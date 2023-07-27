@@ -26,6 +26,13 @@
 #define CUSTOM_CSR(f)
 #endif
 
+#ifdef CONFIG_RV_MPK
+#define MPK_CSR(f) \
+  f(upkru      , 0x800) f(spkrs      , 0x9c1) f(spkctl     , 0x9c0)
+#else
+#define MPK_CSR(f)
+#endif
+
 // SHARE mode does not support mtime
 #ifdef CONFIG_RV_PMP_CSR
 #define CSRS_PMP(f) \
@@ -52,6 +59,7 @@
   f(stval      , 0x143) f(sip        , 0x144) \
   f(satp       , 0x180) \
   CUSTOM_CSR(f) \
+  MPK_CSR(f) \
   f(fflags     , 0x001) f(frm        , 0x002) f(fcsr       , 0x003) \
   f(mtime      , 0xc01)
 #else
@@ -68,6 +76,7 @@
   f(stval      , 0x143) f(sip        , 0x144) \
   f(satp       , 0x180) \
   CUSTOM_CSR(f) \
+  MPK_CSR(f) \
   f(fflags     , 0x001) f(frm        , 0x002) f(fcsr       , 0x003)
 #endif
 
@@ -366,6 +375,19 @@ CSR_STRUCT_START(srnctl)
   uint64_t reserve :63;
 CSR_STRUCT_END(srnctl)
 #endif
+
+#ifdef CONFIG_RV_MPK
+CSR_STRUCT_START(upkru)
+CSR_STRUCT_END(upkru)
+
+CSR_STRUCT_START(spkrs)
+CSR_STRUCT_END(spkrs)
+
+CSR_STRUCT_START(spkctl)
+  uint64_t pke : 1;  // Enable MPK for user
+  uint64_t pks : 1;  // Enable MPK for supervisor
+CSR_STRUCT_END(spkctl)
+#endif  // CONFIG_RV_MPK
 
 CSR_STRUCT_START(fflags)
 CSR_STRUCT_END(fflags)

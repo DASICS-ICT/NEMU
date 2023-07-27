@@ -24,6 +24,10 @@ config RV_DEBUG
   bool "RISC-V Debug Extension"
   default y
 
+config RV_MPK
+  bool "RISC-V Memory Protection Keys"
+  default y
+
 config RV_PMP_CSR
   bool "Enable PMP CSR Read & Write"
   default y

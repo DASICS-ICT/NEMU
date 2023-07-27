@@ -106,6 +106,8 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define FRM_MASK 0x07
 #define FCSR_MASK 0xff
 #define SATP_SV39_MASK 0xf000000000000000ULL
+#define PKR_MASK 0xffffffffffffffffUL
+#define PKCTL_MASK 0x3UL
 #define is_read(csr) (src == (void *)(csr))
 #define is_write(csr) (dest == (void *)(csr))
 #define is_read_pmpcfg (src >= &(csr_array[CSR_PMPCFG0]) && src < (&(csr_array[CSR_PMPCFG0]) + (MAX_NUM_PMP/4)))
@@ -299,6 +301,17 @@ static inline void csr_write(word_t *dest, word_t src) {
     // *dest = src & FCSR_MASK;
 #endif // CONFIG_FPU_NONE
   }
+#ifdef CONFIG_RV_MPK
+  else if (is_write(upkru)) {
+    *dest = src & PKR_MASK;
+  }
+  else if (is_write(spkrs)) {
+    *dest = src & PKR_MASK;
+  }
+  else if (is_write(spkctl)) {
+    *dest = src & PKCTL_MASK;
+  }
+#endif
 #ifdef CONFIG_RV_PMP_CSR
   else if (is_write_pmpaddr) {
     Logtr("Writing pmp addr");

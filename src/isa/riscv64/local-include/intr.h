@@ -37,6 +37,10 @@ enum {
   EX_LPF, // load page fault
   EX_RS1, // reserved
   EX_SPF, // store/amo page fault
+  EX_PKULPF, // protection key user load page fault
+  EX_PKUSPF, // protection key user store page fault
+  EX_PKSLPF, // protection key supervisor load page fault
+  EX_PKSSPF, // protection key supervisor store page fault
 };
 
 // now NEMU does not support EX_IAM,
