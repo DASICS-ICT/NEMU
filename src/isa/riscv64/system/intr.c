@@ -61,6 +61,8 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
+      case EX_PKULPF: case EX_PKUSPF:
+      case EX_PKSLPF: case EX_PKSSPF:
         break;
       default: stval->val = 0;
     }
@@ -78,6 +80,8 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
+      case EX_PKULPF: case EX_PKUSPF:
+      case EX_PKSLPF: case EX_PKSSPF:
         break;
       default: mtval->val = 0;
     }
