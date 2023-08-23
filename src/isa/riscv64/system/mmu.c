@@ -69,7 +69,8 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
 
 #ifdef CONFIG_RV_MPK
   uint32_t pkey = pte->pkey;
-  bool mpk_enable = (mode == MODE_U) ? spkctl->pke : spkctl->pks;
+  bool mpk_enable = (mode == MODE_U) ? spkctl->pke :
+                    (mode == MODE_S) ? spkctl->pks : false;
   uint64_t mpk_pkr = (mode == MODE_U) ? upkru->val : spkrs->val;
   bool mpk_wd = mpk_enable ? (mpk_pkr >> ((pkey << 1) + 1)) & 0x1u : false;
   bool mpk_ad = mpk_enable ? (mpk_pkr >> (pkey << 1)) & 0x1u : false;
