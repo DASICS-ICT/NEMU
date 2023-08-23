@@ -263,7 +263,7 @@ static inline void csr_write(word_t *dest, word_t src) {
     *dest = src & ~(0x3UL);
 #endif // XTVEC_VECTORED_MODE
 }
-  else if (is_write(medeleg)) { *dest = src & 0xb3ff; }
+  else if (is_write(medeleg)) { *dest = src & 0xfb3ff; }
   else if (is_write(mideleg)) { *dest = src & 0x222; }
 #ifdef CONFIG_RVV
   else if (is_write(vcsr)) { vxrm->val = (src >> 1) & 0x3; vxsat->val = src & 0x1; }
