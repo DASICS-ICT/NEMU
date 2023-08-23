@@ -73,6 +73,11 @@ typedef struct {
   uint64_t satp, mip, mie, mscratch, sscratch, mideleg, medeleg;
   uint64_t mtval, stval, mtvec, stvec;
   uint64_t mode;
+
+#ifdef CONFIG_RV_MPK
+  uint64_t upkru, spkrs, spkctl;
+#endif  // CONFIG_RV_MPK
+
   // Above will be synced by regcpy when run difftest, DO NOT TOUCH
 
 #ifdef CONFIG_RVV

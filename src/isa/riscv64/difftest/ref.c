@@ -43,6 +43,13 @@ static void csr_prepare() {
   cpu.stval    = stval->val;
   cpu.mtvec    = mtvec->val;
   cpu.stvec    = stvec->val;
+
+#ifdef CONFIG_RV_MPK
+  cpu.upkru    = upkru->val;
+  cpu.spkrs    = spkrs->val;
+  cpu.spkctl   = spkctl->val;
+#endif  // CONFIG_RV_MPK
+
 #ifdef CONFIG_RVV
   cpu.vstart  = vstart->val;
   cpu.vxsat   = vxsat->val;
@@ -73,6 +80,13 @@ static void csr_writeback() {
   stval->val    = cpu.stval;
   mtvec->val    = cpu.mtvec;
   stvec->val    = cpu.stvec;
+
+#ifdef CONFIG_RV_MPK
+  upkru->val    = cpu.upkru;
+  spkrs->val    = cpu.spkrs;
+  spkctl->val   = cpu.spkctl;
+#endif  // CONFIG_RV_MPK
+
 #ifdef CONFIG_RVV
   vstart->val  = cpu.vstart;
   vxsat->val   = cpu.vxsat;

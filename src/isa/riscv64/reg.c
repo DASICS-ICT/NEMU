@@ -59,6 +59,10 @@ void isa_reg_display() {
       mideleg->val, medeleg->val);
   printf("mtval: " FMT_WORD " stval: " FMT_WORD " mtvec: " FMT_WORD " stvec: " FMT_WORD "\n",
       mtval->val, stval->val, mtvec->val, stvec->val);
+#ifdef CONFIG_RV_MPK
+  printf("upkru: " FMT_WORD " spkrs: " FMT_WORD " spkctl: " FMT_WORD "\n",
+      upkru->val, spkrs->val, spkctl->val);
+#endif  // CONFIG_RV_MPK
 #ifdef CONFIG_RV_PMP_CSR
   printf("privilege mode:%ld  pmp: below\n", cpu.mode);
   for (int i = 0; i < CONFIG_RV_PMP_NUM; i++) {
