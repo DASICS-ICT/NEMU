@@ -29,7 +29,7 @@ enum {
 
 bool intr_deleg_S(word_t exceptionNO) {
   word_t deleg = (exceptionNO & INTR_BIT ? mideleg->val : medeleg->val);
-  bool delegS = ((deleg & (1 << (exceptionNO & 0xf))) != 0) && (cpu.mode < MODE_M);
+  bool delegS = ((deleg & (1 << (exceptionNO & 0x1f))) != 0) && (cpu.mode < MODE_M);
   return delegS;
 }
 
@@ -37,7 +37,7 @@ static word_t get_trap_pc(word_t xtvec, word_t xcause) {
   word_t base = (xtvec >> 2) << 2;
   word_t mode = (xtvec & 0x1); // bit 1 is reserved, dont care here.
   bool is_intr = (xcause >> (sizeof(word_t)*8 - 1)) == 1;
-  word_t casue_no = xcause & 0xf;
+  word_t casue_no = xcause & 0x1f;
   return (is_intr && mode==1) ? (base + (casue_no << 2)) : base;
 }
 
