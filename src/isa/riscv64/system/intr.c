@@ -29,7 +29,7 @@ enum {
 
 bool intr_deleg_S(word_t exceptionNO) {
   word_t deleg = (exceptionNO & INTR_BIT ? mideleg->val : medeleg->val);
-  bool delegS = ((deleg & (1 << (exceptionNO & 0x1f))) != 0) && (cpu.mode < MODE_M);
+  bool delegS = ((deleg & (1UL << (exceptionNO & 0x3f))) != 0) && (cpu.mode < MODE_M);
   return delegS;
 }
 
