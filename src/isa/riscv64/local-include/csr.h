@@ -28,7 +28,7 @@
 
 #ifdef CONFIG_RV_MPK
 #define MPK_CSR(f) \
-  f(upkru      , 0x800) f(spkrs      , 0x9c1) f(spkctl     , 0x9c0)
+  f(upkru      , 0x800) f(spkrs      , 0x9d1) f(spkctl     , 0x9d0)
 #else
 #define MPK_CSR(f)
 #endif
