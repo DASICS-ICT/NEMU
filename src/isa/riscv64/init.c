@@ -60,6 +60,13 @@ void init_isa() {
   srnctl->val = 3; // enable extension 'svinval' [1]
 #endif
 
+#ifdef CONFIG_RV_MPK
+  upkru->val = 0;
+  spkrs->val = 0;
+  spkctl->pke = 0;
+  spkctl->pks = 0;
+#endif  // CONFIG_RV_MPK
+
 #define ext(e) (1 << ((e) - 'a'))
   misa->extensions = ext('i') | ext('m') | ext('a') | ext('c') | ext('s') | ext('u');
 #ifndef CONFIG_FPU_NONE

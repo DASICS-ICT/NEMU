@@ -104,6 +104,12 @@ static void csr_prepare() {
   cpu.dretpcfz  = dretpcfz->val;
 #endif  // CONFIG_RV_DASICS
 
+#ifdef CONFIG_RV_MPK
+  cpu.upkru    = upkru->val;
+  cpu.spkrs    = spkrs->val;
+  cpu.spkctl   = spkctl->val;
+#endif  // CONFIG_RV_MPK
+
 #ifdef CONFIG_RVV
   cpu.vstart  = vstart->val;
   cpu.vxsat   = vxsat->val;
@@ -196,6 +202,12 @@ static void csr_writeback() {
   dretpc->val    = cpu.dretpc;
   dretpcfz->val  = cpu.dretpcfz;
 #endif  // CONFIG_RV_DASICS
+
+#ifdef CONFIG_RV_MPK
+  upkru->val    = cpu.upkru;
+  spkrs->val    = cpu.spkrs;
+  spkctl->val   = cpu.spkctl;
+#endif  // CONFIG_RV_MPK
 
 #ifdef CONFIG_RVV
   vstart->val  = cpu.vstart;

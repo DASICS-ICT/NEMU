@@ -29,12 +29,7 @@ enum {
 
 bool intr_deleg_S(word_t exceptionNO) {
   word_t deleg = (exceptionNO & INTR_BIT ? mideleg->val : medeleg->val);
-#ifdef CONFIG_RV_DASICS
-  word_t mask = 0x1f;  // exception number ranges from [0,31]
-#else
-  word_t mask = 0xf;  // exception number ranges from [0,15]
-#endif  // CONFIG_RV_DASICS
-  bool delegS = ((deleg & (1 << (exceptionNO & mask))) != 0) && (cpu.mode < MODE_M);
+  bool delegS = ((deleg & (1UL << (exceptionNO & 0x3f))) != 0) && (cpu.mode < MODE_M);
   return delegS;
 }
 
@@ -55,11 +50,7 @@ static word_t get_trap_pc(word_t xtvec, word_t xcause) {
   word_t base = (xtvec >> 2) << 2;
   word_t mode = (xtvec & 0x1); // bit 1 is reserved, dont care here.
   bool is_intr = (xcause >> (sizeof(word_t)*8 - 1)) == 1;
-#ifdef CONFIG_RV_DASICS
-  word_t casue_no = xcause & 0x1f;
-#else
-  word_t casue_no = xcause & 0xf;
-#endif // CONFIG_RV_DASICS
+  word_t casue_no = xcause & 0x3f;
   return (is_intr && mode==1) ? (base + (casue_no << 2)) : base;
 }
 
@@ -120,6 +111,10 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_DULAF: case EX_DSLAF:
       case EX_DUSAF: case EX_DSSAF:
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_MPK
+      case EX_PKULPF: case EX_PKUSPF:
+      case EX_PKSLPF: case EX_PKSSPF:
+#endif  // CONFIG_RV_MPK
         break;
       default: stval->val = 0;
     }
@@ -143,6 +138,10 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_DULAF: case EX_DSLAF:
       case EX_DUSAF: case EX_DSSAF:
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_MPK
+      case EX_PKULPF: case EX_PKUSPF:
+      case EX_PKSLPF: case EX_PKSSPF:
+#endif  // CONFIG_RV_MPK
         break;
       default: mtval->val = 0;
     }

@@ -47,6 +47,12 @@ enum {
   EX_DUEF,      // DASICS user ecall fault
   EX_DSEF,      // DASICS supervisor ecall fault
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_MPK
+  EX_PKULPF = 32, // protection key user load page fault
+  EX_PKUSPF, // protection key user store page fault
+  EX_PKSLPF, // protection key supervisor load page fault
+  EX_PKSSPF, // protection key supervisor store page fault
+#endif  // CONFIG_RV_MPK
 };
 
 // now NEMU does not support EX_IAM,

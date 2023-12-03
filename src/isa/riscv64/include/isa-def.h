@@ -74,6 +74,11 @@ typedef struct {
   uint64_t mtval, stval, mtvec, stvec;
   uint64_t mode;
 
+#ifdef CONFIG_RV_MPK
+  uint64_t upkru, spkrs, spkctl;
+#endif  // CONFIG_RV_MPK
+
+
 #ifdef CONFIG_RVN
   uint64_t ustatus, ucause, uepc;
   uint64_t uscratch, utval, utvec;
