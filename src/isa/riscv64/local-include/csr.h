@@ -43,7 +43,7 @@
 #define DASICS_CSRS(f) \
   f(dsmcfg,      0xbc0) f(dsmbound0,   0xbc2) f(dsmbound1,   0xbc3) \
   f(dumcfg,      0x9e0) f(dumbound0,   0x9e2) f(dumbound1,   0x9e3) \
-  f(dlcfg0,      0x881) f(dlcfg1,      0x882) \
+  f(dlcfg,      0x880) \
   f(dlbound0,    0x890) f(dlbound1,    0x891) f(dlbound2,    0x892) f(dlbound3,    0x893) \
   f(dlbound4,    0x894) f(dlbound5,    0x895) f(dlbound6,    0x896) f(dlbound7,    0x897) \
   f(dlbound8,    0x898) f(dlbound9,    0x899) f(dlbound10,   0x89a) f(dlbound11,   0x89b) \
@@ -52,6 +52,9 @@
   f(dlbound20,   0x8a4) f(dlbound21,   0x8a5) f(dlbound22,   0x8a6) f(dlbound23,   0x8a7) \
   f(dlbound24,   0x8a8) f(dlbound25,   0x8a9) f(dlbound26,   0x8aa) f(dlbound27,   0x8ab) \
   f(dlbound28,   0x8ac) f(dlbound29,   0x8ad) f(dlbound30,   0x8ae) f(dlbound31,   0x8af) \
+  f(djcfg, 0x8c8) \
+  f(djbound0, 0x8c0) f(djbound1,0x8c1) f(djbound2,0x8c2) f(djbound3,0x8c3) \
+  f(djbound4, 0x8c4) f(djbound5,0x8c5) f(djbound6,0x8c6) f(djbound7,0x8c7) \
   f(dmaincall,   0x8b0) f(dretpc,      0x8b1) f(dretpcfz,    0x8b2) 
 #else  // CONFIG_RV_DASICS
 #define DASICS_CSRS(f)
@@ -558,9 +561,9 @@ CSR_STRUCT_END(dumbound0)
 CSR_STRUCT_START(dumbound1)
 CSR_STRUCT_END(dumbound1)
 
-#define CSR_DLCFG0   0x881
-#define CSR_DLBOUND0 0x883
-#define CSR_DLBOUND1 0x884
+#define CSR_DLCFG   0x880
+#define CSR_DLBOUND0 0x890
+#define CSR_DLBOUND1 0x891
 
 #define LIBCFG_MASK 0xful
 #define LIBCFG_V    0x8ul
@@ -568,13 +571,16 @@ CSR_STRUCT_END(dumbound1)
 #define LIBCFG_R    0x2ul
 #define LIBCFG_W    0x1ul
 
+#define CSR_DJCFG   0x8c8
+#define CSR_DJBOUND0 0x8c0
+#define CSR_DJBOUND1 0x8c1
+#define JUMPCFG_MASK 0x1ul
+
 #define MAX_DASICS_LIBBOUNDS 16
+#define MAX_DASICS_JUMPBOUNDS 4
 
-CSR_STRUCT_START(dlcfg0)
-CSR_STRUCT_END(dlcfg0)
-
-CSR_STRUCT_START(dlcfg1)
-CSR_STRUCT_END(dlcfg1)
+CSR_STRUCT_START(dlcfg)
+CSR_STRUCT_END(dlcfg)
 
 CSR_STRUCT_START(dlbound0)
 CSR_STRUCT_END(dlbound0)
@@ -672,6 +678,33 @@ CSR_STRUCT_END(dlbound30)
 CSR_STRUCT_START(dlbound31)
 CSR_STRUCT_END(dlbound31)
 
+CSR_STRUCT_START(djcfg)
+CSR_STRUCT_END(djcfg)
+
+CSR_STRUCT_START(djbound0)
+CSR_STRUCT_END(djbound0)
+
+CSR_STRUCT_START(djbound1)
+CSR_STRUCT_END(djbound1)
+
+CSR_STRUCT_START(djbound2)
+CSR_STRUCT_END(djbound2)
+
+CSR_STRUCT_START(djbound3)
+CSR_STRUCT_END(djbound3)
+
+CSR_STRUCT_START(djbound4)
+CSR_STRUCT_END(djbound4)
+
+CSR_STRUCT_START(djbound5)
+CSR_STRUCT_END(djbound5)
+
+CSR_STRUCT_START(djbound6)
+CSR_STRUCT_END(djbound6)
+
+CSR_STRUCT_START(djbound7)
+CSR_STRUCT_END(djbound7)
+
 CSR_STRUCT_START(dmaincall)
 CSR_STRUCT_END(dmaincall)
 
@@ -711,6 +744,8 @@ word_t pmp_tor_mask();
 bool dasics_in_trusted_zone(uint64_t pc);
 uint8_t dasics_libcfg_from_index(int i);
 word_t dasics_libbound_from_index(int i);
+uint8_t dasics_jumpcfg_from_index(int i);
+word_t dasics_jumpbound_from_index(int i);
 bool dasics_match_dlib(uint64_t addr, uint8_t cfg);
 void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type);
 void dasics_redirect_helper(vaddr_t pc, vaddr_t newpc, vaddr_t nextpc, bool is_dasicsret);

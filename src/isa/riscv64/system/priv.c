@@ -161,15 +161,25 @@ bool dasics_in_trusted_zone(uint64_t pc)
 }
 
 uint8_t dasics_libcfg_from_index(int i) {
-  assert(0 <= i && i < MAX_DASICS_LIBBOUNDS);
-  int dlcfg_idx = i >> 3;  // One dlcfg register has 8 tiny configs
-  int tinycfg_idx = i & 0x7;
-  return (csr_array[CSR_DLCFG0 + dlcfg_idx] >> (tinycfg_idx << 3)) & LIBCFG_MASK;
+  assert(0 <= i && i < MAX_DASICS_LIBBOUNDS); // One dlcfg register has 16 configs
+  int tinycfg_idx = i & 0xf;
+  return (csr_array[CSR_DLCFG] >> (tinycfg_idx << 2)) & LIBCFG_MASK;
 }
 
 word_t dasics_libbound_from_index(int i) {
   assert(0 <= i && i < (MAX_DASICS_LIBBOUNDS << 1));
   return csr_array[CSR_DLBOUND0 + i];
+}
+
+uint8_t dasics_jumpcfg_from_index(int i) {
+  assert(0 <= i && i < MAX_DASICS_JUMPBOUNDS); // One djcfg register has 4 configs
+  int tinycfg_idx = i & 0x3;
+  return (csr_array[CSR_DJCFG] >> (tinycfg_idx << 4)) & JUMPCFG_MASK;
+}
+
+word_t dasics_jumpbound_from_index(int i) {
+  assert(0 <= i && i < (MAX_DASICS_JUMPBOUNDS << 1));
+  return csr_array[CSR_DJBOUND0 + i];
 }
 
 bool dasics_match_dlib(uint64_t addr, uint8_t cfg)
@@ -178,8 +188,8 @@ bool dasics_match_dlib(uint64_t addr, uint8_t cfg)
   bool within_range = false;
   for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
     uint8_t cfgval = dasics_libcfg_from_index(i);
-    word_t boundhi = dasics_libbound_from_index(i << 1);
-    word_t boundlo = dasics_libbound_from_index((i << 1) + 1);
+    word_t boundlo = dasics_libbound_from_index(i << 1);
+    word_t boundhi = dasics_libbound_from_index((i << 1) + 1);
 
     if (!((cfgval & cfg) ^ cfg) && boundlo <= addr && addr <= boundhi) {
       within_range = true;
@@ -554,14 +564,11 @@ static inline void csr_write(word_t *dest, word_t src) {
     }
 
     if (val_scls || val_ucls) {
-      for (int i = 0; i < (MAX_DASICS_LIBBOUNDS >> 3); ++i) {
-        csr_array[CSR_DLCFG0 + i] = 0;
-      }
+      csr_array[CSR_DLCFG] = 0;
       for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
         csr_array[CSR_DLBOUND0 + (i << 1)] = 0;
         csr_array[CSR_DLBOUND1 + (i << 1)] = 0;
       }
-
       dmaincall->val = 0;
       dretpc->val = 0;
       dretpcfz->val = 0;

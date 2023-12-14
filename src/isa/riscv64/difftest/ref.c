@@ -59,12 +59,11 @@ static void csr_prepare() {
   cpu.dsmbound0 = dsmbound0->val;
   cpu.dsmbound1 = dsmbound1->val;
 
-  cpu.dumcfg    = csrid_read(0x5c0);  // dumcfg
+  cpu.dumcfg    = dumcfg->val;  // dumcfg
   cpu.dumbound0 = dumbound0->val;
   cpu.dumbound1 = dumbound1->val;
 
-  cpu.dlcfg0    = dlcfg0->val;
-  cpu.dlcfg1    = dlcfg1->val;
+  cpu.dlcfg    = dlcfg->val;
   cpu.dlbound0  = dlbound0->val;
   cpu.dlbound1  = dlbound1->val;
   cpu.dlbound2  = dlbound2->val;
@@ -97,7 +96,15 @@ static void csr_prepare() {
   cpu.dlbound29 = dlbound29->val;
   cpu.dlbound30 = dlbound30->val;
   cpu.dlbound31 = dlbound31->val;
-
+  cpu.djcfg    = djcfg->val;
+  cpu.djbound0 = djbound0->val;
+  cpu.djbound1 = djbound1->val;
+  cpu.djbound2 = djbound2->val;
+  cpu.djbound3 = djbound3->val;
+  cpu.djbound4 = djbound4->val;
+  cpu.djbound5 = djbound5->val;
+  cpu.djbound6 = djbound6->val;
+  cpu.djbound7 = djbound7->val;
   cpu.dmaincall = dmaincall->val;
   cpu.dretpc    = dretpc->val;
   cpu.dretpcfz  = dretpcfz->val;
@@ -151,12 +158,11 @@ static void csr_writeback() {
   dsmbound0->val = cpu.dsmbound0;
   dsmbound1->val = cpu.dsmbound1;
 
-  // dumcfg->val    = cpu.dumcfg;  // dumcfg is a shadow of dsmcfg
+  dumcfg->val    = cpu.dumcfg;  // dumcfg is a shadow of dsmcfg
   dumbound0->val = cpu.dumbound0;
   dumbound1->val = cpu.dumbound1;
 
-  dlcfg0->val    = cpu.dlcfg0;
-  dlcfg1->val    = cpu.dlcfg1;
+  dlcfg->val    = cpu.dlcfg;
   dlbound0->val  = cpu.dlbound0;
   dlbound1->val  = cpu.dlbound1;
   dlbound2->val  = cpu.dlbound2;
@@ -189,7 +195,15 @@ static void csr_writeback() {
   dlbound29->val = cpu.dlbound29;
   dlbound30->val = cpu.dlbound30;
   dlbound31->val = cpu.dlbound31;
-
+  djcfg->val    = cpu.djcfg;
+  djbound0->val = cpu.djbound0;
+  djbound1->val = cpu.djbound1;
+  djbound2->val = cpu.djbound2;
+  djbound3->val = cpu.djbound3;
+  djbound4->val = cpu.djbound4;
+  djbound5->val = cpu.djbound5;
+  djbound6->val = cpu.djbound6;
+  djbound7->val = cpu.djbound7;
   dmaincall->val = cpu.dmaincall;
   dretpc->val    = cpu.dretpc;
   dretpcfz->val  = cpu.dretpcfz;
