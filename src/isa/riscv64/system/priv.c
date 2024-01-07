@@ -328,7 +328,7 @@ void dasics_check_trusted(vaddr_t pc) {
   }
 }
 #endif  // CONFIG_RV_DASICS
-
+#ifdef CONFIG_RV_PMP_CSR
 uint8_t pmpcfg_from_index(int idx) {
   // for now, nemu only support 16 pmp entries in a XLEN=64 machine
   int xlen = 64;
@@ -359,7 +359,7 @@ word_t pmpaddr_from_csrid(int id) {
 word_t inline pmp_tor_mask() {
   return -((word_t)1 << (PMP_PLATFORMGARIN - PMP_SHIFT));
 }
-
+#endif
 static inline void update_mstatus_sd() {
   // mstatus.fs is always dirty or off in QEMU 3.1.0
   if (ISDEF(CONFIG_DIFFTEST_REF_QEMU) && mstatus->fs) { mstatus->fs = 3; }

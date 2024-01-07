@@ -230,7 +230,7 @@ CSR_STRUCT_START(mip)
 CSR_STRUCT_END(mip)
 
 /** pmp */
-
+#ifdef CONFIG_RV_PMP_CSR
 #define PMP_R     0x01
 #define PMP_W     0x02
 #define PMP_X     0x04
@@ -242,7 +242,6 @@ CSR_STRUCT_END(mip)
 #define PMP_TOR   0x08
 #define PMP_NA4   0x10
 #define PMP_NAPOT 0x18
-
 #define CSR_PMPCFG0 0x3a0
 #define CSR_PMPCFG2 0x3a2
 #define CSR_PMPADDR0 0x3b0
@@ -320,7 +319,7 @@ CSR_STRUCT_END(pmpaddr14)
 
 CSR_STRUCT_START(pmpaddr15)
 CSR_STRUCT_END(pmpaddr15)
-
+#endif
 CSR_STRUCT_START(sstatus)
   uint64_t uie : 1;
   uint64_t sie : 1;
