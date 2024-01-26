@@ -78,14 +78,14 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
 
   if (ifetch) {
     Logtr("Translate for instr reading");
-#ifdef CONFIG_SHARE
-//  update a/d by exception
-    bool update_ad = !pte->a;
-    if (update_ad && ok && pte->x)
-      Logtr("raise exception to update ad for ifecth");
-#else
+// #ifdef CONFIG_SHARE
+// //  update a/d by exception
+//     bool update_ad = !pte->a;
+//     if (update_ad && ok && pte->x)
+//       Logtr("raise exception to update ad for ifecth");
+// #else
     bool update_ad = false;
-#endif
+// #endif
     if (!(ok && pte->x) || update_ad) {
       assert(!cpu.amo);
       INTR_TVAL_REG(EX_IPF) = vaddr;
@@ -95,13 +95,13 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
   } else if (type == MEM_TYPE_READ) {
     Logtr("Translate for memory reading");
     bool can_load = pte->r || (mstatus->mxr && pte->x);
-#ifdef CONFIG_SHARE
-    bool update_ad = !pte->a;
-    if (update_ad && ok && can_load)
-      Logtr("raise exception to update ad for load");
-#else
+// #ifdef CONFIG_SHARE
+//     bool update_ad = !pte->a;
+//     if (update_ad && ok && can_load)
+//       Logtr("raise exception to update ad for load");
+// #else
     bool update_ad = false;
-#endif
+// #endif
     if (!(ok && can_load) || update_ad) {
       if (cpu.amo) Logtr("redirect to AMO page fault exception at pc = " FMT_WORD, cpu.pc);
       int ex = (cpu.amo ? EX_SPF : EX_LPF);
@@ -122,12 +122,12 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
     }
 #endif // CONFIG_RV_MPK
   } else {
-#ifdef CONFIG_SHARE
-    bool update_ad = !pte->a || !pte->d;
-   if (update_ad && ok && pte->w) Logtr("raise exception to update ad for store");
-#else
+// #ifdef CONFIG_SHARE
+//     bool update_ad = !pte->a || !pte->d;
+//    if (update_ad && ok && pte->w) Logtr("raise exception to update ad for store");
+// #else
     bool update_ad = false;
-#endif
+// #endif
     Logtr("Translate for memory writing");
     if (!(ok && pte->w) || update_ad) {
       INTR_TVAL_REG(EX_SPF) = vaddr;
