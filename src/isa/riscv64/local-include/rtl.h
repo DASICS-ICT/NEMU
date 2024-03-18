@@ -81,5 +81,17 @@ static inline def_rtl(i_mop, rtlreg_t *dest) {
 }
 
 #endif // CONFIG_RV_ZIMOP
+#ifdef CONFIG_RV_DASICS
+
+static inline def_rtl(dasics_jcheck, vaddr_t target) {
+  dasics_redirect_helper(s->pc, target, s->snpc);
+}
+
+static inline def_rtl(set_dretpc, vaddr_t value) {
+  dasics_check_trusted(s->pc);
+  dretpc->val = value;
+}
+
+#endif // CONFIG_RV_DASICS
 
 #endif

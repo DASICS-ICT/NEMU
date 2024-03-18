@@ -56,13 +56,13 @@
 #endif
 #ifdef CONFIG_RV_SVINVAL
 #define SYS_INSTR_NULLARY(f) \
-  f(ecall) f(ebreak) f(c_ebreak) f(mret) f(sret) f(wfi) \
+  f(ecall) f(ebreak) f(c_ebreak) f(mret) f(sret) f(uret) f(wfi) \
   f(sfence_w_inval) f(sfence_inval_ir)
 #define SYS_INSTR_BINARY(f) \
   f(sfence_vma) f(sinval_vma) RVH_INST_BINARY(f)
 #else
 #define SYS_INSTR_NULLARY(f) \
-  f(ecall) f(ebreak) f(c_ebreak) f(mret) f(sret) f(wfi)
+  f(ecall) f(ebreak) f(c_ebreak) f(mret) f(sret) f(uret) f(wfi)
 #define SYS_INSTR_BINARY(f) \
   f(sfence_vma) RVH_INST_BINARY(f)
 #endif
@@ -328,6 +328,13 @@
 #define ZCB_INSTR_BINARY(f)
 #define ZCB_INSTR_TERNARY(f)
 #endif // CONFIG_RV_ZCB
+#ifdef CONFIG_RV_DASICS
+#define DASICS_INSTR_BINARY(f) f(dasicscall_j)
+#define DASICS_INSTR_TERNARY(f) f(dasicscall_jr)
+#else
+#define DASICS_INSTR_BINARY(f)
+#define DASICS_INSTR_TERNARY(f)
+#endif  // CONFIG_RV_DASICS
 
 #define INSTR_NULLARY(f) \
   f(inv) f(rt_inv) f(nemu_trap) \
@@ -357,7 +364,8 @@
   ZFH_INSTR_BINARY(f) \
   ZFA_INSTR_BINARY(f) \
   ZFH_ZFA_INSTR_BINARY(f) \
-  ZCB_INSTR_BINARY(f)
+  ZCB_INSTR_BINARY(f) \
+  DASICS_INSTR_BINARY(f)
 
 #define INSTR_TERNARY(f) \
   f(add) f(sll) f(srl) f(slt) f(sltu) f(xor) f(or) f(sub) f(sra) f(and) \
@@ -382,7 +390,8 @@
   ZFH_INSTR_TERNARY(f) \
   ZFA_INSTR_TERNARY(f) \
   ZFH_ZFA_INSTR_TERNARY(f) \
-  ZCB_INSTR_TERNARY(f)
+  ZCB_INSTR_TERNARY(f) \
+  DASICS_INSTR_TERNARY(f)
 
 #define INSTR_TERNARY_CSR(f) \
   SYS_INSTR_TERNARY(f) 

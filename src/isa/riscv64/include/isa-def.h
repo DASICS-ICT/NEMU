@@ -106,6 +106,23 @@ typedef struct {
   uint64_t vstvec, vsepc, vscause, vstval, vsatp, vsscratch;
 #endif
 
+#ifdef CONFIG_RV_DASICS
+  uint64_t dumcfg, dumbound0, dumbound1;
+  uint64_t dlcfg0;
+  uint64_t dlbound0, dlbound1, dlbound2, dlbound3;
+  uint64_t dlbound4, dlbound5, dlbound6, dlbound7;
+  uint64_t dlbound8, dlbound9, dlbound10, dlbound11;
+  uint64_t dlbound12, dlbound13, dlbound14, dlbound15;
+  uint64_t dlbound16, dlbound17, dlbound18, dlbound19;
+  uint64_t dlbound20, dlbound21, dlbound22, dlbound23;
+  uint64_t dlbound24, dlbound25, dlbound26, dlbound27;
+  uint64_t dlbound28, dlbound29, dlbound30, dlbound31;
+  uint64_t dmaincall, dretpc;
+  uint64_t djcfg;
+  uint64_t djbound0lo, djbound0hi, djbound1lo, djbound1hi;
+  uint64_t djbound2lo, djbound2hi, djbound3lo, djbound3hi;
+#endif  // CONFIG_RV_DASICS
+
 #ifdef CONFIG_RVV
   //vector
   union {
@@ -225,6 +242,18 @@ typedef struct {
       uint32_t imm10_1   :10;
       int32_t  simm20    : 1;
     } j;
+#ifdef CONFIG_RV_DASICS
+    struct {
+      uint32_t opcode1_0 : 2;
+      uint32_t opcode6_2 : 5;
+      uint32_t imm21     : 1;
+      uint32_t imm14_11  : 4;
+      uint32_t funct3    : 3;
+      uint32_t imm20_15  : 6;
+      uint32_t imm10_1   :10;
+      int32_t  simm22    : 1;
+    } dij;  // DASICSCALL.J
+#endif
     struct {
       uint32_t pad7      :20;
       uint32_t csr       :12;

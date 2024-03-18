@@ -16,6 +16,7 @@
 
 #include "common.h"
 #include <isa.h>
+#include <cpu/decode.h>
 //#include <profiling/betapoint-ext.h>
 #include <profiling/profiling_control.h>
 
@@ -149,6 +150,12 @@ static inline word_t vaddr_read_internal(void *s, vaddr_t addr, int len, int typ
   if (type != MEM_TYPE_IFETCH) {
     isa_misalign_data_addr_check(addr, len, type);
   }
+  #ifdef CONFIG_RV_DASICS
+  void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type);
+  if (s != NULL) {
+    dasics_ldst_helper(((struct Decode *)s)->pc, addr, len, type);    
+  }
+#endif  // CONFIG_RV_DASICS
   if (unlikely(mmu_mode == MMU_DYNAMIC || mmu_mode == MMU_TRANSLATE)) {
     Logm("Checking mmu when MMU_DYN");
     mmu_mode = isa_mmu_check(addr, len, type);
@@ -187,12 +194,14 @@ void dummy_vaddr_data_read(struct Decode *s, vaddr_t addr, int len, int mmu_mode
 #endif // CONFIG_RVV
 
 word_t vaddr_ifetch(vaddr_t addr, int len) {
+  Logm("Fetching vaddr %lx", addr);
   return vaddr_read_internal(NULL, addr, len, MEM_TYPE_IFETCH, MMU_DYNAMIC);
 }
 
 word_t vaddr_read(struct Decode *s, vaddr_t addr, int len, int mmu_mode) {
-  Logm("Reading vaddr %lx", addr);
-  return vaddr_read_internal(s, addr, len, MEM_TYPE_READ, mmu_mode);
+  word_t read_data = vaddr_read_internal(s, addr, len, MEM_TYPE_READ, mmu_mode); 
+  Logm("Reading vaddr %lx  data  %lx", addr, read_data);
+  return read_data;
 }
 
 #ifdef CONFIG_RVV
@@ -213,6 +222,10 @@ void dummy_vaddr_write(struct Decode *s, vaddr_t addr, int len, int mmu_mode) {
 void vaddr_write(struct Decode *s, vaddr_t addr, int len, word_t data, int mmu_mode) {
   void isa_misalign_data_addr_check(vaddr_t vaddr, int len, int type);
   isa_misalign_data_addr_check(addr, len, MEM_TYPE_WRITE);
+  #ifdef CONFIG_RV_DASICS
+  void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type);
+  dasics_ldst_helper(s->pc, addr, len, MEM_TYPE_WRITE);
+#endif  // CONFIG_RV_DASICS
   if (unlikely(mmu_mode == MMU_DYNAMIC || mmu_mode == MMU_TRANSLATE)) {
     mmu_mode = isa_mmu_check(addr, len, MEM_TYPE_WRITE);
   }

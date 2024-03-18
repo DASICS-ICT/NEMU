@@ -44,7 +44,12 @@ bool intr_deleg_VS(word_t exceptionNO){
 bool intr_deleg_S(word_t exceptionNO) {
   bool isNMI = MUXDEF(CONFIG_RV_SMRNMI, cpu.hasNMI && (exceptionNO & INTR_BIT), false);
   word_t deleg = (exceptionNO & INTR_BIT ? mideleg->val : medeleg->val);
-  bool delegS = ((deleg & (1 << (exceptionNO & 0xf))) != 0) && (cpu.mode < MODE_M) && !isNMI;
+#ifdef CONFIG_RV_DASICS
+  word_t mask = 0x1f;  // exception number ranges from [0,31]
+#else
+  word_t mask = 0xf;  // exception number ranges from [0,15]
+#endif  // CONFIG_RV_DASICS
+  bool delegS = ((deleg & (1 << (exceptionNO & mask))) != 0) && (cpu.mode < MODE_M) && !isNMI;
   return delegS;
 }
 #endif
@@ -57,7 +62,7 @@ static word_t get_trap_pc(word_t xtvec, word_t xcause) {
   word_t base = (xtvec >> 2) << 2;
   word_t mode = (xtvec & 0x1); // bit 1 is reserved, dont care here.
   bool is_intr = (xcause >> (sizeof(word_t)*8 - 1)) == 1;
-#ifdef CONFIG_RVH
+#if defined(CONFIG_RVH) || defined(CONFIG_RV_DASICS)
   word_t cause_no = xcause & 0xff;
 #else
   word_t cause_no = xcause & 0xf;
@@ -193,6 +198,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
+#ifdef CONFIG_RV_DASICS
+      case EX_DUIAF: case EX_DULAF: case EX_DUSAF:
+#endif  // CONFIG_RV_DASICS
         IFDEF(CONFIG_RVH, htval->val = 0);
         IFDEF(CONFIG_RVH, htinst->val = 0);
         break;
@@ -249,6 +257,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
+#ifdef CONFIG_RV_DASICS
+      case EX_DUIAF: case EX_DULAF: case EX_DUSAF:
+#endif  // CONFIG_RV_DASICS
         IFDEF(CONFIG_RVH, mtval2->val = 0);
         IFDEF(CONFIG_RVH, mtinst->val = 0);
         break;
