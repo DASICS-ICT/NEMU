@@ -191,7 +191,7 @@ static inline def_rtl(dasics_bndquery, rtlreg_t *dest, word_t type) {
       for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
         uint8_t level = dasics_liblevel_from_index(i);
         uint8_t cfgval = dasics_libcfg_from_index(i);
-        uint8_t res;
+        word_t res;
         if (!(cfgval & LIBCFG_V)) { res = DBQ_EMPTY; }
         else {
           if (level < dasics_level) { res = DBQ_DENY; }
@@ -205,7 +205,7 @@ static inline def_rtl(dasics_bndquery, rtlreg_t *dest, word_t type) {
       for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
         uint8_t level = dasics_jumplevel_from_index(i);
         uint16_t cfgval = dasics_jumpcfg_from_index(i);
-        uint8_t res;
+        word_t res;
         if (!(cfgval & JUMPCFG_V)) { res = DBQ_EMPTY; }
         else {
           if (level < dasics_level) { res = DBQ_DENY; }
