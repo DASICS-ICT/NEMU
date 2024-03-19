@@ -192,7 +192,40 @@ word_t dasics_jumpbound_high_from_index(int i) {
   return csr_array[CSR_DJBOUND0 + 2*i + 1];
 }
 
-bool dasics_match_dlib(uint64_t addr, uint8_t cfg)
+uint16_t dasics_scratchcfg() {
+  return csr_array[CSR_DSCRATCHCFG] & JUMPCFG_MASK;
+}
+
+uint8_t dasics_liblevel_from_index(int i) {
+  assert(0 <= i && i < MAX_DASICS_LIBBOUNDS);
+  return (csr_array[CSR_DLLEVEL] >> (i << 1)) & DASICSLEVEL_MASK;
+}
+
+uint8_t dasics_jumplevel_from_index(int i) {
+  assert(0 <= i && i < MAX_DASICS_JUMPBOUNDS);
+  return (csr_array[CSR_DJLEVEL] >> (i << 1)) & DASICSLEVEL_MASK;
+}
+
+uint8_t dasics_scratchlevel() {
+  return csr_array[CSR_DSCRATCHLEVEL];
+}
+
+uint8_t dasics_get_level(uint64_t pc) {
+  uint8_t current_level = 0;
+  for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
+    uint16_t cfgval = dasics_jumpcfg_from_index(i);
+    word_t boundlo = dasics_jumpbound_low_from_index(i);
+    word_t boundhi = dasics_jumpbound_high_from_index(i);
+
+    if ((cfgval & JUMPCFG_V) && boundlo <= pc && pc < boundhi) {
+      uint8_t level = dasics_jumplevel_from_index(i);
+      if (level > current_level) current_level = level;
+    }
+  }
+  return current_level;
+}
+
+bool dasics_match_dlib(uint64_t addr, uint8_t cfg, uint8_t lv)
 {
   // Check whether the addr is within dlbounds which is marked as cfg
   bool within_range = false;
@@ -200,8 +233,9 @@ bool dasics_match_dlib(uint64_t addr, uint8_t cfg)
     uint8_t cfgval = dasics_libcfg_from_index(i);
     word_t boundlo = dasics_libbound_from_index(i << 1);
     word_t boundhi = dasics_libbound_from_index((i << 1) + 1);
+    uint8_t level = dasics_liblevel_from_index(i);
 
-    if (!((cfgval & cfg) ^ cfg) && boundlo <= addr && addr < boundhi) {
+    if (!((cfgval & cfg) ^ cfg) && boundlo <= addr && addr < boundhi && lv == level) {
       within_range = true;
       break;
     }
@@ -210,15 +244,16 @@ bool dasics_match_dlib(uint64_t addr, uint8_t cfg)
   return within_range;
 }
 
-bool dasics_match_djumpbound(uint64_t addr, uint8_t cfg) {
+bool dasics_match_djumpbound(uint64_t addr, uint8_t cfg, uint8_t lv) {
   bool within_range = false;
   for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
     uint16_t cfgval = dasics_jumpcfg_from_index(i);
     word_t boundlo = dasics_jumpbound_low_from_index(i);
     word_t boundhi = dasics_jumpbound_high_from_index(i);
+    uint8_t level = dasics_jumplevel_from_index(i);
     Logm("[free zone check] cfgval:%d,  boundlo:%lx  boundhi:%lx\n",cfgval,boundlo,boundhi);
 
-    if (!((cfgval & cfg) ^ cfg) && boundlo <= addr && addr < boundhi) {
+    if (!((cfgval & cfg) ^ cfg) && boundlo <= addr && addr < boundhi && lv == level) {
       within_range = true;
       break;
     }
@@ -231,11 +266,12 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   if (dasics_in_trusted_zone(pc)) {
     return;
   }
+  uint8_t dasics_level = dasics_get_level(pc);
 
   if (type == MEM_TYPE_READ) {
     int ex = (cpu.mode == MODE_U) ? EX_DULAF : EX_DSLAF;
     for (int i = 0; i < len; i++) {
-      if (!dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
+      if (!dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R, dasics_level)) {
         INTR_TVAL_REG(ex) = vaddr + i;  // To avoid load inst that crosses libzone
         Logm("Dasics load exception occur %lx", vaddr);
         //isa_reg_display();
@@ -247,7 +283,7 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   else if (type == MEM_TYPE_WRITE) {
     int ex = (cpu.mode == MODE_U) ? EX_DUSAF : EX_DSSAF;
     for (int i = 0; i < len; ++i) {
-      if (!dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W)) {
+      if (!dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W, dasics_level)) {
         INTR_TVAL_REG(ex) = vaddr + i;  // To avoid store inst that crosses libzone
         Logm("Dasics store exception occur %lx", vaddr);
         //isa_reg_display();
@@ -260,21 +296,24 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
 
 void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
   bool src_trusted = dasics_in_trusted_zone(prev_pc);
+  if (src_trusted) return;
+  uint8_t src_level = dasics_get_level(prev_pc);
   bool dst_trusted = dasics_in_trusted_zone(pc);
-  bool src_freezone = dasics_match_djumpbound(prev_pc, JUMPCFG_V);
-  bool dst_freezone = dasics_match_djumpbound(pc, JUMPCFG_V);
+  bool dst_freezone = dasics_match_djumpbound(pc, JUMPCFG_V, src_level);
 
-  Logm("[Dasics Fetch] prev_pc: 0x%lx (T:%d F:%d), pc:0x%lx (T:%d F:%d)\n", prev_pc, src_trusted, src_freezone, pc, dst_trusted, dst_freezone);
-  Logm("[Dasics Fetch] dretpc: 0x%lx dretmaincall: 0x%lx dretpcfz: 0x%lx\n", dretpc->val, dmaincall->val, dretpcfz->val);
+  Logm("[Dasics Fetch] prev_pc: 0x%lx (T:%d, lv: %d), pc:0x%lx (T:%d F:%d)\n", prev_pc, src_trusted, src_level, pc, dst_trusted, dst_freezone);
+  Logm("[Dasics Fetch] dretmaincall: 0x%lx dretpcfz: 0x%lx\n", dmaincall->val, dretpcfz->val);
+  Logm("[Dasics Fetch] dretpc0: 0x%lx dretpc1: 0x%lx\n", dretpc0->val, dretpc1->val);
 
+  word_t dretpc_level = csr_array[CSR_DRETPC0 + src_level];
   bool allow_lib_to_main = !src_trusted && dst_trusted && \
-    (pc == dretpc->val || pc == dmaincall->val);
-  bool allow_freezone_to_lib = src_freezone && !dst_trusted && \
-    !dst_freezone && (pc == dretpcfz->val);
+    (pc == dretpc_level || pc == dmaincall->val);
+  bool allow_freezone_to_lib = !dst_trusted && !dst_freezone && (pc == dretpcfz->val);
+  bool allow_lib_to_lib = !src_trusted && !dst_trusted && pc == dretpc_level;
 
   bool allow_br   = src_trusted  || dst_freezone;
   bool allow_jump = src_trusted  || allow_lib_to_main || \
-                    dst_freezone || allow_freezone_to_lib;
+                    dst_freezone || allow_freezone_to_lib || allow_lib_to_lib;
 
   bool allow_cfi = (cfi_type == CFI_BRANCH && allow_br) || (cfi_type == CFI_JUMP && allow_jump);
 
@@ -326,6 +365,63 @@ void dasics_check_trusted(vaddr_t pc) {
     Logm("Dasics illegal instruction: pc%lx\n", pc);
     longjmp_exception(ex);
   }
+}
+
+enum {CSR_IS_DLCFG, CSR_IS_DLBOUND, CSR_IS_DJCFG, CSR_IS_DJBOUND, CSR_IS_DSCRATCHCFG, CSR_IS_DSCRATCHBOUND, CSR_NOT_LIB_SPACE};
+uint8_t dasics_csr_type(uint32_t csrid) {
+  if (csrid == CSR_DLCFG0) return CSR_IS_DLCFG;
+  if (csrid >= CSR_DLBOUND0 && csrid < CSR_DLBOUND0 + 2 * MAX_DASICS_LIBBOUNDS) return CSR_IS_DLBOUND;
+  if (csrid == CSR_DJCFG) return CSR_IS_DJCFG;
+  if (csrid >= CSR_DJBOUND0 && csrid < CSR_DJBOUND0 + 2 * MAX_DASICS_JUMPBOUNDS) return CSR_IS_DJBOUND;
+  if (csrid == CSR_DSCRATCHCFG) return CSR_IS_DSCRATCHCFG;
+  if (csrid == CSR_DSCRATCHBOUNDLO || csrid == CSR_DSCRATCHBOUNDLO + 1) return CSR_IS_DSCRATCHBOUND;
+  return CSR_NOT_LIB_SPACE;
+}
+word_t dasics_dlcfg_rmask(uint8_t lv) {
+  word_t mask = 0;
+  for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
+    uint16_t cfgval = dasics_libcfg_from_index(i);
+    uint8_t level = dasics_liblevel_from_index(i);
+    if ((cfgval & LIBCFG_V) && lv <= level) mask |= LIBCFG_MASK << (i << 2);
+  }
+  return mask;
+}
+bool dasics_dlcfg_write_fix(uint8_t lv, word_t *wdata) {
+  word_t mask = 0;
+  word_t dlcfgval = csr_array[CSR_DLCFG0];
+  for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
+    uint16_t cfgval = dasics_libcfg_from_index(i);
+    uint8_t level = dasics_liblevel_from_index(i);
+    if ((cfgval & LIBCFG_V) && lv < level) mask |= LIBCFG_MASK << (i << 2);
+  }
+  bool allow = (~dlcfgval & *wdata) == 0;
+  *wdata = (dlcfgval & ~mask) | (*wdata & mask);
+  return allow;
+}
+word_t dasics_djcfg_rmask(uint8_t lv) {
+  word_t mask = 0;
+  for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
+    uint16_t cfgval = dasics_jumpcfg_from_index(i);
+    uint8_t level = dasics_jumplevel_from_index(i);
+    if ((cfgval & JUMPCFG_V) && lv <= level) mask |= JUMPCFG_MASK << (i << 4);
+  }
+  return mask;
+}
+bool dasics_djcfg_write_fix(uint8_t lv, word_t *wdata) {
+  word_t mask = 0;
+  word_t djcfgval = csr_array[CSR_DJCFG];
+  for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
+    uint16_t cfgval = dasics_jumpcfg_from_index(i);
+    uint8_t level = dasics_jumplevel_from_index(i);
+    if ((cfgval & JUMPCFG_V) && lv < level) mask |= JUMPCFG_MASK << (i << 4);
+  }
+  bool allow = (~djcfgval & *wdata) == 0;
+  *wdata = (djcfgval & ~mask) | (*wdata & mask);
+  return allow;
+}
+
+bool dasics_level_overflow(uint8_t lv) {
+  return (lv + 1) >= MAX_DASICS_LEVELS;
 }
 #endif  // CONFIG_RV_DASICS
 
@@ -652,7 +748,7 @@ static inline void csr_write(word_t *dest, word_t src) {
       }
 
       dmaincall->val = 0;
-      dretpc->val = 0;
+      dretpc0->val = 0;
       dretpcfz->val = 0;
     }
 
@@ -712,16 +808,86 @@ word_t csrid_read(uint32_t csrid) {
 }
 
 static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, vaddr_t pc) {
+#ifdef CONFIG_RV_DASICS
+  bool allow_untrusted_access = false;
+  word_t rmask = ~0;
+  word_t wdata_fix = (src != NULL ? *src : 0);
+  do {
+    if (dasics_in_trusted_zone(pc)) break;
+    uint8_t csr_type = dasics_csr_type(csrid);
+    if (csr_type == CSR_NOT_LIB_SPACE) break;
+    bool allow_read = false;
+    bool allow_write = false;
+    uint8_t dasics_level = dasics_get_level(pc);
+    uint8_t reg_level, bndIndex;
+    switch (csr_type) {
+      case CSR_IS_DLCFG:
+        allow_read = true;
+        rmask = dasics_dlcfg_rmask(dasics_level);
+        allow_write = dasics_dlcfg_write_fix(dasics_level, &wdata_fix);
+        break;
+      case CSR_IS_DLBOUND:
+        bndIndex = (csrid - CSR_DLBOUND0) >> 1;
+        if (!(dasics_libcfg_from_index(bndIndex) & LIBCFG_V)) break; // can not write empty bounds
+        reg_level = dasics_liblevel_from_index(bndIndex);
+        if (dasics_level <= reg_level) allow_read = true;
+        if (dasics_level >= reg_level) break; // can not write
+        bool isLo = csrid % 2 == 0;
+        if (isLo) allow_write = wdata_fix >= csrid_read(csrid);
+        else allow_write = wdata_fix <= csrid_read(csrid);
+        break;
+      case CSR_IS_DJCFG:
+        allow_read = true;
+        rmask = dasics_djcfg_rmask(dasics_level);
+        allow_write = dasics_djcfg_write_fix(dasics_level, &wdata_fix);
+        break;
+      case CSR_IS_DJBOUND:  // can not write
+        bndIndex = (csrid - CSR_DJBOUND0) >> 1;
+        reg_level = dasics_jumplevel_from_index(bndIndex);
+        if (dasics_level <= reg_level) allow_read = true;
+        break;
+      case CSR_IS_DSCRATCHCFG:
+        reg_level = dasics_scratchlevel();
+        if (dasics_level < reg_level) allow_read = true;
+        break;
+      case CSR_IS_DSCRATCHBOUND:
+        if (!(dasics_scratchcfg() & JUMPCFG_V)) break;
+        reg_level = dasics_scratchlevel();
+        if (dasics_level >= reg_level) break;
+        allow_read = true;
+        if (csrid % 2 == 0) allow_write = wdata_fix >= csrid_read(csrid);
+        else allow_write = wdata_fix <= csrid_read(csrid);
+        break;
+      default:
+        break;
+    }
+    allow_untrusted_access = allow_read && (src == NULL || allow_write);
+  } while (0);
+  if (!allow_untrusted_access && !csr_is_legal(csrid, src != NULL, pc)) {
+    Logti("Illegal csr id %u", csrid);
+    longjmp_exception(EX_II);
+    return;
+  }
+#else
   if (!csr_is_legal(csrid, src != NULL, pc)) {
     Logti("Illegal csr id %u", csrid);
     longjmp_exception(EX_II);
     return;
   }
+#endif
   word_t *csr = csr_decode(csrid);
   // Log("Decoding csr id %u to %p", csrid, csr);
+
+#ifdef CONFIG_RV_DASICS
+  if (dest != NULL) { *dest = csr_read(csr) & rmask ;}
+  if (src != NULL) {
+    csr_write(csr, wdata_fix);
+  }
+#else
   word_t tmp = (src != NULL ? *src : 0);
   if (dest != NULL) { *dest = csr_read(csr); }
   if (src != NULL) { csr_write(csr, tmp); }
+#endif
 }
 
 static word_t priv_instr(uint32_t op, const rtlreg_t *src) {

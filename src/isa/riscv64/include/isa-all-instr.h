@@ -163,9 +163,11 @@
 #endif // CONFIG_FPU_NONE
 
 #ifdef CONFIG_RV_DASICS
-#define DASICS_INSTR_BINARY(f) f(dasicscall_j)
+#define DASICS_INSTR_UNARY(f) f(dibndquery)
+#define DASICS_INSTR_BINARY(f) f(dasicscall_j) f(dibndmv)
 #define DASICS_INSTR_TERNARY(f) f(dasicscall_jr)
 #else
+#define DASICS_INSTR_UNARY(f)
 #define DASICS_INSTR_BINARY(f)
 #define DASICS_INSTR_TERNARY(f)
 #endif  // CONFIG_RV_DASICS
@@ -178,7 +180,8 @@
   RVN_INSTR_NULLARY(f)
 
 #define INSTR_UNARY(f) \
-  f(p_li_0) f(p_li_1)
+  f(p_li_0) f(p_li_1) \
+  DASICS_INSTR_UNARY(f)
 
 #define INSTR_BINARY(f) \
   f(lui) f(auipc) f(jal) \

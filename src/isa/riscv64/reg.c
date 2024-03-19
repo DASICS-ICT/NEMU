@@ -70,23 +70,27 @@ void isa_reg_display() {
       dsmcfg->val, dsmbound0->val, dsmbound1->val);
   printf("dumcfg: " FMT_WORD " dumbound0: " FMT_WORD " dumbound1: " FMT_WORD "\n",
       dsmcfg->val, dumbound0->val, dumbound1->val);
-  printf("dmaincall: " FMT_WORD " dretpc: " FMT_WORD " dretpcfz: " FMT_WORD "\n",
-      dmaincall->val, dretpc->val, dretpcfz->val);
+  printf("dmaincall: " FMT_WORD " dretpcfz: " FMT_WORD "\n",
+      dmaincall->val, dretpcfz->val);
+  printf("dretpc0: " FMT_WORD " dretpc1: " FMT_WORD " dretpc2: " FMT_WORD " dretpc3: " FMT_WORD "\n",
+      dretpc0->val, dretpc1-> val, dretpc2->val, dretpc3->val);
   printf("dlcfg0: " FMT_WORD "\n",
       dlcfg0->val);
   for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
-    printf("%2d: cfg:0x%02x boundlo:0x%016lx boundhi :0x%016lx", i, dasics_libcfg_from_index(i), \
-      dasics_libbound_from_index(i << 1), dasics_libbound_from_index((i << 1) + 1));
+    printf("%2d: cfg:0x%02x boundlo:0x%016lx boundhi :0x%016lx, level: %u", i, dasics_libcfg_from_index(i), \
+      dasics_libbound_from_index(i << 1), dasics_libbound_from_index((i << 1) + 1), dasics_liblevel_from_index(i));
     if (i % 2 == 1) printf("\n");
     else printf("|");
   }
   printf("djcfg: " FMT_WORD "\n", djcfg->val);
   for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
-    printf("%2d: cfg:0x%02x boundlo: 0x%016lx boundhi: 0x%016lx", i, dasics_jumpcfg_from_index(i), \
-      dasics_jumpbound_low_from_index(i), dasics_jumpbound_high_from_index(i));
+    printf("%2d: cfg:0x%02x boundlo: 0x%016lx boundhi: 0x%016lx, level: %u", i, dasics_jumpcfg_from_index(i), \
+      dasics_jumpbound_low_from_index(i), dasics_jumpbound_high_from_index(i), dasics_jumplevel_from_index(i));
     if (i % 2 == 1) printf("\n");
     else printf("|");
   }
+  printf("dscratchcfg: " FMT_WORD " dscratchlo: " FMT_WORD " dscratchhi: " FMT_WORD "\n",
+    dscratchcfg->val, dscratchlo->val, dscratchhi->val);
 #endif  // CONFIG_RV_DASICS
 #ifdef CONFIG_RV_MPK
   printf("upkru: " FMT_WORD " spkrs: " FMT_WORD " spkctl: " FMT_WORD "\n",

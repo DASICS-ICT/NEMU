@@ -59,10 +59,12 @@
   f(dlbound20,   0x8a4) f(dlbound21,   0x8a5) f(dlbound22,   0x8a6) f(dlbound23,   0x8a7) \
   f(dlbound24,   0x8a8) f(dlbound25,   0x8a9) f(dlbound26,   0x8aa) f(dlbound27,   0x8ab) \
   f(dlbound28,   0x8ac) f(dlbound29,   0x8ad) f(dlbound30,   0x8ae) f(dlbound31,   0x8af) \
-  f(dmaincall,   0x8b0) f(dretpc,      0x8b1) f(dretpcfz,    0x8b2) \
+  f(dmaincall,   0x8b0) f(dretpcfz,    0x8b2) \
+  f(dretpc0,     0x8b4) f(dretpc1,     0x8b5) f(dretpc2,     0x8b6) f(dretpc3,     0x8b7) \
   f(djbound0lo,  0x8c0) f(djbound0hi,  0x8c1) f(djbound1lo,  0x8c2) f(djbound1hi,  0x8c3) \
   f(djbound2lo,  0x8c4) f(djbound2hi,  0x8c5) f(djbound3lo,  0x8c6) f(djbound3hi,  0x8c7) \
-  f(djcfg,       0x8c8)
+  f(djcfg,       0x8c8) f(dllevel,     0x8cc) f(djlevel,     0x8cd) \
+  f(dscratchcfg, 0x8d0) f(dscratchlo,  0x8d2) f(dscratchhi,  0x8d3) f(dscratchlevel, 0x8d4)
 #else  // CONFIG_RV_DASICS
 #define DASICS_CSRS(f)
 #endif  // !CONFIG_RV_DASICS
@@ -587,8 +589,14 @@ CSR_STRUCT_END(dumbound1)
 #define CSR_DLCFG0   0x880
 #define CSR_DLBOUND0 0x890
 #define CSR_DLBOUND1 0x891
+#define CSR_DRETPC0  0x8b4
 #define CSR_DJBOUND0 0x8c0
 #define CSR_DJCFG    0x8c8
+#define CSR_DLLEVEL  0x8cc
+#define CSR_DJLEVEL  0x8cd
+#define CSR_DSCRATCHCFG     0x8d0
+#define CSR_DSCRATCHBOUNDLO 0x8d2
+#define CSR_DSCRATCHLEVEL   0x8d4
 
 #define LIBCFG_MASK 0xful
 #define LIBCFG_V    0x8ul
@@ -598,8 +606,11 @@ CSR_STRUCT_END(dumbound1)
 #define JUMPCFG_MASK 0xfffful
 #define JUMPCFG_V 0x1ul
 
+#define DASICSLEVEL_MASK 0x3ul
+
 #define MAX_DASICS_LIBBOUNDS 16
 #define MAX_DASICS_JUMPBOUNDS 4
+#define MAX_DASICS_LEVELS 4
 
 CSR_STRUCT_START(dlcfg0)
 CSR_STRUCT_END(dlcfg0)
@@ -703,11 +714,20 @@ CSR_STRUCT_END(dlbound31)
 CSR_STRUCT_START(dmaincall)
 CSR_STRUCT_END(dmaincall)
 
-CSR_STRUCT_START(dretpc)
-CSR_STRUCT_END(dretpc)
-
 CSR_STRUCT_START(dretpcfz)
 CSR_STRUCT_END(dretpcfz)
+
+CSR_STRUCT_START(dretpc0)
+CSR_STRUCT_END(dretpc0)
+
+CSR_STRUCT_START(dretpc1)
+CSR_STRUCT_END(dretpc1)
+
+CSR_STRUCT_START(dretpc2)
+CSR_STRUCT_END(dretpc2)
+
+CSR_STRUCT_START(dretpc3)
+CSR_STRUCT_END(dretpc3)
 
 CSR_STRUCT_START(djbound0lo)
 CSR_STRUCT_END(djbound0lo)
@@ -736,6 +756,23 @@ CSR_STRUCT_END(djbound3hi)
 CSR_STRUCT_START(djcfg)
 CSR_STRUCT_END(djcfg)
 
+CSR_STRUCT_START(dllevel)
+CSR_STRUCT_END(dllevel)
+
+CSR_STRUCT_START(djlevel)
+CSR_STRUCT_END(djlevel)
+
+CSR_STRUCT_START(dscratchcfg)
+CSR_STRUCT_END(dscratchcfg)
+
+CSR_STRUCT_START(dscratchlo)
+CSR_STRUCT_END(dscratchlo)
+
+CSR_STRUCT_START(dscratchhi)
+CSR_STRUCT_END(dscratchhi)
+
+CSR_STRUCT_START(dscratchlevel)
+CSR_STRUCT_END(dscratchlevel)
 #endif  // CONFIG_RV_DASICS
 
 #define CSRS_DECL(name, addr) extern concat(name, _t)* const name;
@@ -769,10 +806,19 @@ word_t dasics_libbound_from_index(int i);
 uint16_t dasics_jumpcfg_from_index(int i);
 word_t dasics_jumpbound_low_from_index(int i);
 word_t dasics_jumpbound_high_from_index(int i);
-bool dasics_match_dlib(uint64_t addr, uint8_t cfg);
+uint16_t dasics_scratchcfg();
+uint8_t dasics_liblevel_from_index(int i);
+uint8_t dasics_jumplevel_from_index(int i);
+uint8_t dasics_scratchlevel();
+
+uint8_t dasics_get_level(uint64_t pc);
+bool dasics_match_dlib(uint64_t addr, uint8_t cfg, uint8_t lv);
 void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type);
 void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type);
 void dasics_check_trusted(vaddr_t pc);
+bool dasics_level_overflow(uint8_t lv);
+enum {DIMV_MEM, DIMV_JMP};
+#define DIMV_SCRATCH_INDEX 31
 #endif  // CONFIG_RV_DASICS
 
 #endif

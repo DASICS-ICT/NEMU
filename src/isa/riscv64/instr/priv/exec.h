@@ -38,3 +38,13 @@ MAP(SYS_INSTR_LIST, def_SYS_EHelper)
 #else
 def_SYS_EHelper(system)
 #endif
+
+#ifdef CONFIG_RV_DASICS
+def_EHelper(dibndmv) {
+  rtl_dasics_bndmv(s, dsrc1, ddest, id_src2->imm);
+}
+
+def_EHelper(dibndquery) {
+  rtl_dasics_bndquery(s, ddest, id_src2->imm);
+}
+#endif
