@@ -100,8 +100,13 @@ static void csr_prepare() {
   */
 
   cpu.dmaincall = dmaincall->val;
-  cpu.dretpc    = dretpc0->val;
   cpu.dretpcfz  = dretpcfz->val;
+  cpu.dretpc0   = dretpc0->val;
+  cpu.dretpc1   = dretpc1->val;
+  cpu.dretpc2   = dretpc2->val;
+  cpu.dretpc3   = dretpc3->val;
+  cpu.dllevel   = dllevel->val;
+  cpu.djlevel   = djlevel->val;
 #endif  // CONFIG_RV_DASICS
 
 #ifdef CONFIG_RV_MPK
@@ -199,8 +204,13 @@ static void csr_writeback() {
   */
 
   dmaincall->val = cpu.dmaincall;
-  dretpc0->val    = cpu.dretpc;
   dretpcfz->val  = cpu.dretpcfz;
+  dretpc0->val   = cpu.dretpc0;
+  dretpc1->val   = cpu.dretpc1;
+  dretpc2->val   = cpu.dretpc2;
+  dretpc3->val   = cpu.dretpc3;
+  dllevel->val   = cpu.dllevel;
+  djlevel->val   = cpu.djlevel;
 #endif  // CONFIG_RV_DASICS
 
 #ifdef CONFIG_RV_MPK
