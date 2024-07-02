@@ -150,10 +150,8 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define mask_bitset(old, mask, new) (((old) & ~(mask)) | ((new) & (mask)))
 
 #ifdef CONFIG_RV_DASICS
-#define DUMCFG_MASK (MCFG_UENA | MCFG_UCLS)
-#define DSMCFG_MASK (MCFG_SENA | MCFG_SCLS | DUMCFG_MASK)
 #define BOUND_ADDR_ALGIN 0x7
-bool dasics_in_trusted_zone(uint64_t pc)
+bool dasics_in_trusted_zone(uint64_t pc) // Only use ena
 {
   bool is_smain_enable = dsmcfg->mcfg_sena;
   bool is_umain_enable = dsmcfg->mcfg_uena;
@@ -234,8 +232,9 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
 
   if (type == MEM_TYPE_READ) {
     int ex = (cpu.mode == MODE_U) ? EX_DULAF : EX_DSLAF;
+    bool close_ld_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cult : dsmcfg->mcfg_cslt;
     for (int i = 0; i < len; i++) {
-      if (!dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
+      if (!close_ld_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
         INTR_TVAL_REG(ex) = vaddr + i;  // To avoid load inst that crosses libzone
         Logm("Dasics load exception occur %lx", vaddr);
         //isa_reg_display();
@@ -246,8 +245,9 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   }
   else if (type == MEM_TYPE_WRITE) {
     int ex = (cpu.mode == MODE_U) ? EX_DUSAF : EX_DSSAF;
+    bool close_st_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cust : dsmcfg->mcfg_csst;
     for (int i = 0; i < len; ++i) {
-      if (!dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W)) {
+      if (!close_st_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W)) {
         INTR_TVAL_REG(ex) = vaddr + i;  // To avoid store inst that crosses libzone
         Logm("Dasics store exception occur %lx", vaddr);
         //isa_reg_display();
@@ -263,6 +263,7 @@ void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
   bool dst_trusted = dasics_in_trusted_zone(pc);
   bool src_freezone = dasics_match_djumpbound(prev_pc, JUMPCFG_V);
   bool dst_freezone = dasics_match_djumpbound(pc, JUMPCFG_V);
+  bool close_fetch_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cuft : dsmcfg->mcfg_csft;
 
   Logm("[Dasics Fetch] prev_pc: 0x%lx (T:%d F:%d), pc:0x%lx (T:%d F:%d)\n", prev_pc, src_trusted, src_freezone, pc, dst_trusted, dst_freezone);
   Logm("[Dasics Fetch] dretpc: 0x%lx dretmaincall: 0x%lx dretpcfz: 0x%lx\n", dretpc->val, dmaincall->val, dretpcfz->val);
@@ -278,7 +279,7 @@ void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
 
   bool allow_cfi = (cfi_type == CFI_BRANCH && allow_br) || (cfi_type == CFI_JUMP && allow_jump);
 
-  if (!allow_cfi) {
+  if (!allow_cfi && !close_fetch_ex) {
     int ex = (cpu.mode == MODE_U) ? EX_DUIAF : EX_DSIAF;
     INTR_TVAL_REG(ex) = pc;
     Logm("Dasics fetch exception occur: pc%lx  (st:%d,df:%d)\n",pc,src_trusted,dst_freezone);
@@ -633,32 +634,8 @@ static inline void csr_write(word_t *dest, word_t src) {
 #endif
 #ifdef CONFIG_RV_DASICS
   else if (is_write(dsmcfg) || is_write(dumcfg)) {
-    // Perform CLS logic of dmcfg first
-    bool val_scls = (src & MCFG_SCLS) != 0;
-    bool val_ucls = (src & MCFG_UCLS) != 0;
-
-    if (val_scls) {
-      dumbound0->val = 0;
-      dumbound1->val = 0;
-    }
-
-    if (val_scls || val_ucls) {
-      for (int i = 0; i < (MAX_DASICS_LIBBOUNDS >> 3); ++i) {
-        csr_array[CSR_DLCFG0 + i] = 0;
-      }
-      for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
-        csr_array[CSR_DLBOUND0 + (i << 1)] = 0;
-        csr_array[CSR_DLBOUND1 + (i << 1)] = 0;
-      }
-
-      dmaincall->val = 0;
-      dretpc->val = 0;
-      dretpcfz->val = 0;
-    }
-
-    // Then update dmcfg itself. CLS bit has already taken effect, thus set it to zero
     word_t mask = is_write(dsmcfg) ? DSMCFG_MASK : DUMCFG_MASK;
-    dsmcfg->val = (dsmcfg->val & ~mask) | (src & ~MCFG_SCLS & ~MCFG_UCLS & mask);
+    dsmcfg->val = (dsmcfg->val & ~mask) | (src & mask);
   } else if (is_write_dasics_mem_bound || is_write_dasics_jump_bound) {
     *dest = src & ~BOUND_ADDR_ALGIN; 
     if(is_write_dasics_jump_bound) Logm("[write jump bound]: write addr %016lx src: %lx\n",*dest,src );
@@ -833,10 +810,10 @@ void isa_hostcall(uint32_t id, rtlreg_t *dest, const rtlreg_t *src1,
 #ifdef CONFIG_RV_DASICS
       bool hostcall_trusted = dasics_in_trusted_zone(pc);
 
-      if (!hostcall_trusted && cpu.mode == MODE_U) {
+      if (!hostcall_trusted && cpu.mode == MODE_U && !dsmcfg->mcfg_cuet) {
         ret = raise_intr(EX_DUEF, *src1);
       }
-      else if (!hostcall_trusted && cpu.mode == MODE_S) {
+      else if (!hostcall_trusted && cpu.mode == MODE_S && !dsmcfg->mcfg_cset) {
         ret = raise_intr(EX_DSEF, *src1);
       }
       else {
