@@ -553,12 +553,31 @@ CSR_STRUCT_END(mimpid)
 
 #ifdef CONFIG_RV_DASICS
 
-#define MCFG_UENA   0X2ul
+#define MCFG_CSFT   0x200ul
+#define MCFG_CSLT   0x100ul
+#define MCFG_CSST   0x80ul
+#define MCFG_CSET   0x40ul
+#define MCFG_CUFT   0x20ul
+#define MCFG_CULT   0x10ul
+#define MCFG_CUST   0x8ul
+#define MCFG_CUET   0x4ul
+#define MCFG_UENA   0x2ul
 #define MCFG_SENA   0x1ul
+
+#define DUMCFG_MASK (MCFG_CUFT | MCFG_CULT | MCFG_CUST | MCFG_CUET | MCFG_UENA)
+#define DSMCFG_MASK (MCFG_CSFT | MCFG_CSLT | MCFG_CSST | MCFG_CSET | MCFG_CUFT | MCFG_CULT | MCFG_CUST | MCFG_CUET | MCFG_UENA | MCFG_SENA)
 
 CSR_STRUCT_START(dsmcfg)
   uint64_t mcfg_sena:1;
   uint64_t mcfg_uena:1;
+  uint64_t mcfg_cuet:1;
+  uint64_t mcfg_cust:1;
+  uint16_t mcfg_cult:1;
+  uint64_t mcfg_cuft:1;
+  uint64_t mcfg_cset:1;
+  uint64_t mcfg_csst:1;
+  uint64_t mcfg_cslt:1;
+  uint64_t mcfg_csft:1;
 CSR_STRUCT_END(dsmcfg)
 
 CSR_STRUCT_START(dsmbound0)
@@ -568,8 +587,16 @@ CSR_STRUCT_START(dsmbound1)
 CSR_STRUCT_END(dsmbound1)
 
 CSR_STRUCT_START(dumcfg)
-  uint64_t pad0     :1;
+  uint64_t pad0:1;
   uint64_t mcfg_uena:1;
+  uint64_t mcfg_cuet:1;
+  uint64_t mcfg_cust:1;
+  uint16_t mcfg_cult:1;
+  uint64_t mcfg_cuft:1;
+  uint64_t pad1:1;
+  uint64_t pad2:1;
+  uint64_t pad3:1;
+  uint64_t pad4:1;
 CSR_STRUCT_END(dumcfg)
 
 CSR_STRUCT_START(dumbound0)
