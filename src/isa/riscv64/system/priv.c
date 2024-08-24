@@ -511,7 +511,7 @@ static inline void csr_write(word_t *dest, word_t src) {
   }
 #endif  // CONFIG_RVN
 #ifdef CONFIG_RV_DASICS
-  else if (is_write(medeleg)) { *dest = src & 0xfff00b3ff; }
+  else if (is_write(medeleg)) { *dest = src; }
 #else
   else if (is_write(medeleg)) { *dest = src & 0xb3ff; }
 #endif  // CONFIG_RV_DASICS
