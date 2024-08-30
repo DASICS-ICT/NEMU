@@ -54,6 +54,19 @@ bool intr_deleg_S(word_t exceptionNO) {
 }
 #endif
 
+#ifdef CONFIG_RVN
+bool intr_deleg_U(word_t exceptionNO) {
+  word_t deleg = (exceptionNO & INTR_BIT ? sideleg->val : sedeleg->val);
+#ifdef CONFIG_RV_DASICS
+  word_t mask = 0x1f;  // exception number ranges from [0,31]
+#else
+  word_t mask = 0xf;  // exception number ranges from [0,15]
+#endif  // CONFIG_RV_DASICS
+  bool delegU = ((deleg & (1 << (exceptionNO & mask))) != 0) && (cpu.mode == MODE_U);
+  return delegU;
+}
+#endif // CONFIG_RVN
+
 static word_t get_trap_pc(word_t xtvec, word_t xcause) {
   word_t base = (xtvec >> 2) << 2;
   word_t mode = (xtvec & 0x1); // bit 1 is reserved, dont care here.
@@ -94,7 +107,14 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     case EX_SPF: difftest_skip_dut(1, 2); break;
   }
 #endif
-  bool delegS = intr_deleg_S(NO);
+
+#ifdef CONFIG_RVN
+  bool delegU = intr_deleg_U(NO);
+#else
+  bool delegU = false;
+#endif  // CONFIG_RVN
+  bool delegS = intr_deleg_S(NO) && !delegU;
+
 #ifdef CONFIG_RVH
   extern bool hld_st;
   int hld_st_temp = hld_st;
@@ -137,7 +157,35 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     cpu.v = 0;
     set_sys_state_flag(SYS_STATE_FLUSH_TCACHE);
 #else
-  if (delegS) {
+
+  if (delegU) {
+#ifdef CONFIG_RVN
+    ucause->val = NO;
+    uepc->val = epc;
+    mstatus->upie = mstatus->uie;
+    mstatus->uie = 0;
+    switch (NO) {
+      case EX_IPF: case EX_LPF: case EX_SPF:
+      case EX_LAM: case EX_SAM:
+      case EX_IAF: case EX_LAF: case EX_SAF:
+#ifdef CONFIG_RV_DASICS
+      case EX_DUIAF: case EX_DSIAF:
+      case EX_DULAF: case EX_DSLAF:
+      case EX_DUSAF: case EX_DSSAF:
+#endif  // CONFIG_RV_DASICS
+        break;
+      default: utval->val = 0;
+    }
+    cpu.mode = MODE_U;
+    update_mmu_state();
+    return get_trap_pc(utvec->val, ucause->val);
+    // return utvec->val;
+#else
+    Assert(0, "RVN extension is not implemented yet!");
+    return 0;
+#endif  // CONFIG_RVN
+  }
+  else if (delegS) {
 #endif
     scause->val = NO;
     sepc->val = epc;
@@ -235,15 +283,21 @@ word_t isa_query_intr() {
   for (i = 0; i < intr_num; i ++) {
     int irq = priority[i];
     if (intr_vec & (1 << irq)) {
-      bool deleg = (mideleg->val & (1 << irq)) != 0;
+#ifdef CONFIG_RVN
+      bool delegU = (sideleg->val & (1 << irq)) != 0;
+#else
+      bool delegU = false;
+#endif  // CONFIG_RVN
+      bool delegS = ((mideleg->val & (1 << irq)) != 0) && !delegU;
 #ifdef CONFIG_RVH
       bool hdeleg = (hideleg->val & (1 << irq)) != 0;
-      bool global_enable = (hdeleg & deleg)? (cpu.v && cpu.mode == MODE_S && ((hstatus->vsxl == 1)? vsstatus->_32.sie: vsstatus->_64.sie)) || (cpu.v && cpu.mode < MODE_S):
-                           (deleg)? ((cpu.mode == MODE_S) && mstatus->sie) || (cpu.mode < MODE_S) || cpu.v:
+      bool global_enable = (hdeleg & delegS)? (cpu.v && cpu.mode == MODE_S && ((hstatus->vsxl == 1)? vsstatus->_32.sie: vsstatus->_64.sie)) || (cpu.v && cpu.mode < MODE_S):
+                           (delegS)? ((cpu.mode == MODE_S) && mstatus->sie) || (cpu.mode < MODE_S) || cpu.v:
                            ((cpu.mode == MODE_M) && mstatus->mie) || (cpu.mode < MODE_M);  
 #else
-      bool global_enable = (deleg ? ((cpu.mode == MODE_S) && mstatus->sie) || (cpu.mode < MODE_S) :
-          ((cpu.mode == MODE_M) && mstatus->mie) || (cpu.mode < MODE_M));
+      bool global_enable = (delegU ? ((cpu.mode == MODE_U) && mstatus->uie) :
+                            delegS ? ((cpu.mode == MODE_S) && mstatus->sie) || (cpu.mode < MODE_S) :
+                                     ((cpu.mode == MODE_M) && mstatus->mie) || (cpu.mode < MODE_M));
 #endif
       if (global_enable) return irq | INTR_BIT;
     }

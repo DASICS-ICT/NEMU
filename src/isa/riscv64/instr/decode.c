@@ -153,6 +153,9 @@ int isa_fetch_decode(Decode *s) {
         switch (s->isa.instr.csr.csr) {
           case 0x0:   // ecall
           case 0x1:   // ebreak
+#ifdef CONFIG_RVN
+          case 0x002: // uret
+#endif  // CONFIG_RVN
           case 0x102: // sret
           case 0x302: // mret
             s->type = INSTR_TYPE_I;

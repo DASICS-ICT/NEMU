@@ -67,6 +67,9 @@ def_THelper(system) {
 #if defined(CONFIG_RV_DEBUG) || defined(CONFIG_EBREAK_AS_TRAP)
   def_INSTR_TAB("000000000001 00000 000 00000 ????? ??", ebreak);
 #endif //CONFIG_RV_DEBUG
+#ifdef CONFIG_RVN
+  def_INSTR_TAB("000000000010 00000 000 00000 ????? ??", uret);
+#endif  // CONFIG_RVN
   def_INSTR_TAB("000100000010 00000 000 00000 ????? ??", sret);
   def_INSTR_TAB("000100000101 00000 000 00000 ????? ??", wfi);
   def_INSTR_TAB("0001001????? ????? 000 00000 11100 11", sfence_vma);

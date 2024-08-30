@@ -39,6 +39,9 @@ MAP(CSRS, CSRS_DEF)
 #ifdef CONFIG_RVV
   MAP(VCSRS, CSRS_DEF)
 #endif // CONFIG_RVV
+#ifdef CONFIG_RVN
+  MAP(NCSRS, CSRS_DEF)
+#endif // CONFIG_RVN
 #ifdef CONFIG_RV_ARCH_CSRS
   MAP(ARCH_CSRS, CSRS_DEF)
 #endif // CONFIG_RV_ARCH_CSRS
@@ -57,6 +60,9 @@ void init_csr() {
   #ifdef CONFIG_RVV
   MAP(VCSRS, CSRS_EXIST)
   #endif // CONFIG_RVV
+  #ifdef CONFIG_RVN
+  MAP(NCSRS, CSRS_EXIST)
+  #endif  // CONFIG_RVN
   #ifdef CONFIG_RV_ARCH_CSRS
   MAP(ARCH_CSRS, CSRS_EXIST)
   #endif // CONFIG_RV_ARCH_CSRS
@@ -138,9 +144,9 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define MSTATUS_WMASK (0x7e79aaUL) | (1UL << 63) | (1UL << 39) | (1UL << 38)
 #define HSTATUS_WMASK ((1 << 22) | (1 << 21) | (1 << 20) | (1 << 18) | (0x3f << 12) | (1 << 9) | (1 << 8) | (1 << 7) | (1 << 6) | (1 << 5))
 #elif defined(CONFIG_RVV)
-#define MSTATUS_WMASK (0x7e79aaUL) | (1UL << 63) | (3UL << 9)
+#define MSTATUS_WMASK (0x7e79bbUL) | (1UL << 63) | (3UL << 9)
 #else
-#define MSTATUS_WMASK (0x7e79aaUL) | (1UL << 63)
+#define MSTATUS_WMASK (0x7e79bbUL) | (1UL << 63)
 #endif
 
 #ifdef CONFIG_RVH
@@ -170,6 +176,13 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define SIP_MASK (0x222 & mideleg->val)
 #define SIP_WMASK_S 0x2
 #define MTIE_MASK (1 << 7)
+
+#ifdef CONFIG_RVN
+#define UIE_MASK (0x111 & sideleg->val)
+#define UIP_MASK (0x111 & sideleg->val)
+#define UIP_WMASK_U 0x1
+#endif  // CONFIG_RVN
+
 #define FFLAGS_MASK 0x1f
 #define FRM_MASK 0x07
 #define FCSR_MASK 0xff
@@ -285,26 +298,36 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   }
 }
 
+
 void dasics_redirect_helper(vaddr_t pc, vaddr_t newpc, vaddr_t nextpc) {
   // Check whether this redirect instruction is permitted
   bool src_trusted = dasics_in_trusted_zone(pc);
   bool dst_trusted = dasics_in_trusted_zone(newpc);
+  bool src_activezone = dasics_match_djumpbound(pc, JUMPCFG_V);
   bool dst_activezone = dasics_match_djumpbound(newpc, JUMPCFG_V);
 
-  Logm("[Dasics Redirect] pc: 0x%lx (T:%d), target:0x%lx (T:%d F:%d)\n", pc, src_trusted, newpc, dst_trusted, dst_activezone);
-  Logm("[Dasics Redirect] dretpc: 0x%lx dretmaincall: 0x%lx\n", dretpc->val, dmaincall->val);
+  Logm("[Dasics Redirect] pc: 0x%lx (T:%d F:%d), target:0x%lx (T:%d F:%d)\n", pc, src_trusted, src_activezone, newpc, dst_trusted, dst_activezone);
+  Logm("[Dasics Redirect] dretpc: 0x%lx dretmaincall: 0x%lx dretpcfz: 0x%lx\n", dretpc->val, dmaincall->val, dretpcfz->val);
 
-  bool allow_lib_to_main = !src_trusted && dst_trusted && \
+  bool allow_lib_to_main = !src_trusted && dst_trusted && 
     (newpc == dretpc->val || newpc == dmaincall->val);
-  bool allow_activezone_jump = dst_activezone;
+  bool allow_activezone_to_lib = src_activezone && !dst_trusted && 
+    !dst_activezone && (newpc == dretpcfz->val);
+  
+  bool allow_brjp = src_trusted  || allow_lib_to_main || 
+                    dst_activezone || allow_activezone_to_lib;
 
-  bool allow_jump = src_trusted  || allow_lib_to_main || allow_activezone_jump;
-
-  if (!allow_jump) {
+  if (!allow_brjp) {
     INTR_TVAL_REG(EX_DUIAF) = newpc;
-    Logm("Dasics jump exception occur: pc%lx  (st:%d, altm:%d, df:%d, aftl:%d)\n",pc,src_trusted,allow_lib_to_main,dst_activezone,allow_activezone_jump);
+    // isa_reg_display();
+    Logm("Dasics jump exception occur: pc%lx  (st:%d, altm:%d, df:%d, aftl:%d)\n",pc,src_trusted,allow_lib_to_main,dst_activezone,allow_activezone_to_lib);
     longjmp_exception(EX_DUIAF);
   }
+
+  // FIXME: This code is only for UCAS-OS test!
+  //if (!src_trusted && !src_activezone && !dst_trusted && dst_activezone) {
+    //dretpcfz->val = nextpc;
+  //}
 }
 #endif  // CONFIG_RV_DASICS
 
@@ -432,17 +455,28 @@ if (is_read(vsie))           { return (mie->val & (hideleg->val & (mideleg->val 
 #endif
 
   if (is_read(mstatus) || is_read(sstatus)) { update_mstatus_sd(); }
-
   if (is_read(sstatus))     { return mstatus->val & SSTATUS_RMASK; }
+#ifdef CONFIG_RVN
+  else if (is_read(ustatus)) { return mstatus->val & USTATUS_RMASK; }
+#endif  
   else if (is_read(sie))    { return mie->val & SIE_MASK; }
+#ifdef CONFIG_RVN
+  else if (is_read(uie))    { return mie->val & UIE_MASK; }
+#endif  // CONFIG_RVN
   else if (is_read(mtvec))  { return mtvec->val & ~(0x2UL); }
   else if (is_read(stvec))  { return stvec->val & ~(0x2UL); }
+#ifdef CONFIG_RVN
+  else if (is_read(utvec))  { return utvec->val & ~(0x2UL); }
+#endif  // CONFIG_RVN
   else if (is_read(sip))    {
 #ifndef CONFIG_RVH
     difftest_skip_ref();
 #endif
     return mip->val & SIP_MASK;
   }
+#ifdef CONFIG_RVN
+  else if (is_read(uip))    { difftest_skip_ref(); return mip->val & UIP_MASK; }
+#endif  // CONFIG_RVN
 #ifdef CONFIG_RV_DASICS
   else if (is_read(dumcfg)) { return dumcfg->val & DUMCFG_MASK; }
 #endif  // CONFIG_RV_DASICS
@@ -590,7 +624,13 @@ static inline void csr_write(word_t *dest, word_t src) {
   }
 #endif // CONFIG_RVH
   else if (is_write(sstatus)) { mstatus->val = mask_bitset(mstatus->val, SSTATUS_WMASK, src); }
+#ifdef CONFIG_RVN
+  else if (is_write(ustatus)) { mstatus->val = mask_bitset(mstatus->val, USTATUS_WMASK, src); }
+#endif  // CONFIG_RVN
   else if (is_write(sie)) { mie->val = mask_bitset(mie->val, SIE_MASK, src); }
+#ifdef CONFIG_RVN
+  else if (is_write(uie)) { mie->val = mask_bitset(mie->val, UIE_MASK, src); }
+#endif  // CONFIG_RVN
   else if (is_write(mip)) {
 #ifdef CONFIG_RVH
     mip->val = mask_bitset(mip->val, MIP_MASK | VSSIP, src);
@@ -599,6 +639,9 @@ static inline void csr_write(word_t *dest, word_t src) {
 #endif // CONFIG_RVH
   }
   else if (is_write(sip)) { mip->val = mask_bitset(mip->val, ((cpu.mode == MODE_S) ? SIP_WMASK_S : SIP_MASK), src); }
+#ifdef CONFIG_RVN
+  else if (is_write(uip)) { mip->val = mask_bitset(mip->val, ((cpu.mode == MODE_U) ? UIP_WMASK_U : UIP_MASK), src); }
+#endif  // CONFIG_RVN
   else if (is_write(mtvec)) {
 #ifdef CONFIG_XTVEC_VECTORED_MODE
     *dest = src & ~(0x2UL);
@@ -613,13 +656,22 @@ static inline void csr_write(word_t *dest, word_t src) {
     *dest = src & ~(0x3UL);
 #endif // CONFIG_XTVEC_VECTORED_MODE
 }
+#ifdef CONFIG_RVN
+  else if (is_write(utvec)) {
+#ifdef XTVEC_VECTORED_MODE
+    *dest = src & ~(0x2UL);
+#else
+    *dest = src & ~(0x3UL);
+#endif // XTVEC_VECTORED_MODE
+  }
+#endif  // CONFIG_RVN
   else if (is_write(medeleg)) {
     word_t mask = 0xb3ff;
 #ifdef CONFIG_RVH
     mask = MEDELEG_MASK;
 #endif  // CONFIG_RVH
 #ifdef CONFIG_RV_DASICS
-    mask |= 0x7000000;
+    mask |= 0xff000000;
 #endif  // CONFIG_RV_DASICS
 #ifdef CONFIG_RVH
     medeleg->val = mask_bitset(medeleg->val, mask, src);
@@ -627,7 +679,13 @@ static inline void csr_write(word_t *dest, word_t src) {
     *dest = src & mask;
 #endif  // CONFIG_RVH
   }
+#ifdef CONFIG_RVN
+  else if (is_write(mideleg)) { *dest = src & 0x333; }
+  else if (is_write(sedeleg)) { *dest = src & medeleg->val; }
+  else if (is_write(sideleg)) { *dest = src & mideleg->val; }
+#else
   else if (is_write(mideleg)) { *dest = src & 0x222; }
+#endif  // CONFIG_RVN
 #ifdef CONFIG_RVV
   else if (is_write(vcsr)) { *dest = src & 0b111; vxrm->val = (src >> 1) & 0b11; vxsat->val = src & 0b1; }
   else if (is_write(vxrm)) { *dest = src & 0b11; vcsr->val = (vxrm->val) << 1 | vxsat->val; }
@@ -638,6 +696,9 @@ static inline void csr_write(word_t *dest, word_t src) {
 #endif
   else if (is_write(mepc)) { *dest = src & (~0x1UL); }
   else if (is_write(sepc)) { *dest = src & (~0x1UL); }
+#ifdef CONFIG_RVN
+  else if (is_write(uepc)) { *dest = src & (~0x1UL); }
+#endif  // CONFIG_RVN
   else if (is_write(fflags)) {
 #ifdef CONFIG_FPU_NONE
   longjmp_exception(EX_II);
@@ -823,6 +884,11 @@ static inline void csr_write(word_t *dest, word_t src) {
       is_write(mie) || is_write(sie) || is_write(mip) || is_write(sip)) {
     set_sys_state_flag(SYS_STATE_UPDATE);
   }
+#ifdef CONFIG_RVN
+  if (is_write(ustatus) || is_write(uie) || is_write(uip)) {
+    set_sys_state_flag(SYS_STATE_UPDATE);
+  }
+#endif  // CONFIG_RVN
 }
 
 word_t csrid_read(uint32_t csrid) {
@@ -845,6 +911,16 @@ static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, vaddr_t p
 static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
   switch (op) {
 #ifndef CONFIG_MODE_USER
+#ifdef CONFIG_RVN
+    case 0x002: // uret
+      mstatus->uie = mstatus->upie;
+      mstatus->upie = (ISDEF(CONFIG_DIFFTEST_REF_QEMU) ? 0 // this is bug of QEMU
+          : 1);
+      cpu.mode = MODE_U;
+      mstatus->mprv = 0;
+      update_mmu_state();
+      return uepc->val;
+#endif  // CONFIG_RVN
     case 0x102: // sret
 #ifdef CONFIG_RVH
       if (cpu.v == 0){
@@ -1023,7 +1099,19 @@ void isa_hostcall(uint32_t id, rtlreg_t *dest, const rtlreg_t *src1,
       break;
 #else
     case HOSTCALL_TRAP: 
+#ifdef CONFIG_RV_DASICS
+      bool hostcall_trusted = dasics_in_trusted_zone(pc);
+
+      if (!hostcall_trusted && cpu.mode == MODE_U) {
+        ret = raise_intr(EX_DUEF, *src1);
+      }
+      else {
+        ret = raise_intr(imm, *src1);
+      }
+      break;
+#else
       ret = raise_intr(imm, *src1); break;
+#endif  // CONFIG_RV_DASICS
 #endif
     case HOSTCALL_PRIV: ret = priv_instr(imm, src1); break;
     default: panic("Unsupported hostcall ID = %d", id);

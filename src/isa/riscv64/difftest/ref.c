@@ -42,13 +42,6 @@ void ramcmp() {
 #define MIDELEG_FORCED_MASK ((1 << 12) | (1 << 10) | (1 << 6) | (1 << 2))
 #endif //CONFIG_RVH
 
-
-#ifdef CONFIG_RVV
-#define SSTATUS_WMASK ((1 << 19) | (1 << 18) | (0x3 << 13) | (0x3 << 9) | (1 << 8) | (1 << 5) | (1 << 1))
-#else
-#define SSTATUS_WMASK ((1 << 19) | (1 << 18) | (0x3 << 13) | (1 << 8) | (1 << 5) | (1 << 1))
-#endif // CONFIG_RVV
-#define SSTATUS_RMASK (SSTATUS_WMASK | (0x3 << 15) | (1ull << 63) | (3ull << 32))
 void csr_prepare() {
   cpu.mstatus = mstatus->val;
   cpu.mcause  = mcause->val;
@@ -69,6 +62,17 @@ void csr_prepare() {
   cpu.stval    = stval->val;
   cpu.mtvec    = mtvec->val;
   cpu.stvec    = stvec->val;
+
+#ifdef CONFIG_RVN
+  cpu.ustatus  = csrid_read(0x000);  // ustatus
+  cpu.ucause   = ucause->val;
+  cpu.uepc     = uepc->val;
+  cpu.uscratch = uscratch->val;
+  cpu.sedeleg  = sedeleg->val;
+  cpu.sideleg  = sideleg->val;
+  cpu.utval    = utval->val;
+  cpu.utvec    = utvec->val;
+#endif  // CONFIG_RVN
 
 #ifdef CONFIG_RV_DASICS
   cpu.dumcfg    = dumcfg->val;
@@ -121,6 +125,7 @@ void csr_prepare() {
 
   cpu.dmaincall = dmaincall->val;
   cpu.dretpc    = dretpc->val;
+  cpu.dretpcfz  = dretpcfz->val;
 #endif  // CONFIG_RV_DASICS
 
 #ifdef CONFIG_RVV
@@ -159,6 +164,11 @@ void csr_writeback() {
   //sstatus->val = cpu.sstatus;  // sstatus is a shadow of mstatus
   scause ->val = cpu.scause ;
   sepc   ->val = cpu.sepc   ;
+#ifdef CONFIG_RVN
+  //ustatus->val = cpu.ustatus;  // ustatus is a shadow of mstatus
+  ucause->val  = cpu.ucause;
+  uepc->val    = cpu.uepc;
+#endif  // CONFIG_RVN
 
   satp->val     = cpu.satp;
   mip->val      = cpu.mip;
@@ -171,6 +181,14 @@ void csr_writeback() {
   stval->val    = cpu.stval;
   mtvec->val    = cpu.mtvec;
   stvec->val    = cpu.stvec;
+
+#ifdef CONFIG_RVN
+  uscratch->val = cpu.uscratch;
+  sideleg->val  = cpu.sideleg;
+  sedeleg->val  = cpu.sedeleg;
+  utval->val    = cpu.utval;
+  utvec->val    = cpu.utvec;
+#endif  // CONFIG_RVN
 
 #ifdef CONFIG_RV_DASICS
   dumcfg->val    = cpu.dumcfg;
@@ -223,6 +241,7 @@ void csr_writeback() {
 
   dmaincall->val = cpu.dmaincall;
   dretpc->val    = cpu.dretpc;
+  dretpcfz->val  = cpu.dretpcfz;
 #endif  // CONFIG_RV_DASICS
 
 #ifdef CONFIG_RVV

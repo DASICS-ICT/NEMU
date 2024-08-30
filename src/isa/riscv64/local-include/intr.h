@@ -42,8 +42,13 @@ enum {
   EX_SGPF, // store/amo guest-page fault, H-extention
 #ifdef CONFIG_RV_DASICS
   EX_DUIAF=24,  // DASICS user instruction access fault
+  EX_DSIAF,     // DASICS supervisor instruction access fault
   EX_DULAF,     // DASICS user load access fault
+  EX_DSLAF,     // DASICS supervisor load access fault
   EX_DUSAF,     // DASICS user store access fault
+  EX_DSSAF,     // DASICS supervisor store access fault
+  EX_DUEF,      // DASICS user ecall fault
+  EX_DSEF,      // DASICS supervisor ecall fault
 #endif  // CONFIG_RV_DASICS
 };
 
@@ -55,9 +60,17 @@ word_t raise_intr(word_t NO, vaddr_t epc);
 #define return_on_mem_ex() do { if (cpu.mem_exception != MEM_OK) return; } while (0)
 bool intr_deleg_S(word_t exceptionNO);
 bool intr_deleg_VS(word_t exceptionNO);
-#ifdef CONFIG_RVH
-#define INTR_TVAL_REG(ex) (*((intr_deleg_VS(ex)) ? (word_t *)vstval :(intr_deleg_S(ex)) ? (word_t *)stval : (word_t *)mtval))
+#ifdef CONFIG_RVN
+  bool intr_deleg_U(word_t exceptionNO);
+  #define INTR_TVAL_REG(ex) (*((intr_deleg_U(ex)) ? (word_t *)utval : \
+                              ((intr_deleg_S(ex)) ? (word_t *)stval : \
+                                                    (word_t *)mtval)))
 #else
-#define INTR_TVAL_REG(ex) (*((intr_deleg_S(ex)) ? (word_t *)stval : (word_t *)mtval))
-#endif
+  #ifdef CONFIG_RVH
+  #define INTR_TVAL_REG(ex) (*((intr_deleg_VS(ex)) ? (word_t *)vstval :(intr_deleg_S(ex)) ? (word_t *)stval : (word_t *)mtval))
+  #else
+  #define INTR_TVAL_REG(ex) (*((intr_deleg_S(ex)) ? (word_t *)stval : (word_t *)mtval))
+  #endif
+#endif  // CONFIG_RVN
+
 #endif

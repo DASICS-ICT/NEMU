@@ -91,7 +91,7 @@ void csr_prepare();
   f(dlbound20,   0x8a4) f(dlbound21,   0x8a5) f(dlbound22,   0x8a6) f(dlbound23,   0x8a7) \
   f(dlbound24,   0x8a8) f(dlbound25,   0x8a9) f(dlbound26,   0x8aa) f(dlbound27,   0x8ab) \
   f(dlbound28,   0x8ac) f(dlbound29,   0x8ad) f(dlbound30,   0x8ae) f(dlbound31,   0x8af) \
-  f(dmaincall,   0x8b0) f(dretpc,      0x8b1) \
+  f(dmaincall,   0x8b0) f(dretpc,      0x8b1) f(dretpcfz,    0x8b2)\
   f(djbound0lo,  0x8c0) f(djbound0hi,  0x8c1) f(djbound1lo,  0x8c2) f(djbound1hi,  0x8c3) \
   f(djbound2lo,  0x8c4) f(djbound2hi,  0x8c5) f(djbound3lo,  0x8c6) f(djbound3hi,  0x8c7) \
   f(djcfg,       0x8c8)
@@ -138,6 +138,14 @@ void csr_prepare();
   CORE_DEBUG_CSRS(f) \
   TRIGGER_CSRS(f) \
 
+#endif
+
+#ifdef CONFIG_RVN
+#define NCSRS(f) \
+  f(ustatus,     0x000) f(uie,         0x004) f(utvec,       0x005) \
+  f(uscratch,    0x040) f(uepc,        0x041) f(ucause,      0x042) \
+  f(utval,       0x043) f(uip,         0x044) \
+  f(sedeleg,     0x102) f(sideleg,     0x103)
 #endif
 
 #ifdef CONFIG_RVV
@@ -512,6 +520,54 @@ CSR_STRUCT_START(fcsr)
   };
 CSR_STRUCT_END(fcsr)
 
+#ifdef CONFIG_RVN
+CSR_STRUCT_START(ustatus)
+  uint64_t uie :1;
+  uint64_t pad :3;
+  uint64_t upie:1;
+CSR_STRUCT_END(ustatus)
+
+CSR_STRUCT_START(uie)
+  uint64_t usie:1;
+  uint64_t pad0:3;
+  uint64_t utie:1;
+  uint64_t pad1:3;
+  uint64_t ueie:1;
+  uint64_t pad2:3;
+CSR_STRUCT_END(uie)
+
+CSR_STRUCT_START(utvec)
+CSR_STRUCT_END(utvec)
+
+CSR_STRUCT_START(uscratch)
+CSR_STRUCT_END(uscratch)
+
+CSR_STRUCT_START(uepc)
+CSR_STRUCT_END(uepc)
+
+CSR_STRUCT_START(ucause)
+CSR_STRUCT_END(ucause)
+
+CSR_STRUCT_START(utval)
+CSR_STRUCT_END(utval)
+
+CSR_STRUCT_START(uip)
+  uint64_t usip:1;
+  uint64_t pad0:3;
+  uint64_t utip:1;
+  uint64_t pad1:3;
+  uint64_t ueip:1;
+  uint64_t pad2:3;
+CSR_STRUCT_END(uip)
+
+CSR_STRUCT_START(sedeleg)
+CSR_STRUCT_END(sedeleg)
+
+CSR_STRUCT_START(sideleg)
+CSR_STRUCT_END(sideleg)
+
+#endif  // CONFIG_RVN
+
 CSR_STRUCT_START(mtime)
 CSR_STRUCT_END(mtime)
 
@@ -711,6 +767,9 @@ CSR_STRUCT_END(dmaincall)
 
 CSR_STRUCT_START(dretpc)
 CSR_STRUCT_END(dretpc)
+
+CSR_STRUCT_START(dretpcfz)
+CSR_STRUCT_END(dretpcfz)
 
 CSR_STRUCT_START(djbound0lo)
 CSR_STRUCT_END(djbound0lo)
@@ -1014,6 +1073,9 @@ CSR_STRUCT_END(vsatp)
 
 #define CSRS_DECL(name, addr) extern concat(name, _t)* const name;
 MAP(CSRS, CSRS_DECL)
+#ifdef CONFIG_RVN
+  MAP(NCSRS, CSRS_DECL)
+#endif
 #ifdef CONFIG_RVV
   MAP(VCSRS, CSRS_DECL)
 #endif // CONFIG_RVV
@@ -1032,12 +1094,17 @@ MAP(CSRS, CSRS_DECL)
   #define _vsstatus_  ((hstatus->vsxl == 1)? vsstatus->_32  : vsstatus->_64)
 #endif // CONFIG_RVH
 
- #ifdef CONFIG_RVV
-  #define SSTATUS_WMASK ((1 << 19) | (1 << 18) | (0x3 << 13) | (0x3 << 9) | (1 << 8) | (1 << 5) | (1 << 1))
-#else
-  #define SSTATUS_WMASK ((1 << 19) | (1 << 18) | (0x3 << 13) | (1 << 8) | (1 << 5) | (1 << 1))
-#endif // CONFIG_RVV
+#define SSTATUS_WMASK ((1 << 19) | (1 << 18) | (0x3 << 13)\
+ IFDEF(CONFIG_RVV, | (0x3 << 9)) IFDEF(CONFIG_RVN, | (1 << 4) | (1 << 0))\
+ | (1 << 8) | (1 << 5) | (1 << 1))
+
 #define SSTATUS_RMASK (SSTATUS_WMASK | (0x3 << 15) | (1ull << 63) | (3ull << 32))
+
+#ifdef CONFIG_RVN
+#define USTATUS_WMASK ((1 << 4) | 0x1)
+#define USTATUS_RMASK USTATUS_WMASK
+#endif  // CONFIG_RVN
+
 word_t csrid_read(uint32_t csrid);
 
 // PMP

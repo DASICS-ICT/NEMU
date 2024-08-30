@@ -80,6 +80,13 @@ typedef struct {
   uint64_t mip, mie;
   uint64_t mscratch, sscratch;
   uint64_t mideleg, medeleg;
+
+#ifdef CONFIG_RVN
+  uint64_t ustatus, ucause, uepc;
+  uint64_t uscratch, utval, utvec;
+  uint64_t sedeleg, sideleg;
+#endif  // CONFIG_RVN
+
 #ifdef CONFIG_RV_DASICS
   uint64_t dumcfg, dumbound0, dumbound1;
   uint64_t dlcfg0;
@@ -91,7 +98,7 @@ typedef struct {
   uint64_t dlbound20, dlbound21, dlbound22, dlbound23;
   uint64_t dlbound24, dlbound25, dlbound26, dlbound27;
   uint64_t dlbound28, dlbound29, dlbound30, dlbound31;
-  uint64_t dmaincall, dretpc;
+  uint64_t dmaincall, dretpc, dretpcfz;
   uint64_t djcfg;
   uint64_t djbound0lo, djbound0hi, djbound1lo, djbound1hi;
   uint64_t djbound2lo, djbound2hi, djbound3lo, djbound3hi;

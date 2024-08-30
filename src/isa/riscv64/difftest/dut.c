@@ -81,6 +81,17 @@ bool isa_difftest_checkregs(CPU_state *ref_r, vaddr_t pc) {
     check_reg(vlenb     );
     #endif // CONFIG_RVV
 
+    #ifdef CONFIG_RVN
+    check_reg(ustatus   );
+    check_reg(ucause    );
+    check_reg(uepc      );
+    check_reg(utval     );
+    check_reg(utvec     );
+    check_reg(uscratch  );
+    check_reg(sideleg   );
+    check_reg(sedeleg   );
+    #endif // CONFIG_RVN
+
     #ifdef CONFIG_RVH
     check_reg(v);//virtualization mode
     check_reg(mtval2    );

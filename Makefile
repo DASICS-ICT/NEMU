@@ -14,6 +14,8 @@
 # See the Mulan PSL v2 for more details.
 #**************************************************************************************/
 
+NEMU_HOME=$(abspath .)
+
 ifeq ($(wildcard $(NEMU_HOME)/src/nemu-main.c),)
   $(error NEMU_HOME=$(NEMU_HOME) is not a NEMU repo)
 endif
