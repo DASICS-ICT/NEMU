@@ -134,10 +134,6 @@ _Noreturn void longjmp_exception(int ex_cause) {
 static bool manual_cpt_quit = false;
 #define FILL_EXEC_TABLE(name) [concat(EXEC_ID_, name)] = &&concat(exec_, name),
 
-#ifdef CONFIG_RV_DASICS
-void dasics_redirect_helper(vaddr_t pc, vaddr_t newpc, vaddr_t nextpc);
-#endif  // CONFIG_RV_DASICS
-
 #define rtl_j(s, target)                                                       \
   do {                                                                         \
     IFDEF(CONFIG_ENABLE_INSTR_CNT, n -= s->idx_in_bb);                         \
@@ -159,9 +155,6 @@ void dasics_redirect_helper(vaddr_t pc, vaddr_t newpc, vaddr_t nextpc);
     IFDEF(CONFIG_ENABLE_INSTR_CNT, n -= s->idx_in_bb);                         \
     is_ctrl = true;                                                            \
     bool is_jmp = interpret_relop(relop, *src1, *src2);                        \
-    bool is_branch = s->type == INSTR_TYPE_B;                                  \
-    IFDEF(CONFIG_RV_DASICS, (is_jmp && !is_branch ?                            \
-      dasics_redirect_helper(s->pc, (vaddr_t)target, s->snpc) : 0));           \
     if (is_jmp) {                                                              \
       s = s->tnext;                                                            \
       br_taken = true;                                                         \
@@ -538,6 +531,9 @@ static int execute(int n) {
     cpu.amo = false;
     fetch_decode(&s, cpu.pc);
     cpu.debug.current_pc = s.pc;
+#ifdef CONFIG_RV_DASICS
+    s.prev_pc = cpu.pc;
+#endif
     cpu.pc = s.snpc;
 #ifdef CONFIG_TVAL_EX_II
     cpu.instr = s.isa.instr.val;
@@ -652,7 +648,16 @@ void cpu_exec(uint64_t n) {
     if (cause == NEMU_EXEC_EXCEPTION) {
       Loge("Handle NEMU_EXEC_EXCEPTION");
       cause = 0;
-      cpu.pc = raise_intr(g_ex_cause, prev_s->pc);
+#ifdef CONFIG_RV_DASICS
+      vaddr_t temp_epc = (g_ex_cause == EX_DUIAF)? prev_s->prev_pc : prev_s->pc;
+      if(g_ex_cause == EX_DUIAF){
+        prev_s->prev_is_cfi = 0;
+        prev_s->prev_type = CFI_NONE;
+      }
+#else 
+       vaddr_t temp_epc = prev_s->pc;
+#endif
+      cpu.pc = raise_intr(g_ex_cause, temp_epc);
       cpu.amo = false; // clean up
       IFDEF(CONFIG_PERF_OPT, tcache_handle_exception(cpu.pc));
       IFDEF(CONFIG_SHARE, break);

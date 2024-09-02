@@ -298,38 +298,33 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   }
 }
 
+void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
+  bool src_trusted = dasics_in_trusted_zone(prev_pc);
+  bool dst_trusted = dasics_in_trusted_zone(pc);
+  bool src_freezone = dasics_match_djumpbound(prev_pc, JUMPCFG_V);
+  bool dst_freezone = dasics_match_djumpbound(pc, JUMPCFG_V);
 
-void dasics_redirect_helper(vaddr_t pc, vaddr_t newpc, vaddr_t nextpc) {
-  // Check whether this redirect instruction is permitted
-  bool src_trusted = dasics_in_trusted_zone(pc);
-  bool dst_trusted = dasics_in_trusted_zone(newpc);
-  bool src_activezone = dasics_match_djumpbound(pc, JUMPCFG_V);
-  bool dst_activezone = dasics_match_djumpbound(newpc, JUMPCFG_V);
+  Logm("[Dasics Fetch] prev_pc: 0x%lx (T:%d F:%d), pc:0x%lx (T:%d F:%d)\n", prev_pc, src_trusted, src_freezone, pc, dst_trusted, dst_freezone);
+  Logm("[Dasics Fetch] dretpc: 0x%lx dretmaincall: 0x%lx dretpcfz: 0x%lx\n", dretpc->val, dmaincall->val, dretpcfz->val);
 
-  Logm("[Dasics Redirect] pc: 0x%lx (T:%d F:%d), target:0x%lx (T:%d F:%d)\n", pc, src_trusted, src_activezone, newpc, dst_trusted, dst_activezone);
-  Logm("[Dasics Redirect] dretpc: 0x%lx dretmaincall: 0x%lx dretpcfz: 0x%lx\n", dretpc->val, dmaincall->val, dretpcfz->val);
+  bool allow_lib_to_main = !src_trusted && dst_trusted && \
+    (pc == dretpc->val || pc == dmaincall->val);
+  bool allow_freezone_to_lib = src_freezone && !dst_trusted && \
+    !dst_freezone && (pc == dretpcfz->val);
 
-  bool allow_lib_to_main = !src_trusted && dst_trusted && 
-    (newpc == dretpc->val || newpc == dmaincall->val);
-  bool allow_activezone_to_lib = src_activezone && !dst_trusted && 
-    !dst_activezone && (newpc == dretpcfz->val);
-  
-  bool allow_brjp = src_trusted  || allow_lib_to_main || 
-                    dst_activezone || allow_activezone_to_lib;
+  bool allow_br   = src_trusted  || dst_freezone;
+  bool allow_jump = src_trusted  || allow_lib_to_main || \
+                    dst_freezone || allow_freezone_to_lib;
 
-  if (!allow_brjp) {
-    INTR_TVAL_REG(EX_DUIAF) = newpc;
-    // isa_reg_display();
-    Logm("Dasics jump exception occur: pc%lx  (st:%d, altm:%d, df:%d, aftl:%d)\n",pc,src_trusted,allow_lib_to_main,dst_activezone,allow_activezone_to_lib);
-    longjmp_exception(EX_DUIAF);
+  bool allow_cfi = (cfi_type == CFI_BRANCH && allow_br) || (cfi_type == CFI_JUMP && allow_jump);
+
+  if (!allow_cfi) {
+    int ex = EX_DUIAF;
+    INTR_TVAL_REG(ex) = pc;
+    Logm("Dasics fetch exception occur: pc%lx  (st:%d,df:%d)\n",pc,src_trusted,dst_freezone);
+    longjmp_exception(ex);
   }
-
-  // FIXME: This code is only for UCAS-OS test!
-  //if (!src_trusted && !src_activezone && !dst_trusted && dst_activezone) {
-    //dretpcfz->val = nextpc;
-  //}
 }
-#endif  // CONFIG_RV_DASICS
 
 /* raise exception if not trusted */
 void dasics_check_trusted(vaddr_t pc) {
@@ -340,7 +335,8 @@ void dasics_check_trusted(vaddr_t pc) {
     longjmp_exception(ex);
   }
 }
-
+#endif
+#ifdef CONFIG_RV_PMP_CSR
 uint8_t pmpcfg_from_index(int idx) {
   // for now, nemu only support 16 pmp entries in a XLEN=64 machine
   int xlen = 64;
@@ -371,7 +367,7 @@ word_t pmpaddr_from_csrid(int id) {
 word_t inline pmp_tor_mask() {
   return -((word_t)1 << (CONFIG_PMP_GRANULARITY - PMP_SHIFT));
 }
-
+#endif
 static inline void update_mstatus_sd() {
   // mstatus.fs is always dirty or off in QEMU 3.1.0
   // When CONFIG_FS_CLEAN_STATE is set (such as for rocket-chip), mstatus.fs is always dirty or off.

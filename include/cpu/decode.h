@@ -43,6 +43,11 @@ enum {
   INSTR_TYPE_B, // branch
   INSTR_TYPE_I, // indirect
 };
+enum {
+  CFI_NONE,   //not cfi
+  CFI_BRANCH, //branch 
+  CFI_JUMP,   //jump
+};
 
 typedef struct Decode {
   union {
@@ -57,6 +62,11 @@ typedef struct Decode {
   };
   vaddr_t pc;
   vaddr_t snpc; // sequential next pc
+  #ifdef CONFIG_RV_DASICS
+  vaddr_t prev_pc;  // previous pc for branch check
+  uint8_t prev_type;  // branch or jump
+  uint8_t prev_is_cfi;  //previous instruction is a control flow instruction
+  #endif 
   IFDEF (CONFIG_PERF_OPT, const void *EHelper);
   IFNDEF(CONFIG_PERF_OPT, void (*EHelper)(struct Decode *));
   Operand dest, src1, src2;
