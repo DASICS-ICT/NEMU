@@ -305,7 +305,8 @@ void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
   bool dst_freezone = dasics_match_djumpbound(pc, JUMPCFG_V);
 
   Logm("[Dasics Fetch] prev_pc: 0x%lx (T:%d F:%d), pc:0x%lx (T:%d F:%d)\n", prev_pc, src_trusted, src_freezone, pc, dst_trusted, dst_freezone);
-  Logm("[Dasics Fetch] dretpc: 0x%lx dretmaincall: 0x%lx dretpcfz: 0x%lx\n", dretpc->val, dmaincall->val, dretpcfz->val);
+  Logm("[Dasics Fetch] dretpc: 0x%lx dretmaincall: 0x%lx dretpcfz: 0x%lx, dfreason: 0x%lx\n", 
+         dretpc->val, dmaincall->val, dretpcfz->val, dfreason->val);
 
   bool allow_lib_to_main = !src_trusted && dst_trusted && \
     (pc == dretpc->val || pc == dmaincall->val);

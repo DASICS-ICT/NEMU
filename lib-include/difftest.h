@@ -43,7 +43,7 @@ enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 #endif //RV64_FULL_DIFF
 
 #if defined (RV64_FULL_DIFF) && defined (CONFIG_RV_DASICS)
-#define RV_DASICS_REG_SIZE (sizeof(uint64_t) * (3 + 1 + 32 + 3 + 8 + 1))
+#define RV_DASICS_REG_SIZE (sizeof(uint64_t) * (3 + 1 + 32 + 4 + 8 + 1))
 #else
 #define RV_DASICS_REG_SIZE 0
 #endif  //CONFIG_RV_DASICS
