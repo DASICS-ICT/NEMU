@@ -59,7 +59,7 @@
   f(dlbound20,   0x8a4) f(dlbound21,   0x8a5) f(dlbound22,   0x8a6) f(dlbound23,   0x8a7) \
   f(dlbound24,   0x8a8) f(dlbound25,   0x8a9) f(dlbound26,   0x8aa) f(dlbound27,   0x8ab) \
   f(dlbound28,   0x8ac) f(dlbound29,   0x8ad) f(dlbound30,   0x8ae) f(dlbound31,   0x8af) \
-  f(dmaincall,   0x8b0) f(dretpc,      0x8b1) f(dretpcfz,    0x8b2) \
+  f(dmaincall,   0x8b0) f(dretpc,      0x8b1) f(dretpcfz,    0x8b2) f(dfreason,    0x8b3) \
   f(djbound0lo,  0x8c0) f(djbound0hi,  0x8c1) f(djbound1lo,  0x8c2) f(djbound1hi,  0x8c3) \
   f(djbound2lo,  0x8c4) f(djbound2hi,  0x8c5) f(djbound3lo,  0x8c6) f(djbound3hi,  0x8c7) \
   f(djcfg,       0x8c8)
@@ -729,6 +729,9 @@ CSR_STRUCT_END(dretpc)
 
 CSR_STRUCT_START(dretpcfz)
 CSR_STRUCT_END(dretpcfz)
+
+CSR_STRUCT_START(dfreason)
+CSR_STRUCT_END(dfreason)
 
 CSR_STRUCT_START(djbound0lo)
 CSR_STRUCT_END(djbound0lo)
