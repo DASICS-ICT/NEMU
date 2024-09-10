@@ -72,10 +72,14 @@ void csr_prepare() {
   cpu.sideleg  = sideleg->val;
   cpu.utval    = utval->val;
   cpu.utvec    = utvec->val;
+  cpu.utimer   = utimer->val;
 #endif  // CONFIG_RVN
 
 #ifdef CONFIG_RV_DASICS
-  cpu.dumcfg    = dumcfg->val;
+  cpu.dsmcfg    = dsmcfg->val;
+  cpu.dsmbound0 = dsmbound0->val;
+  cpu.dsmbound1 = dsmbound1->val;
+  // cpu.dumcfg    = csrid_read(0x9e0);   // dumcfg
   cpu.dumbound0 = dumbound0->val;
   cpu.dumbound1 = dumbound1->val;
 
@@ -126,8 +130,17 @@ void csr_prepare() {
   cpu.dmaincall = dmaincall->val;
   cpu.dretpc    = dretpc->val;
   cpu.dretpcfz  = dretpcfz->val;
-  cpu.dfreason  = dfreason->val;
 #endif  // CONFIG_RV_DASICS
+
+#ifdef CONFIG_RV_MPK
+  cpu.upkru    = upkru->val;
+  cpu.spkrs    = spkrs->val;
+  cpu.spkctl   = spkctl->val;
+#endif
+
+#if defined (CONFIG_RV_DASICS) || defined (CONFIG_RV_MPK)
+  cpu.dfreason  = dfreason->val;
+#endif
 
 #ifdef CONFIG_RVV
   cpu.vstart  = vstart->val;
@@ -189,10 +202,14 @@ void csr_writeback() {
   sedeleg->val  = cpu.sedeleg;
   utval->val    = cpu.utval;
   utvec->val    = cpu.utvec;
+  utimer->val   = cpu.utimer;
 #endif  // CONFIG_RVN
 
 #ifdef CONFIG_RV_DASICS
-  dumcfg->val    = cpu.dumcfg;
+  dsmcfg->val    = cpu.dsmcfg;
+  dsmbound0->val = cpu.dsmbound0;
+  dsmbound1->val = cpu.dsmbound1;
+  // dumcfg->val    = cpu.dumcfg; // dumcfg is a shadow of dsmcfg
   dumbound0->val = cpu.dumbound0;
   dumbound1->val = cpu.dumbound1;
 
@@ -243,8 +260,17 @@ void csr_writeback() {
   dmaincall->val = cpu.dmaincall;
   dretpc->val    = cpu.dretpc;
   dretpcfz->val  = cpu.dretpcfz;
-  dfreason->val  = cpu.dfreason;
 #endif  // CONFIG_RV_DASICS
+
+#ifdef CONFIG_RV_MPK
+  upkru->val    = cpu.upkru;
+  spkrs->val    = cpu.spkrs;
+  spkctl->val   = cpu.spkctl;
+#endif
+
+#if defined (CONFIG_RV_DASICS) || defined (CONFIG_RV_MPK)
+  dfreason->val = cpu.dfreason;
+#endif
 
 #ifdef CONFIG_RVV
   vstart->val  = cpu.vstart;

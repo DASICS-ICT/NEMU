@@ -48,6 +48,12 @@ MAP(CSRS, CSRS_DEF)
 #ifdef CONFIG_RV_DASICS
   MAP(DASICS_CSRS, CSRS_DEF)
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_MPK
+  MAP(MPK_CSRS, CSRS_DEF)
+#endif // CONFIG_RV_MPK
+#if defined (CONFIG_RV_DASICS) || defined (CONFIG_RV_MPK)
+  MAP(DASICS_MPK_CSRS, CSRS_DEF)
+#endif
 #ifdef CONFIG_RVH
   MAP(HCSRS, CSRS_DEF)
 #endif //CONFIG_RVH
@@ -69,6 +75,12 @@ void init_csr() {
   #ifdef CONFIG_RV_DASICS
   MAP(DASICS_CSRS, CSRS_EXIST)
   #endif  // CONFIG_RV_DASICS
+  #ifdef CONFIG_RV_MPK
+  MAP(MPK_CSRS, CSRS_EXIST)
+  #endif // CONFIG_RV_MPK
+  #if defined (CONFIG_RV_DASICS) || defined (CONFIG_RV_MPK)
+  MAP(DASICS_MPK_CSRS, CSRS_EXIST)
+  #endif
   #ifdef CONFIG_RVH
   cpu.v = 0;
   MAP(HCSRS, CSRS_EXIST)
@@ -153,9 +165,9 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define MIP_MASK ((1 << 9) | (1 << 5) | (1 << 1))
 #define MIE_MASK ((1 << 9) | (1 << 5) | (1 << 1))
 #else
-#define MIP_MASK ((1 << 9) | (1 << 8) | (1 << 5) | (1 << 4) | (1 << 1) | (1 << 0))
-#define MIE_MASK ((1 << 9) | (1 << 8) | (1 << 5) | (1 << 4) | (1 << 1) | (1 << 0))
-#endif
+#define MIP_MASK ((1 << 11) | (1 << 9) | (1 << 8) | (1 << 7) | (1 << 5) | (1 << 4) | (1 << 3) | (1 << 1) | (1 << 0))
+#define MIE_MASK ((1 << 11) | (1 << 9) | (1 << 8) | (1 << 7) | (1 << 5) | (1 << 4) | (1 << 3) | (1 << 1) | (1 << 0))
+#endif // CONFIG_RVH
 #ifdef CONFIG_RVH
 #define COUNTEREN_MASK 0
 #define MIDELEG_FORCED_MASK ((1 << 12) | (1 << 10) | (1 << 6) | (1 << 2)) // mideleg bits 2、6、10、12 are read_only one
@@ -172,9 +184,9 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define HIE_WMASK HS_MASK
 #endif
 
-#define SIE_MASK (0x222 & mideleg->val)
-#define SIP_MASK (0x222 & mideleg->val)
-#define SIP_WMASK_S 0x2
+#define SIE_MASK (0x333 & mideleg->val)
+#define SIP_MASK (0x333 & mideleg->val)
+#define SIP_WMASK_S 0x3
 #define MTIE_MASK (1 << 7)
 
 #ifdef CONFIG_RVN
@@ -187,6 +199,8 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define FRM_MASK 0x07
 #define FCSR_MASK 0xff
 #define SATP_SV39_MASK 0xf000000000000000ULL
+#define PKR_MASK 0xffffffffffffffffUL
+#define PKCTL_MASK 0x3UL
 #define is_read(csr) (src == (void *)(csr))
 #define is_write(csr) (dest == (void *)(csr))
 #define is_read_pmpcfg (src >= &(csr_array[CSR_PMPCFG0]) && src < (&(csr_array[CSR_PMPCFG0]) + (MAX_NUM_PMP/4)))
@@ -198,15 +212,19 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define mask_bitset(old, mask, new) (((old) & ~(mask)) | ((new) & (mask)))
 
 #ifdef CONFIG_RV_DASICS
-#define DUMCFG_MASK MCFG_UENA
 #define BOUND_ADDR_ALGIN 0x7
-bool dasics_in_trusted_zone(uint64_t pc)
+bool dasics_in_trusted_zone(uint64_t pc) // Only use ena
 {
-  bool is_umain_enable = dumcfg->mcfg_uena;
+  bool is_smain_enable = dsmcfg->mcfg_sena;
+  bool is_umain_enable = dsmcfg->mcfg_uena;
+
+  bool in_smain_zone = pc >= dsmbound0->val && pc < dsmbound1->val && cpu.mode == MODE_S && is_smain_enable;
   bool in_umain_zone = pc >= dumbound0->val && pc < dumbound1->val && cpu.mode == MODE_U && is_umain_enable;
+
+  bool in_s_trusted_zone = in_smain_zone || (cpu.mode == MODE_S && !is_smain_enable);
   bool in_u_trusted_zone = in_umain_zone || (cpu.mode == MODE_U && !is_umain_enable);
 
-  return cpu.mode >= MODE_S || in_u_trusted_zone;
+  return cpu.mode == MODE_M || in_s_trusted_zone || in_u_trusted_zone;
 }
 
 uint8_t dasics_libcfg_from_index(int i) {
@@ -273,40 +291,44 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   if (dasics_in_trusted_zone(pc)) {
     return;
   }
-
-  if (type == MEM_TYPE_READ) {
-    for (int i = 0; i < len; i++) {
-      if (!dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
-        INTR_TVAL_REG(EX_DULAF) = vaddr + i;  // To avoid load inst that crosses libzone
-        Logm("Dasics load exception occur %lx", vaddr);
+  if (type == MEM_TYPE_WRITE) {
+    int ex = (cpu.mode == MODE_U) ? EX_DUCF : EX_DSCF;
+    bool close_st_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cust : dsmcfg->mcfg_csst;
+    for (int i = 0; i < len; ++i) {
+      if (!close_st_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W)) {
+        INTR_TVAL_REG(ex) = vaddr + i;  // To avoid store inst that crosses libzone
+        dfreason->val = DFR_SF;
+        Logm("Dasics store exception occur %lx", vaddr);
         //isa_reg_display();
-        longjmp_exception(EX_DULAF);
+        longjmp_exception(ex);
         break;
       }
     }
   }
-  else if (type == MEM_TYPE_WRITE) {
-    for (int i = 0; i < len; ++i) {
-      if (!dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W)) {
-        INTR_TVAL_REG(EX_DUSAF) = vaddr + i;  // To avoid store inst that crosses libzone
-        Logm("Dasics store exception occur %lx", vaddr);
+  else if (type == MEM_TYPE_READ) {
+    int ex = (cpu.mode == MODE_U) ? EX_DUCF : EX_DSCF;
+    bool close_ld_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cult : dsmcfg->mcfg_cslt;
+    for (int i = 0; i < len; i++) {
+      if (!close_ld_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
+        INTR_TVAL_REG(ex) = vaddr + i;  // To avoid load inst that crosses libzone
+        dfreason->val = DFR_LF;
+        Logm("Dasics load exception occur %lx", vaddr);
         //isa_reg_display();
-        longjmp_exception(EX_DUSAF);
+        longjmp_exception(ex);
         break;
       }
     }
   }
 }
-
 void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
   bool src_trusted = dasics_in_trusted_zone(prev_pc);
   bool dst_trusted = dasics_in_trusted_zone(pc);
   bool src_freezone = dasics_match_djumpbound(prev_pc, JUMPCFG_V);
   bool dst_freezone = dasics_match_djumpbound(pc, JUMPCFG_V);
+  bool close_fetch_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cuft : dsmcfg->mcfg_csft;
 
   Logm("[Dasics Fetch] prev_pc: 0x%lx (T:%d F:%d), pc:0x%lx (T:%d F:%d)\n", prev_pc, src_trusted, src_freezone, pc, dst_trusted, dst_freezone);
-  Logm("[Dasics Fetch] dretpc: 0x%lx dretmaincall: 0x%lx dretpcfz: 0x%lx, dfreason: 0x%lx\n", 
-         dretpc->val, dmaincall->val, dretpcfz->val, dfreason->val);
+  Logm("[Dasics Fetch] dretpc: 0x%lx dretmaincall: 0x%lx dretpcfz: 0x%lx\n", dretpc->val, dmaincall->val, dretpcfz->val);
 
   bool allow_lib_to_main = !src_trusted && dst_trusted && \
     (pc == dretpc->val || pc == dmaincall->val);
@@ -319,9 +341,10 @@ void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
 
   bool allow_cfi = (cfi_type == CFI_BRANCH && allow_br) || (cfi_type == CFI_JUMP && allow_jump);
 
-  if (!allow_cfi) {
-    int ex = EX_DUIAF;
+  if (!allow_cfi && !close_fetch_ex) {
+    int ex = (cpu.mode == MODE_U) ? EX_DUCF : EX_DSCF;
     INTR_TVAL_REG(ex) = pc;
+    dfreason->val = DFR_JF;
     Logm("Dasics fetch exception occur: pc%lx  (st:%d,df:%d)\n",pc,src_trusted,dst_freezone);
     longjmp_exception(ex);
   }
@@ -475,8 +498,14 @@ if (is_read(vsie))           { return (mie->val & (hideleg->val & (mideleg->val 
   else if (is_read(uip))    { difftest_skip_ref(); return mip->val & UIP_MASK; }
 #endif  // CONFIG_RVN
 #ifdef CONFIG_RV_DASICS
-  else if (is_read(dumcfg)) { return dumcfg->val & DUMCFG_MASK; }
+  else if (is_read(dsmcfg)) { return dsmcfg->val & DSMCFG_MASK; }
+  else if (is_read(dumcfg)) { return dsmcfg->val & DUMCFG_MASK; }
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_MPK
+  else if (is_read(upkru)) { return (upkru->val & PKR_MASK); }
+  else if (is_read(spkrs)) { return (spkrs->val & PKR_MASK); }
+  else if (is_read(spkctl)) { return (spkctl->val & PKCTL_MASK); }
+#endif
 #ifdef CONFIG_RVV
   else if (is_read(vcsr))   { return (vxrm->val & 0x3) << 1 | (vxsat->val & 0x1); }
   else if (is_read(vlenb))  { return VLEN >> 3; }
@@ -668,7 +697,7 @@ static inline void csr_write(word_t *dest, word_t src) {
     mask = MEDELEG_MASK;
 #endif  // CONFIG_RVH
 #ifdef CONFIG_RV_DASICS
-    mask |= 0xff000000;
+    mask |= 0x3000000;
 #endif  // CONFIG_RV_DASICS
 #ifdef CONFIG_RVH
     medeleg->val = mask_bitset(medeleg->val, mask, src);
@@ -793,13 +822,25 @@ static inline void csr_write(word_t *dest, word_t src) {
   }
 #endif
 #ifdef CONFIG_RV_DASICS
-  else if (is_write(dumcfg)) {
-    dumcfg->val = mask_bitset(dumcfg->val, DUMCFG_MASK, src);
+  else if (is_write(dsmcfg) || is_write(dumcfg)) {
+    word_t mask = is_write(dsmcfg) ? DSMCFG_MASK : DUMCFG_MASK;
+    dsmcfg->val = (dsmcfg->val & ~mask) | (src & mask);
   } else if (is_write_dasics_mem_bound || is_write_dasics_jump_bound) {
     *dest = src & ~BOUND_ADDR_ALGIN; 
     if(is_write_dasics_jump_bound) Logm("[write jump bound]: write addr %016lx src: %lx\n",*dest,src );
   }
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_MPK
+  else if (is_write(upkru)) {
+    *dest = src & PKR_MASK;
+  }
+  else if (is_write(spkrs)) {
+    *dest = src & PKR_MASK;
+  }
+  else if (is_write(spkctl)) {
+    *dest = src & PKCTL_MASK;
+  }
+#endif
   else if (is_write(satp)) {
     if (cpu.mode == MODE_S && mstatus->tvm == 1) {
       longjmp_exception(EX_II);
@@ -901,8 +942,8 @@ static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, vaddr_t p
   word_t *csr = csr_decode(csrid);
   // Log("Decoding csr id %u to %p", csrid, csr);
   word_t tmp = (src != NULL ? *src : 0);
-  if (dest != NULL) { *dest = csr_read(csr); }
-  if (src != NULL) { csr_write(csr, tmp); }
+  if (dest != NULL) {*dest = csr_read(csr); }
+  if (src != NULL) {csr_write(csr, tmp); }
 }
 
 static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
@@ -1099,8 +1140,13 @@ void isa_hostcall(uint32_t id, rtlreg_t *dest, const rtlreg_t *src1,
 #ifdef CONFIG_RV_DASICS
       bool hostcall_trusted = dasics_in_trusted_zone(pc);
 
-      if (!hostcall_trusted && cpu.mode == MODE_U) {
-        ret = raise_intr(EX_DUEF, *src1);
+      if (!hostcall_trusted && cpu.mode == MODE_U && !dsmcfg->mcfg_cuet) {
+        dfreason->val = DFR_EF;
+        ret = raise_intr(EX_DUCF, *src1);
+      }
+      else if (!hostcall_trusted && cpu.mode == MODE_S && !dsmcfg->mcfg_cset) {
+        dfreason->val = DFR_EF;
+        ret = raise_intr(EX_DSCF, *src1);
       }
       else {
         ret = raise_intr(imm, *src1);

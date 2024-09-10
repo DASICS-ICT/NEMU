@@ -43,10 +43,16 @@ enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 #endif //RV64_FULL_DIFF
 
 #if defined (RV64_FULL_DIFF) && defined (CONFIG_RV_DASICS)
-#define RV_DASICS_REG_SIZE (sizeof(uint64_t) * (3 + 1 + 32 + 4 + 8 + 1))
+#define RV_DASICS_REG_SIZE (sizeof(uint64_t) * (5 + 1 + 32 + 4 + 8 + 1))
 #else
 #define RV_DASICS_REG_SIZE 0
 #endif  //CONFIG_RV_DASICS
+
+#if defined (RV64_FULL_DIFF) && defined (CONFIG_RV_MPK)
+#define RV_MPK_REG_SIZE (sizeof(uint64_t) * (3))
+#else
+#define RV_MPK_REG_SIZE 0
+#endif  //CONFIG_RV_MPK
 
 #if defined (RV64_FULL_DIFF) && defined (CONFIG_RVV)
 #define RVV_EXT_REG_SIZE (sizeof(uint64_t) * (64 + 7))
@@ -66,7 +72,7 @@ enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 #define RVN_EXT_REG_SIZE 0
 #endif //CONFIG_RVH
 
-#define DIFFTEST_REG_SIZE (BASE_SIZE + RV_DASICS_REG_SIZE + RVH_EXT_REG_SIZE + RVV_EXT_REG_SIZE + RVN_EXT_REG_SIZE)
+#define DIFFTEST_REG_SIZE (BASE_SIZE + RV_DASICS_REG_SIZE + RVH_EXT_REG_SIZE + RVV_EXT_REG_SIZE + RVN_EXT_REG_SIZE + RV_MPK_REG_SIZE)
 
 #else
 # error Unsupported ISA

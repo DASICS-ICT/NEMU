@@ -89,6 +89,10 @@ void isa_reg_display() {
     else printf("|");
   }
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_MPK
+  printf("upkru: " FMT_WORD " spkrs: " FMT_WORD " spkctl: " FMT_WORD "\n",
+    upkru->val, spkrs->val, spkctl->val);
+#endif
 #ifdef CONFIG_RVH
   printf("mtval2: " FMT_WORD " mtinst: " FMT_WORD " hstatus: " FMT_WORD " hideleg: " FMT_WORD "\n",
       mtval2->val, mtinst->val, hstatus->val, hideleg->val);

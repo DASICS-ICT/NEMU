@@ -34,7 +34,12 @@ typedef union PageTableEntry {
     uint32_t d   : 1;
     uint32_t rsw : 2;
     uint64_t ppn :44;
+#ifdef CONFIG_RV_MPK
+    uint32_t pkey: 5;
+    uint32_t pad : 5;
+#else
     uint32_t pad :10;
+#endif //CONFIG_RV_MPK
   };
   uint64_t val;
 } PTE;
@@ -80,6 +85,14 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
   Logtr("ok: %i, mode: %s, pte->u: %i, a: %i d: %i, ppn: %lx ", ok,
         mode == MODE_U ? "U" : MODE_S ? "S" : MODE_M ? "M" : "NOTYPE",
         pte->u, pte->a, pte->d, (uint64_t)pte->ppn << 12);
+#ifdef CONFIG_RV_MPK
+  uint32_t pkey = pte->pkey;
+  bool mpk_enable = (mode == MODE_U) ? spkctl->pke :
+                    (mode == MODE_S) ? spkctl->pks : false;
+  uint64_t mpk_pkr = (mode == MODE_U) ? upkru->val : spkrs->val;
+  bool mpk_wd = mpk_enable ? (mpk_pkr >> ((pkey << 1) + 1)) & 0x1u : false;
+  bool mpk_ad = mpk_enable ? (mpk_pkr >> (pkey << 1)) & 0x1u : false;
+#endif  // CONFIG_RV_MPK
 #endif
   if (ifetch) {
     Logtr("Translate for instr reading");
@@ -124,6 +137,16 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
       longjmp_exception(ex);
       return false;
     }
+#ifdef CONFIG_RV_MPK
+    if (mpk_ad) {
+      int ex = (mode == MODE_U) ? EX_DUCF : EX_DSCF;
+      dfreason->val = MFR_LF;
+      INTR_TVAL_REG(ex) = vaddr;
+      Logtr("Protection key load exception!");
+      longjmp_exception(ex);
+      return false;
+    }
+#endif // CONFIG_RV_MPK
   } else { // MEM_TYPE_WRITE
 #ifdef CONFIG_SHARE
     bool update_ad = !pte->a || !pte->d;
@@ -139,6 +162,16 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
       return false;
     }
   }
+#ifdef CONFIG_RV_MPK
+  if (mpk_ad || (!mpk_ad && mpk_wd)) {
+      int ex = (mode == MODE_U) ? EX_DUCF : EX_DSCF;
+      dfreason->val = MFR_SF;
+    INTR_TVAL_REG(ex) = vaddr;
+    Logtr("Protection key store exception!");
+    longjmp_exception(ex);
+    return false;
+  }
+#endif  // CONFIG_RV_MPK
   return true;
 }
 #ifdef CONFIG_RVH

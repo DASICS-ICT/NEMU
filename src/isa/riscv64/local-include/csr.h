@@ -81,6 +81,7 @@ void csr_prepare();
 // CSRs for DASICS protection mechanism
 #ifdef CONFIG_RV_DASICS
 #define DASICS_CSRS(f) \
+  f(dsmcfg,      0xbc0) f(dsmbound0,   0xbc2) f(dsmbound1,   0xbc3) \
   f(dumcfg,      0x9e0) f(dumbound0,   0x9e2) f(dumbound1,   0x9e3) \
   f(dlcfg0,      0x880) \
   f(dlbound0,    0x890) f(dlbound1,    0x891) f(dlbound2,    0x892) f(dlbound3,    0x893) \
@@ -91,11 +92,18 @@ void csr_prepare();
   f(dlbound20,   0x8a4) f(dlbound21,   0x8a5) f(dlbound22,   0x8a6) f(dlbound23,   0x8a7) \
   f(dlbound24,   0x8a8) f(dlbound25,   0x8a9) f(dlbound26,   0x8aa) f(dlbound27,   0x8ab) \
   f(dlbound28,   0x8ac) f(dlbound29,   0x8ad) f(dlbound30,   0x8ae) f(dlbound31,   0x8af) \
-  f(dmaincall,   0x8b0) f(dretpc,      0x8b1) f(dretpcfz,    0x8b2) f(dfreason,    0x8b3) \
+  f(dmaincall,   0x8b0) f(dretpc,      0x8b1) f(dretpcfz,    0x8b2) \
   f(djbound0lo,  0x8c0) f(djbound0hi,  0x8c1) f(djbound1lo,  0x8c2) f(djbound1hi,  0x8c3) \
   f(djbound2lo,  0x8c4) f(djbound2hi,  0x8c5) f(djbound3lo,  0x8c6) f(djbound3hi,  0x8c7) \
-  f(djcfg,       0x8c8)
+  f(djcfg,       0x8c8) 
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_MPK
+#define MPK_CSRS(f) \
+f(upkru      , 0x800) f(spkrs      , 0x9d1) f(spkctl     , 0x9d0)
+#endif
+#if defined (CONFIG_RV_DASICS) || defined (CONFIG_RV_MPK)
+#define DASICS_MPK_CSRS(f) f(dfreason,    0x8b3)
+#endif
 
 #ifndef CONFIG_SHARE
 #define CSRS(f) \
@@ -144,7 +152,7 @@ void csr_prepare();
 #define NCSRS(f) \
   f(ustatus,     0x000) f(uie,         0x004) f(utvec,       0x005) \
   f(uscratch,    0x040) f(uepc,        0x041) f(ucause,      0x042) \
-  f(utval,       0x043) f(uip,         0x044) \
+  f(utval,       0x043) f(uip,         0x044) f(utimer,      0x045) \
   f(sedeleg,     0x102) f(sideleg,     0x103)
 #endif
 
@@ -560,6 +568,9 @@ CSR_STRUCT_START(uip)
   uint64_t pad2:3;
 CSR_STRUCT_END(uip)
 
+CSR_STRUCT_START(utimer)
+CSR_STRUCT_END(utimer)
+
 CSR_STRUCT_START(sedeleg)
 CSR_STRUCT_END(sedeleg)
 
@@ -633,11 +644,50 @@ CSR_STRUCT_END(mimpid)
 
 #ifdef CONFIG_RV_DASICS
 
-#define MCFG_UENA   0X2ul
+#define MCFG_CSFT   0x200ul
+#define MCFG_CSLT   0x100ul
+#define MCFG_CSST   0x80ul
+#define MCFG_CSET   0x40ul
+#define MCFG_CUFT   0x20ul
+#define MCFG_CULT   0x10ul
+#define MCFG_CUST   0x8ul
+#define MCFG_CUET   0x4ul
+#define MCFG_UENA   0x2ul
+#define MCFG_SENA   0x1ul
+
+#define DUMCFG_MASK (MCFG_CUFT | MCFG_CULT | MCFG_CUST | MCFG_CUET | MCFG_UENA)
+#define DSMCFG_MASK (MCFG_CSFT | MCFG_CSLT | MCFG_CSST | MCFG_CSET | MCFG_CUFT | MCFG_CULT | MCFG_CUST | MCFG_CUET | MCFG_UENA | MCFG_SENA)
+
+CSR_STRUCT_START(dsmcfg)
+  uint64_t mcfg_sena:1;
+  uint64_t mcfg_uena:1;
+  uint64_t mcfg_cuet:1;
+  uint64_t mcfg_cust:1;
+  uint16_t mcfg_cult:1;
+  uint64_t mcfg_cuft:1;
+  uint64_t mcfg_cset:1;
+  uint64_t mcfg_csst:1;
+  uint64_t mcfg_cslt:1;
+  uint64_t mcfg_csft:1;
+CSR_STRUCT_END(dsmcfg)
+
+CSR_STRUCT_START(dsmbound0)
+CSR_STRUCT_END(dsmbound0)
+
+CSR_STRUCT_START(dsmbound1)
+CSR_STRUCT_END(dsmbound1)
 
 CSR_STRUCT_START(dumcfg)
-  uint64_t pad0     :1;
+  uint64_t pad0:1;
   uint64_t mcfg_uena:1;
+  uint64_t mcfg_cuet:1;
+  uint64_t mcfg_cust:1;
+  uint16_t mcfg_cult:1;
+  uint64_t mcfg_cuft:1;
+  uint64_t pad1:1;
+  uint64_t pad2:1;
+  uint64_t pad3:1;
+  uint64_t pad4:1;
 CSR_STRUCT_END(dumcfg)
 
 CSR_STRUCT_START(dumbound0)
@@ -802,6 +852,21 @@ CSR_STRUCT_START(djcfg)
 CSR_STRUCT_END(djcfg)
 
 #endif  // CONFIG_RV_DASICS
+
+#ifdef CONFIG_RV_MPK
+
+CSR_STRUCT_START(upkru)
+CSR_STRUCT_END(upkru)
+
+CSR_STRUCT_START(spkrs)
+CSR_STRUCT_END(spkrs)
+
+CSR_STRUCT_START(spkctl)
+  uint64_t pke : 1;  // Enable MPK for user
+  uint64_t pks : 1;  // Enable MPK for supervisor
+CSR_STRUCT_END(spkctl)
+
+#endif
 
 #ifdef CONFIG_RVSDEXT
 CSR_STRUCT_START(dcsr)
@@ -1088,6 +1153,12 @@ MAP(CSRS, CSRS_DECL)
 #ifdef CONFIG_RV_DASICS
   MAP(DASICS_CSRS, CSRS_DECL)
 #endif // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_MPK
+  MAP(MPK_CSRS, CSRS_DECL)
+#endif // CONFIG_RV_MPK
+#if defined (CONFIG_RV_DASICS) || defined (CONFIG_RV_MPK)
+  MAP(DASICS_MPK_CSRS, CSRS_DECL)
+#endif
 #ifdef CONFIG_RVH
   extern bool v; // virtualization mode
   MAP(HCSRS, CSRS_DECL)

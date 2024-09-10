@@ -156,6 +156,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     }
     cpu.v = 0;
     set_sys_state_flag(SYS_STATE_FLUSH_TCACHE);
+  }
 #else
 
   if (delegU) {
@@ -168,10 +169,8 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
-#ifdef CONFIG_RV_DASICS
-      case EX_DUIAF: case EX_DSIAF:
-      case EX_DULAF: case EX_DSLAF:
-      case EX_DUSAF: case EX_DSSAF:
+#if defined (CONFIG_RV_DASICS) || defined (CONFIG_RV_MPK)
+      case EX_DUCF: case EX_DSCF:
 #endif  // CONFIG_RV_DASICS
         break;
       default: utval->val = 0;
@@ -196,8 +195,8 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
-#ifdef CONFIG_RV_DASICS
-      case EX_DUIAF: case EX_DULAF: case EX_DUSAF:
+#if defined (CONFIG_RV_DASICS) || defined (CONFIG_RV_MPK)
+      case EX_DUCF: case EX_DSCF:
 #endif  // CONFIG_RV_DASICS
 #ifdef CONFIG_RVH
         htval->val = 0;
@@ -234,8 +233,8 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
-#ifdef CONFIG_RV_DASICS
-      case EX_DUIAF: case EX_DULAF: case EX_DUSAF:
+#if defined (CONFIG_RV_DASICS) || defined (CONFIG_RV_MPK)
+      case EX_DUCF: case EX_DSCF:
 #endif  // CONFIG_RV_DASICS
 #ifdef CONFIG_RVH
         mtval2->val = 0;
