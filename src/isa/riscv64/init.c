@@ -67,6 +67,10 @@ void init_isa() {
   spkctl->pks = 0;
 #endif  // CONFIG_RV_MPK
 
+#ifdef CONFIG_RVN
+  utimer->val = 0;
+#endif //CONFIG_RVN
+
 #define ext(e) (1 << ((e) - 'a'))
   misa->extensions = ext('i') | ext('m') | ext('a') | ext('c') | ext('s') | ext('u');
 #ifndef CONFIG_FPU_NONE

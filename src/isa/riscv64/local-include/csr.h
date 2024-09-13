@@ -106,7 +106,7 @@
 #define NCSRS(f) \
   f(ustatus,     0x000) f(uie,         0x004) f(utvec,       0x005) \
   f(uscratch,    0x040) f(uepc,        0x041) f(ucause,      0x042) \
-  f(utval,       0x043) f(uip,         0x044) \
+  f(utval,       0x043) f(uip,         0x044) f(utimer,      0x045)\
   f(sedeleg,     0x102) f(sideleg,     0x103)
 #endif
 
@@ -482,6 +482,9 @@ CSR_STRUCT_START(uip)
   uint64_t ueip:1;
   uint64_t pad2:3;
 CSR_STRUCT_END(uip)
+
+CSR_STRUCT_START(utimer)
+CSR_STRUCT_END(utimer)
 
 CSR_STRUCT_START(sedeleg)
 CSR_STRUCT_END(sedeleg)

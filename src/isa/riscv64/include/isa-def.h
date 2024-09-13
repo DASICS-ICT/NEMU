@@ -107,6 +107,10 @@ typedef struct {
 
   // Above will be synced by regcpy when run difftest, DO NOT TOUCH
 
+#ifdef CONFIG_RVN
+ uint64_t utimer;
+#endif
+
 #ifdef CONFIG_RVV
   //vector
   union {

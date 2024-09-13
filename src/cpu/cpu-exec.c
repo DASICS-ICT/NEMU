@@ -301,6 +301,14 @@ static int execute(int n) {
 #endif
     s.EHelper(&s);
     g_nr_guest_instr ++;
+#ifdef CONFIG_RVN
+// utimer logic
+// attention: here our utimer-- logic is not executed per cycle,
+// this may differ from HDL, so don't use utimer when difftest.
+  if (utimer->val > 1 && cpu.mode == MODE_U) utimer->val--;
+  else if (utimer->val == 1) mip->val |= 1 << 8; //IRQ_UEIP
+  else  mip->val &= ~(1 << 8); // utimer->val == 0
+#endif //CONFIG_RVN
     IFDEF(CONFIG_DEBUG, debug_hook(s.pc, s.logbuf));
     IFDEF(CONFIG_DIFFTEST, difftest_step(s.pc, cpu.pc));
     if (nemu_state.state == NEMU_STOP) {
