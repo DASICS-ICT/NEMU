@@ -80,9 +80,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
 #ifdef CONFIG_RV_DASICS
-      case EX_DUIAF: case EX_DSIAF:
-      case EX_DULAF: case EX_DSLAF:
-      case EX_DUSAF: case EX_DSSAF:
+      case EX_DUCF: case EX_DSCF:
 #endif  // CONFIG_RV_DASICS
         break;
       default: utval->val = 0;
@@ -107,14 +105,8 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
 #ifdef CONFIG_RV_DASICS
-      case EX_DUIAF: case EX_DSIAF:
-      case EX_DULAF: case EX_DSLAF:
-      case EX_DUSAF: case EX_DSSAF:
+      case EX_DUCF: case EX_DSCF:
 #endif  // CONFIG_RV_DASICS
-#ifdef CONFIG_RV_MPK
-      case EX_PKULPF: case EX_PKUSPF:
-      case EX_PKSLPF: case EX_PKSSPF:
-#endif  // CONFIG_RV_MPK
         break;
       default: stval->val = 0;
     }
@@ -134,14 +126,8 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
 #ifdef CONFIG_RV_DASICS
-      case EX_DUIAF: case EX_DSIAF:
-      case EX_DULAF: case EX_DSLAF:
-      case EX_DUSAF: case EX_DSSAF:
+      case EX_DUCF: case EX_DSCF:
 #endif  // CONFIG_RV_DASICS
-#ifdef CONFIG_RV_MPK
-      case EX_PKULPF: case EX_PKUSPF:
-      case EX_PKSLPF: case EX_PKSSPF:
-#endif  // CONFIG_RV_MPK
         break;
       default: mtval->val = 0;
     }

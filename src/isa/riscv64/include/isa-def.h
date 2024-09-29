@@ -82,7 +82,7 @@ typedef struct {
 
 #ifdef CONFIG_RV_DASICS
   uint64_t dsmcfg, dsmbound0, dsmbound1;
-  uint64_t dumcfg, dumbound0, dumbound1;
+  uint64_t /*dumcfg,*/ dumbound0, dumbound1;
   uint64_t dlcfg0;
   uint64_t dlbound0, dlbound1, dlbound2, dlbound3;
   uint64_t dlbound4, dlbound5, dlbound6, dlbound7;
@@ -93,18 +93,17 @@ typedef struct {
   uint64_t dlbound24, dlbound25, dlbound26, dlbound27;
   uint64_t dlbound28, dlbound29, dlbound30, dlbound31;
   uint64_t dmaincall, dretpc, dretpcfz, dfreason;
-
+  
+  uint64_t djcfg;
   uint64_t djbound0lo, djbound0hi, djbound1lo, djbound1hi;
   uint64_t djbound2lo, djbound2hi, djbound3lo, djbound3hi;
-  uint64_t djcfg;
+  uint64_t upkru, spkrs, spkctl;
 #endif  // CONFIG_RV_DASICS
 
-#ifdef CONFIG_RV_MPK
-  uint64_t upkru, spkrs, spkctl;
-#endif  // CONFIG_RV_MPK
-
-
   // Above will be synced by regcpy when run difftest, DO NOT TOUCH
+#ifdef CONFIG_RVN
+ uint64_t utimer;
+#endif
 
 #ifdef CONFIG_RVV
   //vector

@@ -37,23 +37,28 @@ enum {
   EX_LPF, // load page fault
   EX_RS1, // reserved
   EX_SPF, // store/amo page fault
+  EX_IGPF = 20,// instruction guest-page fault, H-extention
+  EX_LGPF,// load guest-page fault, H-extention
+  EX_VI,  // virtual instruction, H-extention
+  EX_SGPF, // store/amo guest-page fault, H-extention
 #ifdef CONFIG_RV_DASICS
-  EX_DUIAF=24,  // DASICS user instruction access fault
-  EX_DSIAF,     // DASICS supervisor instruction access fault
-  EX_DULAF,     // DASICS user load access fault
-  EX_DSLAF,     // DASICS supervisor load access fault
-  EX_DUSAF,     // DASICS user store access fault
-  EX_DSSAF,     // DASICS supervisor store access fault
-  EX_DUEF,      // DASICS user ecall fault
-  EX_DSEF,      // DASICS supervisor ecall fault
+  EX_DUCF = 24, // DASICS user check fault
+  EX_DSCF = 25  // DASICS supervisor check fault
 #endif  // CONFIG_RV_DASICS
-#ifdef CONFIG_RV_MPK
-  EX_PKULPF = 32, // protection key user load page fault
-  EX_PKUSPF, // protection key user store page fault
-  EX_PKSLPF, // protection key supervisor load page fault
-  EX_PKSSPF, // protection key supervisor store page fault
-#endif  // CONFIG_RV_MPK
 };
+
+// DASICS / MPK Fault Reason
+#ifdef CONFIG_RV_DASICS
+#define DFR_EF  1 // dasics ecall fault
+#define DFR_LF  2 // dasics load fault
+#define DFR_SF  3 // dasics store fault
+#define DFR_JF  4 // dasics jump fault
+#endif
+
+#ifdef CONFIG_RV_DASICS
+#define MFR_LF  5 // mpk load fault
+#define MFR_SF  6 // mpk store fault
+#endif
 
 // now NEMU does not support EX_IAM,
 // so it may ok to use EX_IAM to indicate a successful memory access

@@ -52,18 +52,18 @@ static void csr_prepare() {
   cpu.sideleg  = sideleg->val;
   cpu.utval    = utval->val;
   cpu.utvec    = utvec->val;
+  cpu.utimer   = utimer->val;
 #endif  // CONFIG_RVN
 
 #ifdef CONFIG_RV_DASICS
   cpu.dsmcfg    = dsmcfg->val;
   cpu.dsmbound0 = dsmbound0->val;
   cpu.dsmbound1 = dsmbound1->val;
-
-  cpu.dumcfg    = csrid_read(0x9e0);  // dumcfg
+  // cpu.dumcfg    = csrid_read(0x9e0);   // dumcfg
   cpu.dumbound0 = dumbound0->val;
   cpu.dumbound1 = dumbound1->val;
 
-  /* Yet to connect
+  
   cpu.dlcfg0    = dlcfg0->val;
   cpu.dlbound0  = dlbound0->val;
   cpu.dlbound1  = dlbound1->val;
@@ -97,19 +97,29 @@ static void csr_prepare() {
   cpu.dlbound29 = dlbound29->val;
   cpu.dlbound30 = dlbound30->val;
   cpu.dlbound31 = dlbound31->val;
-  */
+
+  cpu.djcfg     = djcfg->val;
+  cpu.djbound0lo= djbound0lo->val;
+  cpu.djbound0hi= djbound0hi->val;
+  cpu.djbound1lo= djbound1lo->val;
+  cpu.djbound1hi= djbound1hi->val;
+  cpu.djbound2lo= djbound2lo->val;
+  cpu.djbound2hi= djbound2hi->val;
+  cpu.djbound3lo= djbound3lo->val;
+  cpu.djbound3hi= djbound3hi->val;
 
   cpu.dmaincall = dmaincall->val;
   cpu.dretpc    = dretpc->val;
   cpu.dretpcfz  = dretpcfz->val;
   cpu.dfreason  = dfreason->val;
+
 #endif  // CONFIG_RV_DASICS
 
-#ifdef CONFIG_RV_MPK
+#ifdef CONFIG_RV_DASICS
   cpu.upkru    = upkru->val;
   cpu.spkrs    = spkrs->val;
   cpu.spkctl   = spkctl->val;
-#endif  // CONFIG_RV_MPK
+#endif
 
 #ifdef CONFIG_RVV
   cpu.vstart  = vstart->val;
@@ -152,6 +162,7 @@ static void csr_writeback() {
   sedeleg->val  = cpu.sedeleg;
   utval->val    = cpu.utval;
   utvec->val    = cpu.utvec;
+  utimer->val   = cpu.utimer;
 #endif  // CONFIG_RVN
 
 #ifdef CONFIG_RV_DASICS
@@ -163,7 +174,6 @@ static void csr_writeback() {
   dumbound0->val = cpu.dumbound0;
   dumbound1->val = cpu.dumbound1;
 
-  /* Yet to connect
   dlcfg0->val    = cpu.dlcfg0;
   dlbound0->val  = cpu.dlbound0;
   dlbound1->val  = cpu.dlbound1;
@@ -197,19 +207,28 @@ static void csr_writeback() {
   dlbound29->val = cpu.dlbound29;
   dlbound30->val = cpu.dlbound30;
   dlbound31->val = cpu.dlbound31;
-  */
+
+  djcfg->val     = cpu.djcfg;
+  djbound0lo->val= cpu.djbound0lo;
+  djbound0hi->val= cpu.djbound0hi;
+  djbound1lo->val= cpu.djbound1lo;
+  djbound1hi->val= cpu.djbound1hi;
+  djbound2lo->val= cpu.djbound2lo;
+  djbound2hi->val= cpu.djbound2hi;
+  djbound3lo->val= cpu.djbound3lo;
+  djbound3hi->val= cpu.djbound3hi;
 
   dmaincall->val = cpu.dmaincall;
   dretpc->val    = cpu.dretpc;
   dretpcfz->val  = cpu.dretpcfz;
-  dfreason->val  = cpu.dfreason;
+  dfreason->val = cpu.dfreason;
 #endif  // CONFIG_RV_DASICS
 
-#ifdef CONFIG_RV_MPK
+#ifdef CONFIG_RV_DASICS
   upkru->val    = cpu.upkru;
   spkrs->val    = cpu.spkrs;
   spkctl->val   = cpu.spkctl;
-#endif  // CONFIG_RV_MPK
+#endif
 
 #ifdef CONFIG_RVV
   vstart->val  = cpu.vstart;
