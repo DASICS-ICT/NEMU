@@ -52,7 +52,7 @@ static void csr_prepare() {
   cpu.sideleg  = sideleg->val;
   cpu.utval    = utval->val;
   cpu.utvec    = utvec->val;
-  cpu.utimer   = utimer->val;
+  // cpu.utimer   = utimer->val;
 #endif  // CONFIG_RVN
 
 #ifdef CONFIG_RV_DASICS
@@ -162,7 +162,7 @@ static void csr_writeback() {
   sedeleg->val  = cpu.sedeleg;
   utval->val    = cpu.utval;
   utvec->val    = cpu.utvec;
-  utimer->val   = cpu.utimer;
+  // utimer->val   = cpu.utimer;
 #endif  // CONFIG_RVN
 
 #ifdef CONFIG_RV_DASICS
