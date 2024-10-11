@@ -26,13 +26,6 @@
 #define CUSTOM_CSR(f)
 #endif
 
-#ifdef CONFIG_RV_MPK
-#define MPK_CSR(f) \
-  f(upkru      , 0x800) f(spkrs      , 0x9d1) f(spkctl     , 0x9d0)
-#else
-#define MPK_CSR(f)
-#endif
-
 // SHARE mode does not support mtime
 #ifdef CONFIG_RV_PMP_CSR
 #define CSRS_PMP(f) \
@@ -59,13 +52,20 @@
   f(dlbound20,   0x8a4) f(dlbound21,   0x8a5) f(dlbound22,   0x8a6) f(dlbound23,   0x8a7) \
   f(dlbound24,   0x8a8) f(dlbound25,   0x8a9) f(dlbound26,   0x8aa) f(dlbound27,   0x8ab) \
   f(dlbound28,   0x8ac) f(dlbound29,   0x8ad) f(dlbound30,   0x8ae) f(dlbound31,   0x8af) \
-  f(dmaincall,   0x8b0) f(dretpc,      0x8b1) f(dretpcfz,    0x8b2) \
+  f(dmaincall,   0x8b0) f(dretpc,      0x8b1) f(dretpcfz,    0x8b2) f(dfreason,    0x8b3) \
   f(djbound0lo,  0x8c0) f(djbound0hi,  0x8c1) f(djbound1lo,  0x8c2) f(djbound1hi,  0x8c3) \
   f(djbound2lo,  0x8c4) f(djbound2hi,  0x8c5) f(djbound3lo,  0x8c6) f(djbound3hi,  0x8c7) \
   f(djcfg,       0x8c8)
-#else  // CONFIG_RV_DASICS
+#else 
 #define DASICS_CSRS(f)
-#endif  // !CONFIG_RV_DASICS
+#endif  // CONFIG_RV_DASICS
+
+#ifdef CONFIG_RV_DASICS
+#define MPK_CSRS(f) \
+  f(upkru      , 0x800) f(spkrs      , 0x9d1) f(spkctl     , 0x9d0)
+#else 
+#define MPK_CSRS(f)
+#endif
 
 #ifndef CONFIG_SHARE
 #define CSRS(f) \
@@ -81,7 +81,6 @@
   f(stval      , 0x143) f(sip        , 0x144) \
   f(satp       , 0x180) \
   CUSTOM_CSR(f) \
-  MPK_CSR(f) \
   f(fflags     , 0x001) f(frm        , 0x002) f(fcsr       , 0x003) \
   f(mtime      , 0xc01)
 #else
@@ -98,7 +97,6 @@
   f(stval      , 0x143) f(sip        , 0x144) \
   f(satp       , 0x180) \
   CUSTOM_CSR(f) \
-  MPK_CSR(f) \
   f(fflags     , 0x001) f(frm        , 0x002) f(fcsr       , 0x003)
 #endif
 
@@ -106,7 +104,7 @@
 #define NCSRS(f) \
   f(ustatus,     0x000) f(uie,         0x004) f(utvec,       0x005) \
   f(uscratch,    0x040) f(uepc,        0x041) f(ucause,      0x042) \
-  f(utval,       0x043) f(uip,         0x044) \
+  f(utval,       0x043) f(uip,         0x044) f(utimer,      0x045) \
   f(sedeleg,     0x102) f(sideleg,     0x103)
 #endif
 
@@ -406,7 +404,7 @@ CSR_STRUCT_START(srnctl)
 CSR_STRUCT_END(srnctl)
 #endif
 
-#ifdef CONFIG_RV_MPK
+#ifdef CONFIG_RV_DASICS
 CSR_STRUCT_START(upkru)
 CSR_STRUCT_END(upkru)
 
@@ -417,7 +415,7 @@ CSR_STRUCT_START(spkctl)
   uint64_t pke : 1;  // Enable MPK for user
   uint64_t pks : 1;  // Enable MPK for supervisor
 CSR_STRUCT_END(spkctl)
-#endif  // CONFIG_RV_MPK
+#endif  // CONFIG_RV_DASICS
 
 CSR_STRUCT_START(fflags)
 CSR_STRUCT_END(fflags)
@@ -483,6 +481,9 @@ CSR_STRUCT_START(uip)
   uint64_t ueip:1;
   uint64_t pad2:3;
 CSR_STRUCT_END(uip)
+
+CSR_STRUCT_START(utimer)
+CSR_STRUCT_END(utimer)
 
 CSR_STRUCT_START(sedeleg)
 CSR_STRUCT_END(sedeleg)
@@ -730,6 +731,9 @@ CSR_STRUCT_END(dretpc)
 CSR_STRUCT_START(dretpcfz)
 CSR_STRUCT_END(dretpcfz)
 
+CSR_STRUCT_START(dfreason)
+CSR_STRUCT_END(dfreason)
+
 CSR_STRUCT_START(djbound0lo)
 CSR_STRUCT_END(djbound0lo)
 
@@ -773,6 +777,20 @@ MAP(CSRS, CSRS_DECL)
 #ifdef CONFIG_RV_DASICS
   MAP(DASICS_CSRS, CSRS_DECL)
 #endif // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_DASICS
+  MAP(MPK_CSRS, CSRS_DECL)
+#endif // CONFIG_RV_DASICS
+
+#define SSTATUS_WMASK ((1 << 19) | (1 << 18) | (0x3 << 13)\
+ IFDEF(CONFIG_RVV, | (0x3 << 9)) IFDEF(CONFIG_RVN, | (1 << 4) | (1 << 0))\
+ | (1 << 8) | (1 << 5) | (1 << 1))
+
+#define SSTATUS_RMASK (SSTATUS_WMASK | (0x3 << 15) | (1ull << 63) | (3ull << 32))
+
+#ifdef CONFIG_RVN
+#define USTATUS_WMASK ((1 << 4) | 0x1)
+#define USTATUS_RMASK USTATUS_WMASK
+#endif  // CONFIG_RVN
 
 word_t csrid_read(uint32_t csrid);
 

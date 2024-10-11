@@ -46,6 +46,9 @@ MAP(CSRS, CSRS_DEF)
 #ifdef CONFIG_RV_DASICS
   MAP(DASICS_CSRS, CSRS_DEF)
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_DASICS
+  MAP(MPK_CSRS, CSRS_DEF)
+#endif // CONFIG_RV_DASICS
 
 #define CSRS_EXIST(name, addr) csr_exist[addr] = 1;
 static bool csr_exist[4096] = {};
@@ -63,6 +66,10 @@ void init_csr() {
   #ifdef CONFIG_RV_DASICS
   MAP(DASICS_CSRS, CSRS_EXIST)
   #endif  // CONFIG_RV_DASICS
+  #ifdef CONFIG_RV_DASICS
+  MAP(MPK_CSRS, CSRS_EXIST)
+  #endif // CONFIG_RV_DASICS
+
 };
 
 rtlreg_t csr_perf;
@@ -111,21 +118,13 @@ static inline word_t* csr_decode(uint32_t addr) {
 
 // WPRI, SXL, UXL cannot be written
 #define MSTATUS_WMASK (0x7e79bbUL) | (1UL << 63)
-#ifdef CONFIG_RVV
-#define SSTATUS_WMASK ((1 << 19) | (1 << 18) | (0x3 << 13) | (0x3 << 9) | (1 << 8) | (1 << 5) | (1 << 1))
-#else
-#define SSTATUS_WMASK ((1 << 19) | (1 << 18) | (0x3 << 13) | (1 << 8) | (1 << 5) | (1 << 1))
-#endif // CONFIG_RVV
-#define SSTATUS_RMASK (SSTATUS_WMASK | (0x3 << 15) | (1ull << 63) | (3ull << 32))
-#ifdef CONFIG_RVN
-#define USTATUS_WMASK ((1 << 4) | 0x1)
-#define USTATUS_RMASK USTATUS_WMASK
-#endif  // CONFIG_RVN
 
-#define MIP_MASK ((1 << 9) | (1 << 8) | (1 << 5) | (1 << 4) | (1 << 1) | (1 << 0))
-#define SIE_MASK (0x222 & mideleg->val)
-#define SIP_MASK (0x222 & mideleg->val)
-#define SIP_WMASK_S 0x2
+#define MIP_MASK (0xbbb)
+#define MIE_MASK (0xbbb)
+
+#define SIE_MASK (0x333 & mideleg->val)
+#define SIP_MASK (0x333 & mideleg->val)
+#define SIP_WMASK_S 0x3
 #define MTIE_MASK (1 << 7)
 #ifdef CONFIG_RVN
 #define UIE_MASK (0x111 & sideleg->val)
@@ -229,26 +228,13 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   if (dasics_in_trusted_zone(pc)) {
     return;
   }
-
-  if (type == MEM_TYPE_READ) {
-    int ex = (cpu.mode == MODE_U) ? EX_DULAF : EX_DSLAF;
-    bool close_ld_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cult : dsmcfg->mcfg_cslt;
-    for (int i = 0; i < len; i++) {
-      if (!close_ld_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
-        INTR_TVAL_REG(ex) = vaddr + i;  // To avoid load inst that crosses libzone
-        Logm("Dasics load exception occur %lx", vaddr);
-        //isa_reg_display();
-        longjmp_exception(ex);
-        break;
-      }
-    }
-  }
-  else if (type == MEM_TYPE_WRITE) {
-    int ex = (cpu.mode == MODE_U) ? EX_DUSAF : EX_DSSAF;
+  if (type == MEM_TYPE_WRITE) {
+    int ex = (cpu.mode == MODE_U) ? EX_DUCF : EX_DSCF;
     bool close_st_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cust : dsmcfg->mcfg_csst;
     for (int i = 0; i < len; ++i) {
       if (!close_st_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W)) {
         INTR_TVAL_REG(ex) = vaddr + i;  // To avoid store inst that crosses libzone
+        dfreason->val = DFR_SF;
         Logm("Dasics store exception occur %lx", vaddr);
         //isa_reg_display();
         longjmp_exception(ex);
@@ -256,8 +242,21 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
       }
     }
   }
+  else if (type == MEM_TYPE_READ) {
+    int ex = (cpu.mode == MODE_U) ? EX_DUCF : EX_DSCF;
+    bool close_ld_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cult : dsmcfg->mcfg_cslt;
+    for (int i = 0; i < len; i++) {
+      if (!close_ld_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
+        INTR_TVAL_REG(ex) = vaddr + i;  // To avoid load inst that crosses libzone
+        dfreason->val = DFR_LF;
+        Logm("Dasics load exception occur %lx", vaddr);
+        //isa_reg_display();
+        longjmp_exception(ex);
+        break;
+      }
+    }
+  }
 }
-
 void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
   bool src_trusted = dasics_in_trusted_zone(prev_pc);
   bool dst_trusted = dasics_in_trusted_zone(pc);
@@ -280,8 +279,9 @@ void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
   bool allow_cfi = (cfi_type == CFI_BRANCH && allow_br) || (cfi_type == CFI_JUMP && allow_jump);
 
   if (!allow_cfi && !close_fetch_ex) {
-    int ex = (cpu.mode == MODE_U) ? EX_DUIAF : EX_DSIAF;
+    int ex = (cpu.mode == MODE_U) ? EX_DUCF : EX_DSCF;
     INTR_TVAL_REG(ex) = pc;
+    dfreason->val = DFR_JF;
     Logm("Dasics fetch exception occur: pc%lx  (st:%d,df:%d)\n",pc,src_trusted,dst_freezone);
     longjmp_exception(ex);
   }
@@ -423,6 +423,11 @@ static inline word_t csr_read(word_t *src) {
   else if (is_read(dsmcfg)) { return dsmcfg->val & DSMCFG_MASK; }
   else if (is_read(dumcfg)) { return dsmcfg->val & DUMCFG_MASK; }
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_DASICS
+  else if (is_read(upkru)) { return (upkru->val & PKR_MASK); }
+  else if (is_read(spkrs)) { return (spkrs->val & PKR_MASK); }
+  else if (is_read(spkctl)) { return (spkctl->val & PKCTL_MASK); }
+#endif
 #ifdef CONFIG_RVV
   else if (is_read(vcsr))   { return (vxrm->val & 0x3) << 1 | (vxsat->val & 0x1); }
 #endif
@@ -511,11 +516,13 @@ static inline void csr_write(word_t *dest, word_t src) {
 #endif // XTVEC_VECTORED_MODE
   }
 #endif  // CONFIG_RVN
-#ifdef CONFIG_RV_DASICS
-  else if (is_write(medeleg)) { *dest = src & 0xfff00b3ff; }
-#else
-  else if (is_write(medeleg)) { *dest = src & 0xb3ff; }
+  else if (is_write(medeleg)) {
+    word_t mask = 0xb3ff;
+#if defined(CONFIG_RV_DASICS) || defined(CONFIG_RV_DASICS)
+    mask |= 0x3000000;
 #endif  // CONFIG_RV_DASICS
+    *dest = src & mask;
+  }
 #ifdef CONFIG_RVN
   else if (is_write(mideleg)) { *dest = src & 0x333; }
   else if (is_write(sedeleg)) { *dest = src & medeleg->val; }
@@ -562,7 +569,7 @@ static inline void csr_write(word_t *dest, word_t src) {
     // *dest = src & FCSR_MASK;
 #endif // CONFIG_FPU_NONE
   }
-#ifdef CONFIG_RV_MPK
+#ifdef CONFIG_RV_DASICS
   else if (is_write(upkru)) {
     *dest = src & PKR_MASK;
   }
@@ -697,8 +704,8 @@ static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, vaddr_t p
   word_t *csr = csr_decode(csrid);
   // Log("Decoding csr id %u to %p", csrid, csr);
   word_t tmp = (src != NULL ? *src : 0);
-  if (dest != NULL) { *dest = csr_read(csr); }
-  if (src != NULL) { csr_write(csr, tmp); }
+  if (dest != NULL) {*dest = csr_read(csr); }
+  if (src != NULL) {csr_write(csr, tmp); }
 }
 
 static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
@@ -811,10 +818,12 @@ void isa_hostcall(uint32_t id, rtlreg_t *dest, const rtlreg_t *src1,
       bool hostcall_trusted = dasics_in_trusted_zone(pc);
 
       if (!hostcall_trusted && cpu.mode == MODE_U && !dsmcfg->mcfg_cuet) {
-        ret = raise_intr(EX_DUEF, *src1);
+        dfreason->val = DFR_EF;
+        ret = raise_intr(EX_DUCF, *src1);
       }
       else if (!hostcall_trusted && cpu.mode == MODE_S && !dsmcfg->mcfg_cset) {
-        ret = raise_intr(EX_DSEF, *src1);
+        dfreason->val = DFR_EF;
+        ret = raise_intr(EX_DSCF, *src1);
       }
       else {
         ret = raise_intr(imm, *src1);

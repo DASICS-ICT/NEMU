@@ -301,6 +301,14 @@ static int execute(int n) {
 #endif
     s.EHelper(&s);
     g_nr_guest_instr ++;
+#ifdef CONFIG_RVN
+// utimer logic
+// attention: here our utimer-- logic is not executed per cycle,
+// this may differ from HDL, so don't use utimer when difftest.
+  if (utimer->val > 1 && cpu.mode == MODE_U) utimer->val--;
+  else if (utimer->val == 1) mip->val |= 1 << 8; //IRQ_UEIP
+  else  mip->val &= ~(1 << 8); // utimer->val == 0
+#endif //CONFIG_RVN
     IFDEF(CONFIG_DEBUG, debug_hook(s.pc, s.logbuf));
     IFDEF(CONFIG_DIFFTEST, difftest_step(s.pc, cpu.pc));
     if (nemu_state.state == NEMU_STOP) {
@@ -367,11 +375,14 @@ void cpu_exec(uint64_t n) {
     if (cause == NEMU_EXEC_EXCEPTION) {
       Loge("Handle NEMU_EXEC_EXCEPTION");
       cause = 0;
-      vaddr_t temp_epc = (g_ex_cause == EX_DUIAF || g_ex_cause == EX_DSIAF)? prev_s->prev_pc : prev_s->pc;
-      if(g_ex_cause == EX_DUIAF || g_ex_cause == EX_DSIAF){
+      vaddr_t temp_epc = prev_s->pc;
+#ifdef CONFIG_RV_DASICS
+      if((g_ex_cause == EX_DUCF || g_ex_cause == EX_DSCF) && dfreason->val == DFR_JF){
+        temp_epc = prev_s->prev_pc;
         prev_s->prev_is_cfi = 0;
         prev_s->prev_type = CFI_NONE;
       }
+#endif
       cpu.pc = raise_intr(g_ex_cause, temp_epc);
       cpu.amo = false; // clean up
       IFDEF(CONFIG_PERF_OPT, tcache_handle_exception(cpu.pc));
