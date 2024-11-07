@@ -1375,8 +1375,16 @@ CSR_STRUCT_DUMMY_LIST(CSRS_UNPRIV_HPMCOUNTER)
 #define MCFG_UENA   0X2ul
 
 CSR_STRUCT_START(dumcfg)
-  uint64_t pad0     :1;
+  uint64_t pad0:1;
   uint64_t mcfg_uena:1;
+  uint64_t pad5:1;
+  uint64_t mcfg_cust:1;
+  uint16_t mcfg_cult:1;
+  uint64_t mcfg_cuft:1;
+  uint64_t pad1:1;
+  uint64_t pad2:1;
+  uint64_t pad3:1;
+  uint64_t pad4:1;
 CSR_STRUCT_END(dumcfg)
 
 CSR_STRUCT_START(dumbound0)
@@ -1722,7 +1730,8 @@ word_t dasics_jumpbound_low_from_index(int i);
 word_t dasics_jumpbound_high_from_index(int i);
 bool dasics_match_dlib(uint64_t addr, uint8_t cfg);
 void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type);
-void dasics_redirect_helper(vaddr_t pc, vaddr_t newpc, vaddr_t nextpc);
+// void dasics_redirect_helper(vaddr_t pc, vaddr_t newpc, vaddr_t nextpc);
+void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type);
 void dasics_check_trusted(vaddr_t pc);
 #endif  // CONFIG_RV_DASICS
 

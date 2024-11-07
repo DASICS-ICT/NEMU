@@ -593,21 +593,10 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   if (dasics_in_trusted_zone(pc)) {
     return;
   }
-
-  if (type == MEM_TYPE_READ) {
-    for (int i = 0; i < len; i++) {
-      if (!dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
-        trapInfo.tval = vaddr + i;  // To avoid load inst that crosses libzone
-        Logm("Dasics load exception occur %lx", vaddr);
-        //isa_reg_display();
-        longjmp_exception(EX_DULAF);
-        break;
-      }
-    }
-  }
-  else if (type == MEM_TYPE_WRITE) {
+  if (type == MEM_TYPE_WRITE) {
+    bool close_st_ex = dumcfg->mcfg_cust;
     for (int i = 0; i < len; ++i) {
-      if (!dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W)) {
+      if (!close_st_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W)) {
         trapInfo.tval = vaddr + i;  // To avoid store inst that crosses libzone
         Logm("Dasics store exception occur %lx", vaddr);
         //isa_reg_display();
@@ -616,30 +605,68 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
       }
     }
   }
-}
-
-void dasics_redirect_helper(vaddr_t pc, vaddr_t newpc, vaddr_t nextpc) {
-  // Check whether this redirect instruction is permitted
-  bool src_trusted = dasics_in_trusted_zone(pc);
-  bool dst_trusted = dasics_in_trusted_zone(newpc);
-  bool dst_activezone = dasics_match_djumpbound(newpc, JUMPCFG_V);
-
-  Logm("[Dasics Redirect] pc: 0x%lx (T:%d), target:0x%lx (T:%d F:%d)\n", pc, src_trusted, newpc, dst_trusted, dst_activezone);
-  Logm("[Dasics Redirect] dretpc: 0x%lx dretmaincall: 0x%lx\n", dretpc->val, dmaincall->val);
-
-  bool allow_lib_to_main = !src_trusted && dst_trusted && \
-    (newpc == dretpc->val || newpc == dmaincall->val);
-  bool allow_activezone_jump = dst_activezone;
-
-  bool allow_jump = src_trusted  || allow_lib_to_main || allow_activezone_jump;
-
-  if (!allow_jump) {
-    trapInfo.tval = newpc;
-    Logm("Dasics jump exception occur: pc%lx  (st:%d, altm:%d, df:%d, aftl:%d)\n",pc,src_trusted,allow_lib_to_main,dst_activezone,allow_activezone_jump);
-    longjmp_exception(EX_DUIAF);
+  else if (type == MEM_TYPE_READ) {
+    bool close_ld_ex = dumcfg->mcfg_cult;
+    for (int i = 0; i < len; i++) {
+      if (!close_ld_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
+        trapInfo.tval = vaddr + i;  // To avoid load inst that crosses libzone
+        Logm("Dasics load exception occur %lx", vaddr);
+        //isa_reg_display();
+        longjmp_exception(EX_DULAF);
+        break;
+      }
+    }
   }
 }
-#endif  // CONFIG_RV_DASICS
+
+// void dasics_redirect_helper(vaddr_t pc, vaddr_t newpc, vaddr_t nextpc) {
+//   // Check whether this redirect instruction is permitted
+//   bool src_trusted = dasics_in_trusted_zone(pc);
+//   bool dst_trusted = dasics_in_trusted_zone(newpc);
+//   bool dst_activezone = dasics_match_djumpbound(newpc, JUMPCFG_V);
+
+//   Logm("[Dasics Redirect] pc: 0x%lx (T:%d), target:0x%lx (T:%d F:%d)\n", pc, src_trusted, newpc, dst_trusted, dst_activezone);
+//   Logm("[Dasics Redirect] dretpc: 0x%lx dretmaincall: 0x%lx\n", dretpc->val, dmaincall->val);
+
+//   bool allow_lib_to_main = !src_trusted && dst_trusted && (newpc == dretpc->val || newpc == dmaincall->val);
+//   bool allow_activezone_jump = dst_activezone;
+
+//   bool allow_jump = src_trusted  || allow_lib_to_main || allow_activezone_jump;
+
+//   if (!allow_jump) {
+//     trapInfo.tval = newpc;
+//     Logm("Dasics jump exception occur: pc%lx  (st:%d, altm:%d, df:%d, aftl:%d)\n",pc,src_trusted,allow_lib_to_main,dst_activezone,allow_activezone_jump);
+//     longjmp_exception(EX_DUIAF);
+//   }
+// }
+
+
+void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
+  bool src_trusted = dasics_in_trusted_zone(prev_pc);
+  bool dst_trusted = dasics_in_trusted_zone(pc);
+  bool src_freezone = dasics_match_djumpbound(prev_pc, JUMPCFG_V);
+  bool dst_freezone = dasics_match_djumpbound(pc, JUMPCFG_V);
+  bool close_fetch_ex = dumcfg->mcfg_cuft;
+
+  Logm("[Dasics Fetch] prev_pc: 0x%lx (T:%d F:%d), pc:0x%lx (T:%d F:%d)\n", prev_pc, src_trusted, src_freezone, pc, dst_trusted, dst_freezone);
+  Logm("[Dasics Fetch] dretpc: 0x%lx dretmaincall: 0x%lx\n", dretpc->val, dmaincall->val);
+
+  bool allow_lib_to_main = !src_trusted && dst_trusted && \
+    (pc == dretpc->val || pc == dmaincall->val);
+
+  bool allow_br   = src_trusted  || dst_freezone;
+  bool allow_jump = src_trusted  || allow_lib_to_main || \
+                    dst_freezone;
+
+  bool allow_cfi = (cfi_type == CFI_BRANCH && allow_br) || (cfi_type == CFI_JUMP && allow_jump);
+
+  if (!allow_cfi && !close_fetch_ex) {
+    int ex =  EX_DUIAF;
+    trapInfo.tval = pc;
+    Logm("Dasics fetch exception occur: pc%lx  (st:%d,df:%d)\n",pc,src_trusted,dst_freezone);
+    longjmp_exception(ex);
+  }
+}
 
 /* raise exception if not trusted */
 void dasics_check_trusted(vaddr_t pc) {
@@ -650,6 +677,7 @@ void dasics_check_trusted(vaddr_t pc) {
     longjmp_exception(ex);
   }
 }
+#endif  // CONFIG_RV_DASICS
 
 #ifdef CONFIG_RV_PMP_CSR
 // get 8-bit config of one PMP entries by index.
