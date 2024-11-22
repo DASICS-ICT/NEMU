@@ -66,24 +66,34 @@ void isa_reg_display() {
       uepc->val, ucause->val, sedeleg->val, sideleg->val);
 #endif  // CONFIG_RVN
 #ifdef CONFIG_RV_DASICS
-  printf("dsmcfg: " FMT_WORD " dsmbound0: " FMT_WORD " dsmbound1: " FMT_WORD "\n",
-      dsmcfg->val, dsmbound0->val, dsmbound1->val);
-  printf("dumcfg: " FMT_WORD " dumbound0: " FMT_WORD " dumbound1: " FMT_WORD "\n",
-      dsmcfg->val, dumbound0->val, dumbound1->val);
-  printf("dmaincall: " FMT_WORD " dretpc: " FMT_WORD " dretpcfz: " FMT_WORD "\n",
-      dmaincall->val, dretpc->val, dretpcfz->val);
-  printf("dlcfg0: " FMT_WORD "\n",
-      dlcfg0->val);
-  for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
-    printf("%2d: cfg:0x%02x boundlo:0x%016lx boundhi :0x%016lx", i, dasics_libcfg_from_index(i), \
-      dasics_libbound_from_index(i << 1), dasics_libbound_from_index((i << 1) + 1));
+  printf("dmaincall: " FMT_WORD " dretpc: " FMT_WORD " dretpcfz: " FMT_WORD " dfreason: " FMT_WORD "\n",  
+      dmaincall->val, dretpc->val, dretpcfz->val, dfreason->val);
+  
+  printf("dsmbound: cfg:0x%01lx; lo:0x%016lx hi:0x%016lx\n",
+       get_dasics_bound_cfg(dsmbound->val),
+       get_dasics_bound_lo(dsmbound->val),
+       get_dasics_bound_hi(dsmbound->val));
+
+  printf("dumbound: cfg:0x%01lx; lo:0x%016lx hi:0x%016lx\n",
+       get_dasics_bound_cfg(dumbound->val),
+       get_dasics_bound_lo(dumbound->val),
+       get_dasics_bound_hi(dumbound->val));
+
+  for (int i = 0; i < MAX_DASICS_MEMBOUNDS; ++i) {
+    uint64_t mem_bound = dasics_membound_from_index(i);
+    printf("%2d: dmbound: cfg:0x%01lx; lo:0x%016lx hi:0x%016lx", i,
+      get_dasics_bound_cfg(mem_bound),
+      get_dasics_bound_lo(mem_bound),
+      get_dasics_bound_hi(mem_bound));
     if (i % 2 == 1) printf("\n");
     else printf("|");
   }
-  printf("djcfg: " FMT_WORD "\n", djcfg->val);
-  for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
-    printf("%2d: cfg:0x%02x boundlo: 0x%016lx boundhi: 0x%016lx", i, dasics_jumpcfg_from_index(i), \
-      dasics_jumpbound_low_from_index(i), dasics_jumpbound_high_from_index(i));
+  for (int i = 0; i < MAX_DASICS_JMPBOUNDS; ++i) {
+    uint64_t jmp_bound = dasics_jmpbound_from_index(i);
+    printf("%2d: djbound: cfg:0x%01lx; lo:0x%016lx hi:0x%016lx", i,
+      get_dasics_bound_cfg(jmp_bound),
+      get_dasics_bound_lo(jmp_bound),
+      get_dasics_bound_hi(jmp_bound));
     if (i % 2 == 1) printf("\n");
     else printf("|");
   }

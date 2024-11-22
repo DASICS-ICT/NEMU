@@ -41,23 +41,18 @@
 // CSRs for DASICS protection mechanism
 #ifdef CONFIG_RV_DASICS
 #define DASICS_CSRS(f) \
-  f(dsmcfg,      0xbc0) f(dsmbound0,   0xbc2) f(dsmbound1,   0xbc3) \
-  f(dumcfg,      0x9e0) f(dumbound0,   0x9e2) f(dumbound1,   0x9e3) \
-  f(dlcfg0,      0x880) \
-  f(dlbound0,    0x890) f(dlbound1,    0x891) f(dlbound2,    0x892) f(dlbound3,    0x893) \
-  f(dlbound4,    0x894) f(dlbound5,    0x895) f(dlbound6,    0x896) f(dlbound7,    0x897) \
-  f(dlbound8,    0x898) f(dlbound9,    0x899) f(dlbound10,   0x89a) f(dlbound11,   0x89b) \
-  f(dlbound12,   0x89c) f(dlbound13,   0x89d) f(dlbound14,   0x89e) f(dlbound15,   0x89f) \
-  f(dlbound16,   0x8a0) f(dlbound17,   0x8a1) f(dlbound18,   0x8a2) f(dlbound19,   0x8a3) \
-  f(dlbound20,   0x8a4) f(dlbound21,   0x8a5) f(dlbound22,   0x8a6) f(dlbound23,   0x8a7) \
-  f(dlbound24,   0x8a8) f(dlbound25,   0x8a9) f(dlbound26,   0x8aa) f(dlbound27,   0x8ab) \
-  f(dlbound28,   0x8ac) f(dlbound29,   0x8ad) f(dlbound30,   0x8ae) f(dlbound31,   0x8af) \
+  f(dsmbound,    0xbc1) f(dumbound,   0x9e1) \
+  f(dmbound0,    0x890) f(dmbound1,    0x891) f(dmbound2,    0x892) f(dmbound3,    0x893) \
+  f(dmbound4,    0x894) f(dmbound5,    0x895) f(dmbound6,    0x896) f(dmbound7,    0x897) \
+  f(dmbound8,    0x898) f(dmbound9,    0x899) f(dmbound10,   0x89a) f(dmbound11,   0x89b) \
+  f(dmbound12,   0x89c) f(dmbound13,   0x89d) f(dmbound14,   0x89e) f(dmbound15,   0x89f) \
+  f(dmbound16,   0x8a0) f(dmbound17,   0x8a1) f(dmbound18,   0x8a2) f(dmbound19,   0x8a3) \
+  f(dmbound20,   0x8a4) f(dmbound21,   0x8a5) f(dmbound22,   0x8a6) f(dmbound23,   0x8a7) \
+  f(dmbound24,   0x8a8) f(dmbound25,   0x8a9) f(dmbound26,   0x8aa) f(dmbound27,   0x8ab) \
+  f(dmbound28,   0x8ac) f(dmbound29,   0x8ad) f(dmbound30,   0x8ae) f(dmbound31,   0x8af) \
   f(dmaincall,   0x8b0) f(dretpc,      0x8b1) f(dretpcfz,    0x8b2) f(dfreason,    0x8b3) \
-  f(djbound0lo,  0x8c0) f(djbound0hi,  0x8c1) f(djbound1lo,  0x8c2) f(djbound1hi,  0x8c3) \
-  f(djbound2lo,  0x8c4) f(djbound2hi,  0x8c5) f(djbound3lo,  0x8c6) f(djbound3hi,  0x8c7) \
-  f(djcfg,       0x8c8)
-#else 
-#define DASICS_CSRS(f)
+  f(djbound0,  0x8c0) f(djbound1,  0x8c1) f(djbound2,  0x8c2) f(djbound3,  0x8c3) \
+  f(djbound4,  0x8c4) f(djbound5,  0x8c5) f(djbound6,  0x8c6) f(djbound7,  0x8c7) 
 #endif  // CONFIG_RV_DASICS
 
 #ifdef CONFIG_RV_DASICS
@@ -554,173 +549,102 @@ CSR_STRUCT_END(mimpid)
 
 #ifdef CONFIG_RV_DASICS
 
-#define MCFG_CSFT   0x200ul
-#define MCFG_CSLT   0x100ul
-#define MCFG_CSST   0x80ul
-#define MCFG_CSET   0x40ul
-#define MCFG_CUFT   0x20ul
-#define MCFG_CULT   0x10ul
-#define MCFG_CUST   0x8ul
-#define MCFG_CUET   0x4ul
-#define MCFG_UENA   0x2ul
-#define MCFG_SENA   0x1ul
+#define MCFG_MASK    0xfUL
+#define MCFG_ECALLF  0x8UL
+#define MCFG_JUMPF   0x4UL
+#define MCFG_LOADF   0x2UL
+#define MCFG_STOREF  0x1UL
 
-#define DUMCFG_MASK (MCFG_CUFT | MCFG_CULT | MCFG_CUST | MCFG_CUET | MCFG_UENA)
-#define DSMCFG_MASK (MCFG_CSFT | MCFG_CSLT | MCFG_CSST | MCFG_CSET | MCFG_CUFT | MCFG_CULT | MCFG_CUST | MCFG_CUET | MCFG_UENA | MCFG_SENA)
+#define CSR_DUMBOUND 0x9e1
+#define CSR_DSMBOUND 0xbc1
 
-CSR_STRUCT_START(dsmcfg)
-  uint64_t mcfg_sena:1;
-  uint64_t mcfg_uena:1;
-  uint64_t mcfg_cuet:1;
-  uint64_t mcfg_cust:1;
-  uint16_t mcfg_cult:1;
-  uint64_t mcfg_cuft:1;
-  uint64_t mcfg_cset:1;
-  uint64_t mcfg_csst:1;
-  uint64_t mcfg_cslt:1;
-  uint64_t mcfg_csft:1;
-CSR_STRUCT_END(dsmcfg)
-
-CSR_STRUCT_START(dsmbound0)
-CSR_STRUCT_END(dsmbound0)
-
-CSR_STRUCT_START(dsmbound1)
-CSR_STRUCT_END(dsmbound1)
-
-CSR_STRUCT_START(dumcfg)
-  uint64_t pad0:1;
-  uint64_t mcfg_uena:1;
-  uint64_t mcfg_cuet:1;
-  uint64_t mcfg_cust:1;
-  uint16_t mcfg_cult:1;
-  uint64_t mcfg_cuft:1;
-  uint64_t pad1:1;
-  uint64_t pad2:1;
-  uint64_t pad3:1;
-  uint64_t pad4:1;
-CSR_STRUCT_END(dumcfg)
-
-CSR_STRUCT_START(dumbound0)
-CSR_STRUCT_END(dumbound0)
-
-CSR_STRUCT_START(dumbound1)
-CSR_STRUCT_END(dumbound1)
-
-#define CSR_DLCFG0   0x880
-#define CSR_DLBOUND0 0x890
-#define CSR_DLBOUND1 0x891
+#define CSR_DMBOUND0 0x890
 #define CSR_DJBOUND0 0x8c0
-#define CSR_DJCFG    0x8c8
 
-#define LIBCFG_MASK 0xful
-#define LIBCFG_V    0x8ul
-#define LIBCFG_R    0x2ul
-#define LIBCFG_W    0x1ul
+#define MEMCFG_MASK 0xful
+#define MEMCFG_V    0x8ul
+#define MEMCFG_U    0x4ul
+#define MEMCFG_R    0x2ul
+#define MEMCFG_W    0x1ul
 
-#define JUMPCFG_MASK 0xfffful
-#define JUMPCFG_V 0x1ul
+#define JMPCFG_V    0x8ul
 
-#define MAX_DASICS_LIBBOUNDS 16
-#define MAX_DASICS_JUMPBOUNDS 4
+#define MAX_DASICS_MEMBOUNDS 32
+#define MAX_DASICS_JMPBOUNDS 8
 
-CSR_STRUCT_START(dlcfg0)
-CSR_STRUCT_END(dlcfg0)
+#define CSR_STRUCT_DMAINBOUND(name) \
+  CSR_STRUCT_START(name)     \
+    uint64_t base   : 39;    \
+    uint64_t offset : 21;    \
+    uint64_t esf    :  1;    \
+    uint64_t elf    :  1;    \
+    uint64_t ejf    :  1;    \
+    uint64_t eef    :  1;    \
+  CSR_STRUCT_END(name)
 
-CSR_STRUCT_START(dlbound0)
-CSR_STRUCT_END(dlbound0)
+#define CSR_STRUCT_DMEMBOUND(name) \
+  CSR_STRUCT_START(name) \
+      uint64_t base   : 39;  \
+      uint64_t offset : 21;  \
+      uint64_t w      :  1;  \
+      uint64_t r      :  1;  \
+      uint64_t u      :  1;  \
+      uint64_t v      :  1;  \
+  CSR_STRUCT_END(name)
 
-CSR_STRUCT_START(dlbound1)
-CSR_STRUCT_END(dlbound1)
+#define CSR_STRUCT_DJMPBOUND(name) \
+  CSR_STRUCT_START(name)    \
+      uint64_t base   : 39; \
+      uint64_t offset : 21; \
+      uint64_t pad0   :  3; \
+      uint64_t v      :  1; \
+  CSR_STRUCT_END(name)
 
-CSR_STRUCT_START(dlbound2)
-CSR_STRUCT_END(dlbound2)
+CSR_STRUCT_DMAINBOUND(dsmbound)
+CSR_STRUCT_DMAINBOUND(dumbound)
 
-CSR_STRUCT_START(dlbound3)
-CSR_STRUCT_END(dlbound3)
+CSR_STRUCT_DMEMBOUND(dmbound0)
+CSR_STRUCT_DMEMBOUND(dmbound1)
+CSR_STRUCT_DMEMBOUND(dmbound2)
+CSR_STRUCT_DMEMBOUND(dmbound3)
+CSR_STRUCT_DMEMBOUND(dmbound4)
+CSR_STRUCT_DMEMBOUND(dmbound5)
+CSR_STRUCT_DMEMBOUND(dmbound6)
+CSR_STRUCT_DMEMBOUND(dmbound7)
+CSR_STRUCT_DMEMBOUND(dmbound8)
+CSR_STRUCT_DMEMBOUND(dmbound9)
+CSR_STRUCT_DMEMBOUND(dmbound10)
+CSR_STRUCT_DMEMBOUND(dmbound11)
+CSR_STRUCT_DMEMBOUND(dmbound12)
+CSR_STRUCT_DMEMBOUND(dmbound13)
+CSR_STRUCT_DMEMBOUND(dmbound14)
+CSR_STRUCT_DMEMBOUND(dmbound15)
+CSR_STRUCT_DMEMBOUND(dmbound16)
+CSR_STRUCT_DMEMBOUND(dmbound17)
+CSR_STRUCT_DMEMBOUND(dmbound18)
+CSR_STRUCT_DMEMBOUND(dmbound19)
+CSR_STRUCT_DMEMBOUND(dmbound20)
+CSR_STRUCT_DMEMBOUND(dmbound21)
+CSR_STRUCT_DMEMBOUND(dmbound22)
+CSR_STRUCT_DMEMBOUND(dmbound23)
+CSR_STRUCT_DMEMBOUND(dmbound24)
+CSR_STRUCT_DMEMBOUND(dmbound25)
+CSR_STRUCT_DMEMBOUND(dmbound26)
+CSR_STRUCT_DMEMBOUND(dmbound27)
+CSR_STRUCT_DMEMBOUND(dmbound28)
+CSR_STRUCT_DMEMBOUND(dmbound29)
+CSR_STRUCT_DMEMBOUND(dmbound30)
+CSR_STRUCT_DMEMBOUND(dmbound31)
 
-CSR_STRUCT_START(dlbound4)
-CSR_STRUCT_END(dlbound4)
+CSR_STRUCT_DJMPBOUND(djbound0)
+CSR_STRUCT_DJMPBOUND(djbound1)
+CSR_STRUCT_DJMPBOUND(djbound2)
+CSR_STRUCT_DJMPBOUND(djbound3)
+CSR_STRUCT_DJMPBOUND(djbound4)
+CSR_STRUCT_DJMPBOUND(djbound5)
+CSR_STRUCT_DJMPBOUND(djbound6)
+CSR_STRUCT_DJMPBOUND(djbound7)
 
-CSR_STRUCT_START(dlbound5)
-CSR_STRUCT_END(dlbound5)
-
-CSR_STRUCT_START(dlbound6)
-CSR_STRUCT_END(dlbound6)
-
-CSR_STRUCT_START(dlbound7)
-CSR_STRUCT_END(dlbound7)
-
-CSR_STRUCT_START(dlbound8)
-CSR_STRUCT_END(dlbound8)
-
-CSR_STRUCT_START(dlbound9)
-CSR_STRUCT_END(dlbound9)
-
-CSR_STRUCT_START(dlbound10)
-CSR_STRUCT_END(dlbound10)
-
-CSR_STRUCT_START(dlbound11)
-CSR_STRUCT_END(dlbound11)
-
-CSR_STRUCT_START(dlbound12)
-CSR_STRUCT_END(dlbound12)
-
-CSR_STRUCT_START(dlbound13)
-CSR_STRUCT_END(dlbound13)
-
-CSR_STRUCT_START(dlbound14)
-CSR_STRUCT_END(dlbound14)
-
-CSR_STRUCT_START(dlbound15)
-CSR_STRUCT_END(dlbound15)
-
-CSR_STRUCT_START(dlbound16)
-CSR_STRUCT_END(dlbound16)
-
-CSR_STRUCT_START(dlbound17)
-CSR_STRUCT_END(dlbound17)
-
-CSR_STRUCT_START(dlbound18)
-CSR_STRUCT_END(dlbound18)
-
-CSR_STRUCT_START(dlbound19)
-CSR_STRUCT_END(dlbound19)
-
-CSR_STRUCT_START(dlbound20)
-CSR_STRUCT_END(dlbound20)
-
-CSR_STRUCT_START(dlbound21)
-CSR_STRUCT_END(dlbound21)
-
-CSR_STRUCT_START(dlbound22)
-CSR_STRUCT_END(dlbound22)
-
-CSR_STRUCT_START(dlbound23)
-CSR_STRUCT_END(dlbound23)
-
-CSR_STRUCT_START(dlbound24)
-CSR_STRUCT_END(dlbound24)
-
-CSR_STRUCT_START(dlbound25)
-CSR_STRUCT_END(dlbound25)
-
-CSR_STRUCT_START(dlbound26)
-CSR_STRUCT_END(dlbound26)
-
-CSR_STRUCT_START(dlbound27)
-CSR_STRUCT_END(dlbound27)
-
-CSR_STRUCT_START(dlbound28)
-CSR_STRUCT_END(dlbound28)
-
-CSR_STRUCT_START(dlbound29)
-CSR_STRUCT_END(dlbound29)
-
-CSR_STRUCT_START(dlbound30)
-CSR_STRUCT_END(dlbound30)
-
-CSR_STRUCT_START(dlbound31)
-CSR_STRUCT_END(dlbound31)
 
 CSR_STRUCT_START(dmaincall)
 CSR_STRUCT_END(dmaincall)
@@ -733,33 +657,6 @@ CSR_STRUCT_END(dretpcfz)
 
 CSR_STRUCT_START(dfreason)
 CSR_STRUCT_END(dfreason)
-
-CSR_STRUCT_START(djbound0lo)
-CSR_STRUCT_END(djbound0lo)
-
-CSR_STRUCT_START(djbound0hi)
-CSR_STRUCT_END(djbound0hi)
-
-CSR_STRUCT_START(djbound1lo)
-CSR_STRUCT_END(djbound1lo)
-
-CSR_STRUCT_START(djbound1hi)
-CSR_STRUCT_END(djbound1hi)
-
-CSR_STRUCT_START(djbound2lo)
-CSR_STRUCT_END(djbound2lo)
-
-CSR_STRUCT_START(djbound2hi)
-CSR_STRUCT_END(djbound2hi)
-
-CSR_STRUCT_START(djbound3lo)
-CSR_STRUCT_END(djbound3lo)
-
-CSR_STRUCT_START(djbound3hi)
-CSR_STRUCT_END(djbound3hi)
-
-CSR_STRUCT_START(djcfg)
-CSR_STRUCT_END(djcfg)
 
 #endif  // CONFIG_RV_DASICS
 
@@ -802,16 +699,30 @@ word_t pmp_tor_mask();
 
 // DASICS
 #ifdef CONFIG_RV_DASICS
+bool dasics_bound_overflow(uint64_t bound);
 bool dasics_in_trusted_zone(uint64_t pc);
-uint8_t dasics_libcfg_from_index(int i);
-word_t dasics_libbound_from_index(int i);
-uint16_t dasics_jumpcfg_from_index(int i);
-word_t dasics_jumpbound_low_from_index(int i);
-word_t dasics_jumpbound_high_from_index(int i);
-bool dasics_match_dlib(uint64_t addr, uint8_t cfg);
+uint8_t dasics_memcfg_from_index(int i);
+word_t dasics_membound_from_index(int i);
+word_t dasics_jmpbound_from_index(int i);
+bool dasics_match_dmembound(uint64_t addr, uint8_t cfg);
 void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type);
 void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type);
 void dasics_check_trusted(vaddr_t pc);
+
+#define cal_dasics_bound_val(lo, hi, cfg)           \
+     (((uint64_t)    lo  & ((1UL<<39)-1)) |         \
+     (((uint64_t)(hi-lo) & ((1UL<<21)-1)) <<  39) | \
+     (((uint64_t)   cfg  & ((1UL<< 4)-1)) <<  60))
+
+#define get_dasics_bound_lo(bound)           \
+     ((uint64_t)bound & ((1UL<<39)-1))
+
+#define get_dasics_bound_hi(bound)           \
+     (get_dasics_bound_lo(bound) + (((uint64_t)bound >> 39) & ((1UL<<21)-1)))
+
+#define get_dasics_bound_cfg(bound)          \
+     ((uint64_t)bound >> 60)
+
 #endif  // CONFIG_RV_DASICS
 
 #endif

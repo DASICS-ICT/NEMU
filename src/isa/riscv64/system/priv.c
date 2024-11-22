@@ -144,19 +144,29 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define is_read_pmpaddr (src >= &(csr_array[CSR_PMPADDR0]) && src < (&(csr_array[CSR_PMPADDR0]) + MAX_NUM_PMP))
 #define is_write_pmpcfg (dest >= &(csr_array[CSR_PMPCFG0]) && dest < (&(csr_array[CSR_PMPCFG0]) + (MAX_NUM_PMP/4)))
 #define is_write_pmpaddr (dest >= &(csr_array[CSR_PMPADDR0]) && dest < (&(csr_array[CSR_PMPADDR0]) + MAX_NUM_PMP))
-#define is_write_dasics_mem_bound (dest >= &(csr_array[CSR_DLBOUND0]) && dest < (&(csr_array[CSR_DLBOUND0]) + MAX_DASICS_LIBBOUNDS*2))
-#define is_write_dasics_jump_bound (dest >= &(csr_array[CSR_DJBOUND0]) && dest < (&(csr_array[CSR_DJBOUND0]) + MAX_DASICS_JUMPBOUNDS*2))
+#define is_write_dasics_main_bound ((dest == &(csr_array[CSR_DSMBOUND])) || (dest == &(csr_array[CSR_DUMBOUND])))
+#define is_write_dasics_mem_bound (dest >= &(csr_array[CSR_DMBOUND0]) && dest < (&(csr_array[CSR_DMBOUND0]) + MAX_DASICS_MEMBOUNDS))
+#define is_write_dasics_jump_bound (dest >= &(csr_array[CSR_DJBOUND0]) && dest < (&(csr_array[CSR_DJBOUND0]) + MAX_DASICS_JMPBOUNDS))
+#define is_write_dasics_bound (is_write_dasics_main_bound || is_write_dasics_mem_bound || is_write_dasics_jump_bound)
+
 #define mask_bitset(old, mask, new) (((old) & ~(mask)) | ((new) & (mask)))
 
 #ifdef CONFIG_RV_DASICS
-#define BOUND_ADDR_ALGIN 0x7
+#define BOUND_ADDR_ALIGN 0x7
+
+bool dasics_bound_overflow(uint64_t bound){
+  uint64_t base = bound & ((1UL<<39)-1);
+  uint64_t offset = (bound >> 39) & ((1UL<<21)-1);
+  return ((base >> 38) ^ ((base+offset) >> 38)) & 0x1;
+}
+
 bool dasics_in_trusted_zone(uint64_t pc) // Only use ena
 {
-  bool is_smain_enable = dsmcfg->mcfg_sena;
-  bool is_umain_enable = dsmcfg->mcfg_uena;
+  bool is_smain_enable = dsmbound->eef | dsmbound->ejf | dsmbound->elf | dsmbound->esf;
+  bool is_umain_enable = dumbound->eef | dumbound->ejf | dumbound->elf | dumbound->esf;
 
-  bool in_smain_zone = pc >= dsmbound0->val && pc < dsmbound1->val && cpu.mode == MODE_S && is_smain_enable;
-  bool in_umain_zone = pc >= dumbound0->val && pc < dumbound1->val && cpu.mode == MODE_U && is_umain_enable;
+  bool in_smain_zone = (pc & ((1UL<<39)-1)) >= dsmbound->base && (pc & ((1UL<<39)-1)) < (dsmbound->base + dsmbound->offset) && cpu.mode == MODE_S && is_smain_enable;
+  bool in_umain_zone = (pc & ((1UL<<39)-1)) >= dumbound->base && (pc & ((1UL<<39)-1)) < (dumbound->base + dumbound->offset) && cpu.mode == MODE_U && is_umain_enable;
 
   bool in_s_trusted_zone = in_smain_zone || (cpu.mode == MODE_S && !is_smain_enable);
   bool in_u_trusted_zone = in_umain_zone || (cpu.mode == MODE_U && !is_umain_enable);
@@ -164,58 +174,39 @@ bool dasics_in_trusted_zone(uint64_t pc) // Only use ena
   return cpu.mode == MODE_M || in_s_trusted_zone || in_u_trusted_zone;
 }
 
-uint8_t dasics_libcfg_from_index(int i) {
-  assert(0 <= i && i < MAX_DASICS_LIBBOUNDS);
-  return (csr_array[CSR_DLCFG0] >> (i << 2)) & LIBCFG_MASK;
+word_t dasics_membound_from_index(int i) {
+  assert(0 <= i && i < MAX_DASICS_MEMBOUNDS);
+  return csr_array[CSR_DMBOUND0 + i];
 }
 
-word_t dasics_libbound_from_index(int i) {
-  assert(0 <= i && i < (MAX_DASICS_LIBBOUNDS << 1));
-  return csr_array[CSR_DLBOUND0 + i];
+word_t dasics_jmpbound_from_index(int i) {
+  assert(0 <= i && i < MAX_DASICS_JMPBOUNDS);
+  return csr_array[CSR_DJBOUND0 + i];
 }
 
-uint16_t dasics_jumpcfg_from_index(int i) {
-  assert(0 <= i && i < MAX_DASICS_JUMPBOUNDS);
-  return (csr_array[CSR_DJCFG] >> (i << 4)) & JUMPCFG_MASK;
-}
-
-word_t dasics_jumpbound_low_from_index(int i) {
-  assert(0 <= i && i < MAX_DASICS_JUMPBOUNDS);
-  return csr_array[CSR_DJBOUND0 + 2*i];
-}
-
-word_t dasics_jumpbound_high_from_index(int i) {
-  assert(0 <= i && i < MAX_DASICS_JUMPBOUNDS);
-  return csr_array[CSR_DJBOUND0 + 2*i + 1];
-}
-
-bool dasics_match_dlib(uint64_t addr, uint8_t cfg)
+bool dasics_match_dmembound(uint64_t addr, uint8_t cfg)
 {
-  // Check whether the addr is within dlbounds which is marked as cfg
+  // Check whether the addr is within dmbounds which is marked as cfg
   bool within_range = false;
-  for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
-    uint8_t cfgval = dasics_libcfg_from_index(i);
-    word_t boundlo = dasics_libbound_from_index(i << 1);
-    word_t boundhi = dasics_libbound_from_index((i << 1) + 1);
-
-    if (!((cfgval & cfg) ^ cfg) && boundlo <= addr && addr < boundhi) {
+  for (int i = 0; i < MAX_DASICS_MEMBOUNDS; ++i) {
+    word_t bound = dasics_membound_from_index(i);
+    if (!((get_dasics_bound_cfg(bound) & cfg) ^ cfg) && 
+           get_dasics_bound_lo(bound) <= addr && 
+           addr < get_dasics_bound_hi(bound)) {
       within_range = true;
       break;
     }
   }
-
   return within_range;
 }
 
-bool dasics_match_djumpbound(uint64_t addr, uint8_t cfg) {
+bool dasics_match_djmpbound(uint64_t addr, uint8_t cfg) {
   bool within_range = false;
-  for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
-    uint16_t cfgval = dasics_jumpcfg_from_index(i);
-    word_t boundlo = dasics_jumpbound_low_from_index(i);
-    word_t boundhi = dasics_jumpbound_high_from_index(i);
-    Logm("[free zone check] cfgval:%d,  boundlo:%lx  boundhi:%lx\n",cfgval,boundlo,boundhi);
-
-    if (!((cfgval & cfg) ^ cfg) && boundlo <= addr && addr < boundhi) {
+  for (int i = 0; i < MAX_DASICS_JMPBOUNDS; ++i) {
+    word_t bound = dasics_jmpbound_from_index(i);
+    if (!((get_dasics_bound_cfg(bound) & cfg) ^ cfg) && 
+           get_dasics_bound_lo(bound) <= addr && 
+           addr < get_dasics_bound_hi(bound)) {
       within_range = true;
       break;
     }
@@ -230,9 +221,9 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   }
   if (type == MEM_TYPE_WRITE) {
     int ex = (cpu.mode == MODE_U) ? EX_DUCF : EX_DSCF;
-    bool close_st_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cust : dsmcfg->mcfg_csst;
+    bool enable_st_ex = (cpu.mode == MODE_U) ? dumbound->esf : dsmbound->esf;
     for (int i = 0; i < len; ++i) {
-      if (!close_st_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W)) {
+      if (enable_st_ex && !dasics_match_dmembound(vaddr + i, MEMCFG_V | MEMCFG_W)) {
         INTR_TVAL_REG(ex) = vaddr + i;  // To avoid store inst that crosses libzone
         dfreason->val = DFR_SF;
         Logm("Dasics store exception occur %lx", vaddr);
@@ -244,9 +235,9 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   }
   else if (type == MEM_TYPE_READ) {
     int ex = (cpu.mode == MODE_U) ? EX_DUCF : EX_DSCF;
-    bool close_ld_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cult : dsmcfg->mcfg_cslt;
+    bool enable_ld_ex = (cpu.mode == MODE_U) ? dumbound->elf : dsmbound->elf;
     for (int i = 0; i < len; i++) {
-      if (!close_ld_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
+      if (enable_ld_ex && !dasics_match_dmembound(vaddr + i, MEMCFG_V | MEMCFG_R)) {
         INTR_TVAL_REG(ex) = vaddr + i;  // To avoid load inst that crosses libzone
         dfreason->val = DFR_LF;
         Logm("Dasics load exception occur %lx", vaddr);
@@ -260,9 +251,9 @@ void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
 void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
   bool src_trusted = dasics_in_trusted_zone(prev_pc);
   bool dst_trusted = dasics_in_trusted_zone(pc);
-  bool src_freezone = dasics_match_djumpbound(prev_pc, JUMPCFG_V);
-  bool dst_freezone = dasics_match_djumpbound(pc, JUMPCFG_V);
-  bool close_fetch_ex = (cpu.mode == MODE_U) ? dsmcfg->mcfg_cuft : dsmcfg->mcfg_csft;
+  bool src_freezone = dasics_match_djmpbound(prev_pc, JMPCFG_V);
+  bool dst_freezone = dasics_match_djmpbound(pc, JMPCFG_V);
+  bool enable_jump_ex = (cpu.mode == MODE_U) ? dumbound->ejf : dsmbound->ejf;
 
   Logm("[Dasics Fetch] prev_pc: 0x%lx (T:%d F:%d), pc:0x%lx (T:%d F:%d)\n", prev_pc, src_trusted, src_freezone, pc, dst_trusted, dst_freezone);
   Logm("[Dasics Fetch] dretpc: 0x%lx dretmaincall: 0x%lx dretpcfz: 0x%lx\n", dretpc->val, dmaincall->val, dretpcfz->val);
@@ -278,7 +269,7 @@ void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
 
   bool allow_cfi = (cfi_type == CFI_BRANCH && allow_br) || (cfi_type == CFI_JUMP && allow_jump);
 
-  if (!allow_cfi && !close_fetch_ex) {
+  if (!allow_cfi && enable_jump_ex) {
     int ex = (cpu.mode == MODE_U) ? EX_DUCF : EX_DSCF;
     INTR_TVAL_REG(ex) = pc;
     dfreason->val = DFR_JF;
@@ -419,10 +410,6 @@ static inline word_t csr_read(word_t *src) {
 #ifdef CONFIG_RVN
   else if (is_read(uip))    { difftest_skip_ref(); return mip->val & UIP_MASK; }
 #endif  // CONFIG_RVN
-#ifdef CONFIG_RV_DASICS
-  else if (is_read(dsmcfg)) { return dsmcfg->val & DSMCFG_MASK; }
-  else if (is_read(dumcfg)) { return dsmcfg->val & DUMCFG_MASK; }
-#endif  // CONFIG_RV_DASICS
 #ifdef CONFIG_RV_DASICS
   else if (is_read(upkru)) { return (upkru->val & PKR_MASK); }
   else if (is_read(spkrs)) { return (spkrs->val & PKR_MASK); }
@@ -640,12 +627,12 @@ static inline void csr_write(word_t *dest, word_t src) {
   }
 #endif
 #ifdef CONFIG_RV_DASICS
-  else if (is_write(dsmcfg) || is_write(dumcfg)) {
-    word_t mask = is_write(dsmcfg) ? DSMCFG_MASK : DUMCFG_MASK;
-    dsmcfg->val = (dsmcfg->val & ~mask) | (src & mask);
-  } else if (is_write_dasics_mem_bound || is_write_dasics_jump_bound) {
-    *dest = src & ~BOUND_ADDR_ALGIN; 
-    if(is_write_dasics_jump_bound) Logm("[write jump bound]: write addr %016lx src: %lx\n",*dest,src );
+  else if (is_write_dasics_bound) {
+    // if overflow, throw II
+    if (dasics_bound_overflow(src)){
+      longjmp_exception(EX_II);
+    }
+    *dest = src & ~BOUND_ADDR_ALIGN; 
   }
 #endif  // CONFIG_RV_DASICS
   else if (is_write(satp)) {
@@ -817,11 +804,11 @@ void isa_hostcall(uint32_t id, rtlreg_t *dest, const rtlreg_t *src1,
 #ifdef CONFIG_RV_DASICS
       bool hostcall_trusted = dasics_in_trusted_zone(pc);
 
-      if (!hostcall_trusted && cpu.mode == MODE_U && !dsmcfg->mcfg_cuet) {
+      if (!hostcall_trusted && cpu.mode == MODE_U && dumbound->eef) {
         dfreason->val = DFR_EF;
         ret = raise_intr(EX_DUCF, *src1);
       }
-      else if (!hostcall_trusted && cpu.mode == MODE_S && !dsmcfg->mcfg_cset) {
+      else if (!hostcall_trusted && cpu.mode == MODE_S && dsmbound->eef) {
         dfreason->val = DFR_EF;
         ret = raise_intr(EX_DSCF, *src1);
       }
