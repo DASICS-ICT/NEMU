@@ -96,7 +96,7 @@ def_THelper(main) {
 #endif // CONFIG_RVV
   def_INSTR_IDTAB("??????? ????? ????? ??? ????? 11000 ??", B     , branch);
   def_INSTR_IDTAB("??????? ????? ????? 000 ????? 11001 ??", I     , jalr_dispatch);
-  def_INSTR_TAB  ("??????? ????? ????? 000 ????? 11010 ??",         nemu_trap);
+  def_INSTR_TAB  ("0000000 00000 ????? 000 00000 11010 ??",         nemu_trap);
   def_INSTR_IDTAB("??????? ????? ????? ??? ????? 11011 ??", J     , jal_dispatch);
 #ifdef CONFIG_RVH
   def_INSTR_TAB  ("??????? ????? ????? ??? ????? 11100 ??",         system);
@@ -109,13 +109,14 @@ def_THelper(main) {
 int isa_fetch_decode(Decode *s) {
   int idx = EXEC_ID_inv;
 
-#ifdef CONFIG_RV_SDTRIG
-  trig_action_t action = TRIG_ACTION_NONE;
-  if (cpu.TM->check_timings.bf) {
-    action = tm_check_hit(cpu.TM, TRIG_OP_EXECUTE, s->pc, TRIGGER_NO_VALUE);
-  }
-  trigger_handler(action, s->pc);
-#endif
+#ifdef CONFIG_TDATA1_ICOUNT
+  trig_action_t icount_action = check_triggers_icount(cpu.TM);
+  trigger_handler(TRIG_TYPE_ICOUNT, icount_action, 0);
+#endif // CONFIG_TDATA1_ICOUNT
+#ifdef CONFIG_TDATA1_MCONTROL6
+  trig_action_t mcontrol6_action = check_triggers_mcontrol6(cpu.TM, TRIG_OP_EXECUTE, s->pc, TRIGGER_NO_VALUE);
+  trigger_handler(TRIG_TYPE_MCONTROL6, mcontrol6_action, s->pc);
+#endif // CONFIG_TDATA1_MCONTROL6
 
 #ifdef CONFIG_RV_DASICS
   if(s->prev_is_cfi)
@@ -136,12 +137,6 @@ int isa_fetch_decode(Decode *s) {
     idx = table_main(s);
   }
 
-#ifdef CONFIG_RV_SDTRIG
-  if (cpu.TM->check_timings.af) {
-    action = tm_check_hit(cpu.TM, (trig_op_t)(TRIG_OP_EXECUTE | TRIG_OP_TIMING), s->pc, s->isa.instr.val);
-  }
-  trigger_handler(action, s->pc);
-#endif
 
 #ifdef CONFIG_RV_DASICS
   s->prev_is_cfi = 0;

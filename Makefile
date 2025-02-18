@@ -28,7 +28,20 @@ remove_quote = $(patsubst "%",%,$(1))
 
 ISA    ?= $(if $(CONFIG_ISA),$(call remove_quote,$(CONFIG_ISA)),x86)
 CFLAGS += -D__ISA__=$(ISA)
-# CFLAGS += -g
+
+ifdef CONFIG_ENABLE_CONFIG_MMIO_SPACE
+CFLAGS += -D__MMIO_SPECE_RANGE__=$(call remove_quote,$(CONFIG_MMIO_SPACE_RANGE))
+endif
+
+ifdef CONFIG_HAS_FLASH
+FLASH_IMG_PATH=$(shell realpath $(CONFIG_FLASH_IMG_PATH) 2>/dev/null)
+ifeq ($(FLASH_IMG_PATH),)
+CFLAGS += -D__FLASH_IMG_PATH__=\"\"
+else
+CFLAGS += -D__FLASH_IMG_PATH__=\"$(FLASH_IMG_PATH)\"
+endif # ($(FLASH_IMG_PATH),)
+endif # CONFIG_HAS_FLASH
+
 INC_DIR += $(NEMU_HOME)/src/isa/$(ISA)/include
 DIRS-y += src/isa/$(ISA)
 
@@ -87,13 +100,14 @@ NAME  = nemu-$(ENGINE)
 
 ifndef CONFIG_SHARE
 ifdef CONFIG_CC_NATIVE_ARCH
-CFLAGS  += -march=native
+CFLAGS  += -march=native -mtune=native
+CFLAGS	+= -ftree-vectorize # vector unit stride fast path
 endif
 LDFLAGS += -lz
 endif
 
 ifndef CONFIG_SHARE
-LDFLAGS += -lreadline -ldl -pie
+LDFLAGS += -lreadline -ldl
 else
 SHARE = 1
 endif
@@ -104,42 +118,11 @@ LDFLAGS += -lSDL2
 endif
 endif
 
-ifdef CONFIG_FPU_SOFT
-SOFTFLOAT = resource/softfloat/build/softfloat.a
-ifeq ($(ISA),riscv64)
-SPECIALIZE_TYPE = RISCV
-else
-SPECIALIZE_TYPE = 8086-SSE
-endif
-ifdef CONFIG_SHARE
-SOFTFLOAT_OPTS_DEFAULT = -DSOFTFLOAT_ROUND_ODD -DINLINE_LEVEL=5 \
-  -DSOFTFLOAT_FAST_DIV32TO16 -DSOFTFLOAT_FAST_DIV64TO32
-SOFTFLOAT_OPTS_OVERRIDE = SOFTFLOAT_OPTS="$(SOFTFLOAT_OPTS_DEFAULT) -fPIC"
-endif
-
-SOFTFLOAT_REPO_PATH = resource/softfloat/repo
-ifeq ($(wildcard $(SOFTFLOAT_REPO_PATH)/COPYING.txt),)
-  $(shell git clone --depth=1 https://github.com/ucb-bar/berkeley-softfloat-3 $(SOFTFLOAT_REPO_PATH))
-endif
-SOFTFLOAT_BUILD_PATH = $(abspath $(SOFTFLOAT_REPO_PATH)/build/Linux-x86_64-GCC)
-
-INC_DIR += $(SOFTFLOAT_REPO_PATH)/source/include
-INC_DIR += $(SOFTFLOAT_REPO_PATH)/source/$(SPECIALIZE_TYPE)
-LIBS += $(SOFTFLOAT)
-$(SOFTFLOAT):
-	SPECIALIZE_TYPE=$(SPECIALIZE_TYPE) $(SOFTFLOAT_OPTS_OVERRIDE) $(MAKE) -s -C $(SOFTFLOAT_BUILD_PATH) all
-	mkdir -p $(@D)
-	ln -sf $(SOFTFLOAT_BUILD_PATH)/softfloat.a $@
-
-clean-softfloat:
-	$(MAKE) -s -C $(SOFTFLOAT_BUILD_PATH) clean
-clean-all: clean-softfloat
-
-.PHONY: $(SOFTFLOAT) clean-softfloat
-else ifdef CONFIG_FPU_HOST
+ifdef CONFIG_FPU_HOST
 LDFLAGS += -lm
 endif
 
+include $(NEMU_HOME)/scripts/repos.mk
 include $(NEMU_HOME)/scripts/git.mk
 include $(NEMU_HOME)/scripts/config.mk
 include $(NEMU_HOME)/scripts/isa.mk
@@ -186,6 +169,6 @@ clean-tools = $(dir $(shell find ./tools -name "Makefile"))
 $(clean-tools):
 	-@$(MAKE) -s -C $@ clean
 clean-tools: $(clean-tools)
-clean-all: clean distclean clean-tools
+clean-all: clean distclean clean-tools clean-repos
 
 .PHONY: run gdb run-env clean-tools clean-all $(clean-tools)

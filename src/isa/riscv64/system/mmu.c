@@ -22,7 +22,6 @@
 #include "../local-include/csr.h"
 #include "../local-include/intr.h"
 #include "../local-include/rtl.h"
-#include "../local-include/trapinfo.h"
 
 typedef union PageTableEntry {
   struct {
@@ -44,13 +43,23 @@ typedef union PageTableEntry {
 } PTE;
 
 #define PGSHFT 12
+#ifdef CONFIG_RV_MBMC
+#define BMSHFT 32
+#endif
 #define PGMASK ((1ull << PGSHFT) - 1)
 #define PGBASE(pn) ((uint64_t) pn << PGSHFT)
+#ifdef CONFIG_RV_MBMC
+#define BMBASE(bma) (bma << BMSHFT)
+#define GET_BIT(bm_base, ppn) (((bm_base[(ppn) / 8] >> ((ppn) % 8)) & 1))
+static int pt_level = 0;
+#endif
 
 // Sv39 & Sv48 page walk
 #define PTE_SIZE 8
 #define VPNMASK 0x1ff
 #define GPVPNMASK 0x7ff
+#define SVNAPOTMASK 0b1111 // only suppoprt 64 KiB contiguous region
+#define SVNAPOTSHFT ((PGSHFT) + 4)
 static inline uintptr_t VPNiSHFT(int i) {
   return (PGSHFT) + 9 * i;
 }
@@ -58,8 +67,8 @@ static inline uintptr_t VPNi(vaddr_t va, int i) {
   return (va >> VPNiSHFT(i)) & VPNMASK;
 }
 #ifdef CONFIG_RVH
-static inline uintptr_t GVPNi(vaddr_t va, int i) {
-  return (i == 2)?  (va >> VPNiSHFT(i)) & GPVPNMASK : (va >> VPNiSHFT(i)) & VPNMASK;
+static inline uintptr_t GVPNi(vaddr_t va, int i, int max_level) {
+  return (i == max_level - 1)?  (va >> VPNiSHFT(i)) & GPVPNMASK : (va >> VPNiSHFT(i)) & VPNMASK;
 }
 bool hlvx = 0;
 bool hld_st = 0;
@@ -75,6 +84,7 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
   assert(mode == MODE_U || mode == MODE_S);
   ok = ok && pte->v;
   ok = ok && !(mode == MODE_U && !pte->u);
+  ok = ok && (!pte->n || (pte->ppn & SVNAPOTMASK) == 0b1000);
 #ifdef CONFIG_RVH
   ok = ok && !(pte->u && ((mode == MODE_S) && (!(virt? vsstatus->sum: mstatus->sum) || ifetch)));
   Logtr("ok: %i, mode == U: %i, pte->u: %i, ppn: %lx, virt: %d", ok, mode == MODE_U, pte->u, (uint64_t)pte->ppn << 12, virt);
@@ -96,7 +106,7 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
 #endif
     if (!(ok && pte->x && !pte->pad) || update_ad) {
       assert(!cpu.amo);
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
       longjmp_exception(EX_IPF);
       return false;
     }
@@ -121,7 +131,7 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
     if (!(ok && can_load && !pte->pad) || update_ad) {
       if (cpu.amo) Logtr("redirect to AMO page fault exception at pc = " FMT_WORD, cpu.pc);
       int ex = (cpu.amo ? EX_SPF : EX_LPF);
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
       cpu.amo = false;
       Logtr("Memory read translation exception!");
       longjmp_exception(ex);
@@ -136,7 +146,7 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
 #endif
     Logtr("Translate for memory writing v: %d w: %d", pte->v, pte->w);
     if (!(ok && pte->w && !pte->pad) || update_ad) {
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
       cpu.amo = false;
       longjmp_exception(EX_SPF);
       return false;
@@ -144,6 +154,13 @@ static inline bool check_permission(PTE *pte, bool ok, vaddr_t vaddr, int type) 
   }
   return true;
 }
+
+#ifndef CONFIG_RVH
+vaddr_t get_effective_address(vaddr_t vaddr, int type) {
+  return vaddr;
+}
+#endif
+
 #ifdef CONFIG_RVH
 bool has_two_stage_translation(){
   return hld_st || (mstatus->mprv && mstatus->mpv) || cpu.v;
@@ -171,15 +188,76 @@ void raise_guest_excep(paddr_t gpaddr, vaddr_t vaddr, int type, bool is_support_
   } else {
     ex = EX_LGPF;
   }
-  trapInfo.tval  = vaddr;
-  trapInfo.tval2 = gpaddr >> 2;
-  trapInfo.tinst = tinst;
+  cpu.trapInfo.tval  = vaddr;
+  cpu.trapInfo.tval2 = gpaddr >> 2;
+  cpu.trapInfo.tinst = tinst;
   longjmp_exception(ex);
+}
+
+vaddr_t get_effective_address(vaddr_t vaddr, int type) {
+  if (type == MEM_TYPE_IFETCH || hlvx) {
+    return vaddr;
+  }
+
+  bool virt = cpu.v;
+  int mode = cpu.mode;
+  int pmm = 0;
+  int masked_width = 0;
+
+  // Early out fastpath for non-H & non-pmm applications
+  if (likely(!hld_st && !mstatus->mprv && mode == MODE_U && senvcfg->pmm == 0)) {
+    return vaddr;
+  }
+
+  if (hld_st) {
+    mode = hstatus->spvp;
+    virt = true;
+  } else if (mstatus->mprv) {
+    mode = mstatus->mpp;
+    virt = mstatus->mpv && mode != MODE_M;
+  }
+
+  if (mode == MODE_M) {
+    pmm = mseccfg->pmm;
+  } else if (!virt && mode == MODE_S) {
+    pmm = menvcfg->pmm;
+  } else if (virt && mode == MODE_S) {
+    pmm = henvcfg->pmm;
+    // Is cpu.mode here
+  } else if (hld_st && cpu.mode == MODE_U) {
+    pmm = hstatus->hupmm;
+  } else if (mode == MODE_U) {
+    pmm = senvcfg->pmm;
+  } else {
+    assert(0);
+  }
+
+  switch (pmm) {
+    case 2:
+      masked_width = 7;
+      break;
+    case 3:
+      masked_width = 16;
+      break;
+  }
+
+  bool isBare = mode == MODE_M;
+  bool isPaddr = !virt && satp->mode == SATP_MODE_BARE;
+  bool isGpaddr = virt && vsatp->mode == SATP_MODE_BARE;
+
+  if (isBare || isPaddr || isGpaddr) {
+    return ((uint64_t)vaddr << masked_width) >> masked_width;
+  } else {
+    return ((int64_t)vaddr << masked_width) >> masked_width;
+  }
 }
 
 paddr_t gpa_stage(paddr_t gpaddr, vaddr_t vaddr, int type, int trap_type, bool ishlvx, bool is_support_vs){
   Logtr("gpa_stage gpaddr: " FMT_PADDR ", vaddr: " FMT_WORD ", type: %d", gpaddr, vaddr, type);
   int max_level = 0;
+  #ifdef CONFIG_RV_MBMC
+  pt_level = 0;
+  #endif
   if (hgatp->mode == HGATP_MODE_BARE) {
     return gpaddr;
   } else if (hgatp->mode == HGATP_MODE_Sv48x4){
@@ -199,7 +277,7 @@ paddr_t gpa_stage(paddr_t gpaddr, vaddr_t vaddr, int type, int trap_type, bool i
   word_t p_pte;
   PTE pte;
   for (level = max_level - 1; level >= 0; ) {
-    p_pte = pg_base + GVPNi(gpaddr, level) * PTE_SIZE;
+    p_pte = pg_base + GVPNi(gpaddr, level, max_level) * PTE_SIZE;
     pte.val	= paddr_read(p_pte, PTE_SIZE,
     type == MEM_TYPE_IFETCH ? MEM_TYPE_IFETCH_READ :
     type == MEM_TYPE_WRITE ? MEM_TYPE_WRITE_READ : MEM_TYPE_READ, trap_type, MODE_S, vaddr);
@@ -247,7 +325,16 @@ paddr_t gpa_stage(paddr_t gpaddr, vaddr_t vaddr, int type, int trap_type, bool i
         if ((pg_base & pg_mask) != 0) {
           // misaligned superpage
           break;
+        } else if (pte.n) {
+          // superpage but napot
+          break;
         }
+        pg_base = (pg_base & ~pg_mask) | (gpaddr & pg_mask & ~PGMASK);
+      } else if (pte.n) {
+        if ((pte.ppn & SVNAPOTMASK) != 0b1000) {
+          break;
+        }
+        word_t pg_mask = ((1ull << SVNAPOTSHFT) - 1);
         pg_base = (pg_base & ~pg_mask) | (gpaddr & pg_mask & ~PGMASK);
       }
       return pg_base | (gpaddr & PAGE_MASK);
@@ -266,7 +353,7 @@ static word_t pte_read(paddr_t addr, int type, int mode, vaddr_t vaddr) {
   if (unlikely(is_in_mmio(addr))) {
     int cause = type == MEM_TYPE_IFETCH ? EX_IAF :
                 type == MEM_TYPE_WRITE  ? EX_SAF : EX_LAF;
-    trapInfo.tval = vaddr;
+    cpu.trapInfo.tval = vaddr;
     longjmp_exception(cause);
   }
 #endif
@@ -364,13 +451,25 @@ static paddr_t ptw(vaddr_t vaddr, int type) {
 #else
   if (!check_permission(&pte, true, vaddr, type)) return MEM_RET_FAIL;
 #endif
+  #ifdef CONFIG_RV_MBMC
+  pt_level = level;
+  #endif
   if (level > 0) {
     // superpage
     word_t pg_mask = ((1ull << VPNiSHFT(level)) - 1);
     if ((pg_base & pg_mask) != 0) {
       // missaligned superpage
       goto bad;
+    } else if (pte.n) {
+      // superpage but napot
+      goto bad;
     }
+    pg_base = (pg_base & ~pg_mask) | (vaddr & pg_mask & ~PGMASK);
+  } else if (pte.n) {
+    if ((pte.ppn & SVNAPOTMASK) != 0b1000) {
+      goto bad;
+    }
+    word_t pg_mask = ((1ull << SVNAPOTSHFT) - 1);
     pg_base = (pg_base & ~pg_mask) | (vaddr & pg_mask & ~PGMASK);
   }
   #ifdef CONFIG_RVH
@@ -383,7 +482,7 @@ static paddr_t ptw(vaddr_t vaddr, int type) {
   // update a/d by hardware
   is_write = (type == MEM_TYPE_WRITE);
   if (!pte.a || (!pte.d && is_write)) {
-    trapInfo.tval = vaddr;
+    cpu.trapInfo.tval = vaddr;
     switch (type)
     {
     int ex;
@@ -496,7 +595,7 @@ int isa_mmu_check(vaddr_t vaddr, int len, int type) {
   bool enable_39 = satp->mode == SATP_MODE_Sv39 || ((cpu.v || hld_st) && (vsatp->mode == SATP_MODE_Sv39 || hgatp->mode == HGATP_MODE_Sv39x4));
   bool enable_48 = satp->mode == SATP_MODE_Sv48 || ((cpu.v || hld_st) && (vsatp->mode == SATP_MODE_Sv48 || hgatp->mode == HGATP_MODE_Sv48x4));
   bool vm_enable = (mstatus->mprv && (!is_ifetch) ? mstatus->mpp : cpu.mode) < MODE_M && (enable_39 || enable_48);
-  bool hyperinst_vm_enable = hld_st && (vsatp->mode == SATP_MODE_Sv39 || hgatp->mode == HGATP_MODE_Sv39x4);
+  bool hyperinst_vm_enable = hld_st && (vsatp->mode == SATP_MODE_Sv39 || vsatp->mode == SATP_MODE_Sv48 || hgatp->mode == HGATP_MODE_Sv39x4 || hgatp->mode == HGATP_MODE_Sv48x4);
 #else
   bool enable_39 = satp->mode == SATP_MODE_Sv39;
   bool enable_48 = satp->mode == SATP_MODE_Sv48;
@@ -504,7 +603,7 @@ int isa_mmu_check(vaddr_t vaddr, int len, int type) {
 #endif
 
   bool va_msbs_ok = true;
-  if (vm_enable || MUXDEF(CONFIG_RVH, hyperinst_vm_enable, false)) {
+  if (likely(vm_enable || MUXDEF(CONFIG_RVH, hyperinst_vm_enable, false))) {
     if (enable_48) {
       word_t va_mask = ((((word_t)1) << (63 - 47 + 1)) - 1);
       word_t va_msbs = vaddr >> 47;
@@ -520,7 +619,7 @@ int isa_mmu_check(vaddr_t vaddr, int len, int type) {
 
 #ifdef CONFIG_RVH
   bool gpf = false;
-  if((cpu.v || hld_st) && vsatp->mode == SATP_MODE_BARE){ // don't need bits 63–39 are equal to bit 38
+  if (unlikely((cpu.v || hld_st) && vsatp->mode == SATP_MODE_BARE)) { // don't need bits 63–39 are equal to bit 38
     if (enable_48) {
       word_t maxgpa = ((((word_t)1) << 50) - 1);
       if((vaddr & ~maxgpa) == 0){
@@ -538,12 +637,12 @@ int isa_mmu_check(vaddr_t vaddr, int len, int type) {
     }
   }
 #endif
-  if(!va_msbs_ok){
+  if (unlikely(!va_msbs_ok)) {
     if(is_ifetch){
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
 #ifdef CONFIG_RVH
-      if (hld_st || gpf) {
-        trapInfo.tval2 = vaddr >> 2;
+      if (gpf) {
+        cpu.trapInfo.tval2 = vaddr >> 2;
         longjmp_exception(EX_IGPF);
       } else {
         longjmp_exception(EX_IPF);
@@ -552,12 +651,12 @@ int isa_mmu_check(vaddr_t vaddr, int len, int type) {
       longjmp_exception(EX_IPF);
 #endif
     } else if(type == MEM_TYPE_READ){
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
 #ifdef CONFIG_RVH
       int ex;
-      if(hld_st || gpf){
+      if(gpf){
         ex = cpu.amo ? EX_SGPF : EX_LGPF;
-        trapInfo.tval2 = vaddr >> 2;
+        cpu.trapInfo.tval2 = vaddr >> 2;
       } else {
         ex = cpu.amo ? EX_SPF : EX_LPF;
       }
@@ -567,10 +666,10 @@ int isa_mmu_check(vaddr_t vaddr, int len, int type) {
       longjmp_exception(ex);
 #endif
     } else {
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
 #ifdef CONFIG_RVH
-      if (hld_st || gpf) {
-        trapInfo.tval2 = vaddr >> 2;
+      if (gpf) {
+        cpu.trapInfo.tval2 = vaddr >> 2;
         longjmp_exception(EX_SGPF);
       } else {
         longjmp_exception(EX_SPF);
@@ -595,7 +694,7 @@ void isa_misalign_data_addr_check(vaddr_t vaddr, int len, int type) {
     Logm("addr misaligned happened: vaddr:%lx len:%d type:%d pc:%lx", vaddr, len, type, cpu.pc);
     if (ISDEF(CONFIG_AC_SOFT)) {
       int ex = cpu.amo || type == MEM_TYPE_WRITE ? EX_SAM : EX_LAM;
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
       longjmp_exception(ex);
     }
   }
@@ -607,7 +706,7 @@ void isa_vec_misalign_data_addr_check(vaddr_t vaddr, int len, int type) {
     Logm("addr misaligned happened: vaddr:%lx len:%d type:%d pc:%lx", vaddr, len, type, cpu.pc);
     if (ISDEF(CONFIG_VECTOR_AC_SOFT)) {
       int ex = cpu.amo || type == MEM_TYPE_WRITE ? EX_SAM : EX_LAM;
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
       longjmp_exception(ex);
     }
   }
@@ -619,16 +718,13 @@ void isa_amo_misalign_data_addr_check(vaddr_t vaddr, int len, int type) {
     Logm("addr misaligned happened: vaddr:%lx len:%d type:%d pc:%lx", vaddr, len, type, cpu.pc);
     if (ISDEF(CONFIG_AMO_AC_SOFT)) {
       int ex = cpu.amo || type == MEM_TYPE_WRITE ? EX_SAM : EX_LAM;
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
       longjmp_exception(ex);
     }
   }
 }
 
 paddr_t isa_mmu_translate(vaddr_t vaddr, int len, int type) {
-  bool is_cross_page = ((vaddr & PAGE_MASK) + len) > PAGE_SIZE;
-  if (is_cross_page) return MEM_RET_CROSS_PAGE;
-
   paddr_t ptw_result = ptw(vaddr, type);
 #ifdef FORCE_RAISE_PF
 #ifdef CONFIG_RVH
@@ -663,7 +759,7 @@ int force_raise_pf(vaddr_t vaddr, int type){
       }
 #ifdef CONFIG_RVH
       if (intr_deleg_VS(EX_IPF)) {
-        trapInfo.tval = cpu.execution_guide.vstval;
+        cpu.trapInfo.tval = cpu.execution_guide.vstval;
         if(
           vaddr != cpu.execution_guide.vstval &&
           // cross page ipf caused mismatch is legal
@@ -678,7 +774,7 @@ int force_raise_pf(vaddr_t vaddr, int type){
 #else
       if(intr_deleg_S(EX_IPF)) {
 #endif // CONFIG_RVH
-        trapInfo.tval = cpu.execution_guide.stval;
+        cpu.trapInfo.tval = cpu.execution_guide.stval;
         if(
           vaddr != cpu.execution_guide.stval &&
           // cross page ipf caused mismatch is legal
@@ -690,7 +786,7 @@ int force_raise_pf(vaddr_t vaddr, int type){
           );
         }
       } else {
-        trapInfo.tval = cpu.execution_guide.mtval;
+        cpu.trapInfo.tval = cpu.execution_guide.mtval;
         if(
           vaddr != cpu.execution_guide.mtval &&
           // cross page ipf caused mismatch is legal
@@ -715,7 +811,7 @@ int force_raise_pf(vaddr_t vaddr, int type){
 #endif
       printf("[NEMU]: force raise LPF\n");
 
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
       longjmp_exception(EX_LPF);
       return MEM_RET_FAIL;
     } else if(type == MEM_TYPE_WRITE && cpu.execution_guide.exception_num == EX_SPF){
@@ -728,7 +824,7 @@ int force_raise_pf(vaddr_t vaddr, int type){
 #endif
       printf("[NEMU]: force raise SPF\n");
 
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
       longjmp_exception(EX_SPF);
       return MEM_RET_FAIL;
     }
@@ -757,8 +853,8 @@ int force_raise_gpf(vaddr_t vaddr, int type){
         return MEM_RET_OK;
       }
       if (intr_deleg_S(EX_IGPF)) {
-        trapInfo.tval = cpu.execution_guide.stval;
-        trapInfo.tval2 = cpu.execution_guide.htval;
+        cpu.trapInfo.tval = cpu.execution_guide.stval;
+        cpu.trapInfo.tval2 = cpu.execution_guide.htval;
         if(
           vaddr != cpu.execution_guide.stval &&
           // cross page ipf caused mismatch is legal
@@ -770,8 +866,8 @@ int force_raise_gpf(vaddr_t vaddr, int type){
           );
         }
       } else {
-        trapInfo.tval = cpu.execution_guide.mtval;
-        trapInfo.tval2 = cpu.execution_guide.mtval2;
+        cpu.trapInfo.tval = cpu.execution_guide.mtval;
+        cpu.trapInfo.tval2 = cpu.execution_guide.mtval2;
         if(
           vaddr != cpu.execution_guide.mtval &&
           // cross page ipf caused mismatch is legal
@@ -796,8 +892,8 @@ int force_raise_gpf(vaddr_t vaddr, int type){
 #endif
       printf("[NEMU]: force raise LGPF\n");
 
-      trapInfo.tval = vaddr;
-      trapInfo.tval2 = intr_deleg_S(EX_LGPF) ? cpu.execution_guide.htval: cpu.execution_guide.mtval2;
+      cpu.trapInfo.tval = vaddr;
+      cpu.trapInfo.tval2 = intr_deleg_S(EX_LGPF) ? cpu.execution_guide.htval: cpu.execution_guide.mtval2;
       longjmp_exception(EX_LGPF);
       return MEM_RET_FAIL;
     } else if(type == MEM_TYPE_WRITE && cpu.execution_guide.exception_num == EX_SGPF){
@@ -810,8 +906,8 @@ int force_raise_gpf(vaddr_t vaddr, int type){
 #endif
       printf("[NEMU]: force raise SGPF\n");
 
-      trapInfo.tval = vaddr;
-      trapInfo.tval2 = intr_deleg_S(EX_SGPF) ? cpu.execution_guide.htval: cpu.execution_guide.mtval2;
+      cpu.trapInfo.tval = vaddr;
+      cpu.trapInfo.tval2 = intr_deleg_S(EX_SGPF) ? cpu.execution_guide.htval: cpu.execution_guide.mtval2;
       longjmp_exception(EX_SGPF);
       return MEM_RET_FAIL;
     }
@@ -949,6 +1045,22 @@ bool pmptable_check_permission(word_t offset, word_t root_table_base, int type, 
 #undef W_BIT
 #undef X_BIT
   }
+}
+#endif
+
+#ifdef CONFIG_RV_MBMC
+bool isa_bmc_check_permission(paddr_t addr, int len, int type, int out_mode) {
+  if (mbmc->BME == 0) {
+    return true;
+  }
+  if (mbmc->CMODE == 1) {
+    return true;
+  }
+  word_t bm_base = (mbmc->BMA) << 6;
+  // word_t ppn = ((addr >> PGSHFT));
+  word_t ppn = (addr >> (9 * pt_level + PGSHFT) << (9 * pt_level));
+  bool is_bmc = (bitmap_read(bm_base + ppn / 8, MEM_TYPE_BM_READ, out_mode) >> (ppn % 8)) & 1;
+  return !is_bmc;
 }
 #endif
 

@@ -19,6 +19,7 @@
 
 #include <common.h>
 #include <memory/vaddr.h>
+#include "../local-include/encoding.h"
 
 #define FUNCT3_CSRRW  1
 #define FUNCT3_CSRRS  2
@@ -26,6 +27,25 @@
 #define FUNCT3_CSRRWI 5
 #define FUNCT3_CSRRSI 6
 #define FUNCT3_CSRRCI 7
+
+#define CUSTOM_CSR_SBPCTL     0x5c0
+#define CUSTOM_CSR_SPFCTL     0x5c1
+#define CUSTOM_CSR_SLVPREDCTL 0x5c2
+#define CUSTOM_CSR_SMBLOCKCTL 0x5c3
+#define CUSTOM_CSR_SRNCTL     0x5c4
+#define CUSTOM_CSR_SFETCHCTL  0x9e0
+#define CUSTOM_CSR_MCOREPWR   0xbc0
+#define CUSTOM_CSR_MFLUSHPWR  0xbc1
+#define CUSTOM_CSR_MBMC       0xbC2
+
+#define CUSTOM_CSR_SBPCTL_WMASK     0x7f
+#define CUSTOM_CSR_SPFCTL_WMASK     0x3ffff
+#define CUSTOM_CSR_SLVPREDCTL_WMASK 0x1ff
+#define CUSTOM_CSR_SMBLOCKCTL_WMASK 0x3ff
+#define CUSTOM_CSR_SRNCTL_WMASK     0x5
+#define CUSTOM_CSR_SFETCHCTL_WMASK  0x1
+#define CUSTOM_CSR_MCOREPWR_WMASK   0x1
+#define CUSTOM_CSR_MFLUSHPWR_WMASK  0x1
 
 /**
  * Mapping between CSR name and addr
@@ -143,12 +163,12 @@
   f(satp       , 0x180)
 
 /** Debug/Trace Registers (Trigger Module Registers) **/
-#ifdef CONFIG_RV_SDTRIG
+#ifdef CONFIG_RV_SDTRIG_EXTRA
   #define CSRS_S_DEBUG_TRACE(f) \
-    f(scontext   , 0x6A8)
-#else // CONFIG_RV_SDTRIG
+    f(scontext   , 0x5A8)
+#else // CONFIG_RV_SDTRIG_EXTRA
   #define CSRS_S_DEBUG_TRACE(f)
-#endif // CONFIG_RV_SDTRIG
+#endif // CONFIG_RV_SDTRIG_EXTRA
 
 /** Supervisor State Enable Registers **/
 #ifdef CONFIG_RV_SMSTATEEN
@@ -240,12 +260,12 @@
     f(hgatp      , 0x680)
 
   /** Debug/Trace Registers (Trigger Module Registers) **/
-  #ifdef CONFIG_RV_SDTRIG
+  #ifdef CONFIG_RV_SDTRIG_EXTRA
     #define CSRS_H_DEBUG_TRACE(f) \
       f(hcontext   , 0x6A8)
-  #else // CONFIG_RV_SDTRIG
+  #else // CONFIG_RV_SDTRIG_EXTRA
     #define CSRS_H_DEBUG_TRACE(f)
-  #endif // CONFIG_RV_SDTRIG
+  #endif // CONFIG_RV_SDTRIG_EXTRA
 
   /** Hypervisor Counter/Timer Virtualization Registers **/
   #define CSRS_H_CONUTER_TIMER_VIRTUALIZATION(f) \
@@ -436,6 +456,18 @@
   #define CSRS_DEBUG_MODE(f)
 #endif // CONFIG_RV_SDEXT
 
+/** Bitmap registers **/
+#ifdef CONFIG_RV_MBMC
+  #define CSRS_M_MBMC(f) \
+    f(mbmc       , 0xBC2)
+#else // CONFIG_RV_MBMC
+  #define CSRS_M_MBMC(f)
+#endif // CONFIG_RV_MBMC
+
+#define CSRS_M_CUSTOM(f) \
+  f(mcorepwr   , 0xBC0) f(mflushpwr  , 0xBC1) \
+  CSRS_M_MBMC(f)
+
 /** Machine AIA Registers **/
 #ifdef CONFIG_RV_IMSIC
   #define CSRS_M_AIA(f) \
@@ -469,7 +501,8 @@
   CSRS_M_DEBUG_TRACE(f) \
   CSRS_M_AIA(f) \
   CSRS_M_SMRNMI(f) \
-  CSRS_DEBUG_MODE(f)
+  CSRS_DEBUG_MODE(f) \
+  CSRS_M_CUSTOM(f)
 
 
 /* ALL CSRs */
@@ -716,7 +749,9 @@ CSR_STRUCT_START(mseccfg)
   uint64_t useed : 1; // [8]
   uint64_t sseed : 1; // [9]
   uint64_t mlpe  : 1; // [10]
-  uint64_t pad1  :53; // [63:11]
+  uint64_t pad1  :21; // [31:11]
+  uint64_t pmm   : 2; // [33:32]
+  uint64_t pad2  :30; // [63:34]
 CSR_STRUCT_END(mseccfg)
 
 #ifdef CONFIG_RV_SMSTATEEN
@@ -844,13 +879,34 @@ CSR_STRUCT_START(tdata3)    // 0x7a3
 CSR_STRUCT_END(tdata3)
 
 CSR_STRUCT_START(tinfo)     // 0x7a4
-  uint64_t info : 16;       // [15:0]
+  uint64_t none        : 1; // [0]
+  uint64_t legacy      : 1; // [1]
+  uint64_t mcontrol    : 1; // [2]
+  uint64_t icount      : 1; // [3]
+  uint64_t itrigger    : 1; // [4]
+  uint64_t etrigger    : 1; // [5]
+  uint64_t mcontrol6   : 1; // [6]
+  uint64_t tmexttrigger: 1; // [7]
+  uint64_t             : 4; // [11:8]
+  uint64_t             : 3; // [14:12]
+  uint64_t disabled    : 1; // [15]
+  uint64_t             : 8; // [23:16]
+  uint64_t version     : 8; // [31:24]
 CSR_STRUCT_END(tinfo)
 
 CSR_STRUCT_START(mcontext)  // 0x7a8
 CSR_STRUCT_END(mcontext)
 
 #endif // CONFIG_RV_SDTRIG
+
+CSR_STRUCT_START(mcorepwr)
+  uint64_t powerdown  : 1; // [0] core want to power down when core is in WFI state
+CSR_STRUCT_END(mcorepwr)
+
+CSR_STRUCT_START(mflushpwr)
+  uint64_t flushl2    : 1; // [0] core want to flush L2 and exit coherency
+  uint64_t l2flushed  : 1; // [1] L2 flush is done and L2 exit coherency
+CSR_STRUCT_END(mflushpwr)
 
 #ifdef CONFIG_RV_IMSIC
 CSR_STRUCT_START(miselect)
@@ -988,8 +1044,20 @@ CSR_STRUCT_START(satp)
   uint64_t mode: 4;
 CSR_STRUCT_END(satp)
 
+#ifdef CONFIG_RV_MBMC
+CSR_STRUCT_START(mbmc)
+  uint64_t CMODE:   1;
+  uint64_t BCLEAR:  1;
+  uint64_t BME  :   1;
+  uint64_t RSV  :   3;
+  uint64_t BMA  :  58;
+CSR_STRUCT_END(mbmc)
+#endif
+
 #ifdef CONFIG_RV_SSCOFPMF
 CSR_STRUCT_START(scountovf)
+  uint64_t pad    :   3;
+  uint64_t ofvec  :  29;
 CSR_STRUCT_END(scountovf)
 #endif
 
@@ -1000,24 +1068,55 @@ CSR_STRUCT_END(scountovf)
 // to fix xiangshan that:
 // rnctl: move elimination,
 CSR_STRUCT_START(srnctl)
-  uint64_t rnctrl  : 1;
-  uint64_t reserve :63;
+  uint64_t fusion_enable : 1;  // [0]
+  uint64_t               : 1;  // [1]
+  uint64_t wfi_enable    : 1;  // [2]
 CSR_STRUCT_END(srnctl)
 #endif
 
 CSR_STRUCT_START(sbpctl)
+  uint64_t ubtb_enable : 1; // [0]
+  uint64_t btb_enable  : 1; // [1]
+  uint64_t bim_enable  : 1; // [2]
+  uint64_t tage_enable : 1; // [3]
+  uint64_t sc_enable   : 1; // [4]
+  uint64_t ras_enable  : 1; // [5]
+  uint64_t loop_enable : 1; // [6]
 CSR_STRUCT_END(sbpctl)
 
 CSR_STRUCT_START(spfctl)
+  uint64_t l1i_pf_enable            : 1; // [0] L1I Cache Prefetcher Enable
+  uint64_t l2_pf_enable             : 1; // [1] L2  Cache Prefetcher Enable
+  uint64_t l1d_pf_enable            : 1; // [2] L1D Cache Prefetcher Enable
+  uint64_t l1d_pf_train_on_hit      : 1; // [3] L1D train prefetch on hit
+  uint64_t l1d_pf_enable_agt        : 1; // [4] L1D prefetch enable agt
+  uint64_t l1d_pf_enable_pht        : 1; // [5] L1D prefetch enable pht
+  uint64_t l1d_pf_active_threshold  : 4; // [9:6] L1D prefetch active page threshold
+  uint64_t l1d_pf_active_stride     : 6; // [15:10] L1D prefetch active page stride
+  uint64_t l1d_pf_enable_stride     : 1; // [16] L1D prefetch enable stride
+  uint64_t l2_pf_store_only         : 1; // [17] L2 pf store only
 CSR_STRUCT_END(spfctl)
 
 CSR_STRUCT_START(slvpredctl)
+  uint64_t lvpred_disable           : 1; // [0]
+  uint64_t no_spec_load             : 1; // [1]
+  uint64_t storeset_wait_store      : 1; // [2]
+  uint64_t storeset_no_fast_wakeup  : 1; // [3]
+  uint64_t lvpred_timeout           : 5; // [8:4]
 CSR_STRUCT_END(slvpredctl)
 
 CSR_STRUCT_START(smblockctl)
+  uint64_t sbuffer_threshold                : 4; // [3:0] Store buffer flush threshold (Th).
+  uint64_t ldld_vio_check_enable            : 1; // [4] Enable load load violation check after reset (LVC).
+  uint64_t soft_prefetch_enable             : 1; // [5] Enable soft-prefetch after reset (SP).
+  uint64_t cache_error_enable               : 1; // [6] Enable cache error after reset (CE).
+  uint64_t uncache_write_outstanding_enable : 1; // [7] Enable uncache write outstanding (0).
+  uint64_t hd_misalign_st_enable            : 1; // [8] Enable hardware store misalign.
+  uint64_t hd_misalign_ld_enable            : 1; // [9] Enable hardware load misalign.
 CSR_STRUCT_END(smblockctl)
 
 CSR_STRUCT_START(sfetchctl)
+  uint64_t icache_parity_enable : 1; // [0]
 CSR_STRUCT_END(sfetchctl)
 
 /** Supervisor Timer Register**/
@@ -1051,20 +1150,23 @@ CSR_STRUCT_END(stopi)
 
 #ifdef CONFIG_RVH
 CSR_STRUCT_START(hstatus)
-  uint64_t pad0  : 5;
-  uint64_t vsbe  : 1;
-  uint64_t gva   : 1;
-  uint64_t spv   : 1;
-  uint64_t spvp  : 1;
-  uint64_t hu    : 1;
-  uint64_t pad1  : 2;
-  uint64_t vgein : 6;
-  uint64_t pad2  : 2;
-  uint64_t vtvm  : 1;
-  uint64_t vtw   : 1;
-  uint64_t vtsr  : 1;
-  uint64_t pad3  : 9;
-  uint64_t vsxl  : 2;
+  uint64_t pad0  : 5;  // [4:0]
+  uint64_t vsbe  : 1;  // [5]
+  uint64_t gva   : 1;  // [6]
+  uint64_t spv   : 1;  // [7]
+  uint64_t spvp  : 1;  // [8]
+  uint64_t hu    : 1;  // [9]
+  uint64_t pad1  : 2;  // [11:10]
+  uint64_t vgein : 6;  // [17:12]
+  uint64_t pad2  : 2;  // [19:18]
+  uint64_t vtvm  : 1;  // [20]
+  uint64_t vtw   : 1;  // [21]
+  uint64_t vtsr  : 1;  // [22]
+  uint64_t pad3  : 9;  // [31:23]
+  uint64_t vsxl  : 2;  // [33:32]
+  uint64_t pad4  : 14; // [47:34]
+  uint64_t hupmm : 2;  // [49:48]
+  uint64_t pad5  : 14; // [63:50]
 CSR_STRUCT_END(hstatus)
 
 CSR_STRUCT_START(hedeleg)
@@ -1256,6 +1358,14 @@ CSR_STRUCT_START(hvictl)
 CSR_STRUCT_END(hvictl)
 
 CSR_STRUCT_START(hviprio1)
+  uint64_t intr0  : 8; // [7 : 0] reserved
+  uint64_t ssi    : 8; // [16: 8]
+  uint64_t intr4  : 8; // [23:16] reserved
+  uint64_t sti    : 8; // [31:24]
+  uint64_t intr8  : 8; // [39:32] reserved
+  uint64_t coi    : 8; // [47:40]
+  uint64_t intr14 : 8; // [55:48]
+  uint64_t intr15 : 8; // [63:56]
 CSR_STRUCT_END(hviprio1)
 
 CSR_STRUCT_START(hviprio2)
@@ -1393,6 +1503,7 @@ CSR_STRUCT_END(dumbound0)
 CSR_STRUCT_START(dumbound1)
 CSR_STRUCT_END(dumbound1)
 
+#define CSR_DUMCFG   0x9e1
 #define CSR_DLCFG0   0x880
 #define CSR_DLBOUND0 0x890
 #define CSR_DLBOUND1 0x891
@@ -1680,9 +1791,7 @@ MAP(CSRS, CSRS_DECL)
 // SD, SDT, UXL, MXR, SUM, XS, FS, VS, SPP, UBE, SPIE, SIE
 #define SSTATUS_BASE 0x80000003000de762UL
 
-#define SSTATUS_SDT MUXDEF(CONFIG_RV_SMRNMI, 0x1000000, 0)
-
-#define SSTATUS_RMASK (SSTATUS_BASE | SSTATUS_SDT)
+#define SSTATUS_RMASK (SSTATUS_BASE | MUXDEF(CONFIG_RV_SMRNMI, SSTATUS_SDT, 0))
 
 /** AIA **/
 #ifdef CONFIG_RV_IMSIC
@@ -1696,10 +1805,6 @@ MAP(CSRS, CSRS_DECL)
 
 /** Double Trap**/
 #ifdef CONFIG_RV_SMRNMI
-  #define MNSTATUS_NMIE   0x1UL << 3
-  #define MNSTATUS_MNPV   0X1UL << 7
-  #define MNSTATUS_MNPELP 0X1UL << 9
-  #define MNSTATUS_MNPP   0X3UL << 11
   #define MNSTATUS_MASK (MNSTATUS_NMIE | MNSTATUS_MNPV | MNSTATUS_MNPP)
 #endif
 
@@ -1712,8 +1817,14 @@ void csr_prepare();
 
 word_t gen_status_sd(word_t status);
 word_t get_mip();
-
-word_t csrid_read(uint32_t csrid);
+word_t get_hideleg();
+word_t mstatus_read();
+word_t sstatus_read(bool vsreg_read, bool bare_read);
+#ifdef CONFIG_RV_IMSIC
+void update_mtopi();
+void update_stopi();
+void update_vstopi();
+#endif
 
 /** PMP **/
 uint8_t pmpcfg_from_index(int idx);

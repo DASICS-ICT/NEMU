@@ -344,6 +344,7 @@ def_EHelper(vmvsx) {
     }
   }
   vstart->val = 0;
+  vp_set_dirty();
 }
 
 def_EHelper(vmvxs) {
@@ -375,6 +376,7 @@ def_EHelper(vmvnr) {
     set_vreg(id_dest->reg, i, *s0, 3, vlmul, 1);
   }
   vstart->val = 0;
+  vp_set_dirty();
 }
 
 def_EHelper(vpopc) {
@@ -468,6 +470,7 @@ def_EHelper(vmsbf) {
     }
     vstart->val = 0;
   }
+  vp_set_dirty();
 }
 
 def_EHelper(vmsof) {
@@ -509,6 +512,7 @@ def_EHelper(vmsof) {
     }
     vstart->val = 0;
   }
+  vp_set_dirty();
 }
 
 def_EHelper(vmsif) {
@@ -553,6 +557,7 @@ def_EHelper(vmsif) {
     }
     vstart->val = 0;
   }
+  vp_set_dirty();
 }
 
 def_EHelper(viota) {
@@ -598,6 +603,7 @@ def_EHelper(viota) {
     }
   }
   vstart->val = 0;
+  vp_set_dirty();
 }
 
 def_EHelper(vid) {
@@ -640,6 +646,7 @@ def_EHelper(vid) {
     }
   }
   vstart->val = 0;
+  vp_set_dirty();
 }
 
 def_EHelper(vzextvf8) {
@@ -808,6 +815,7 @@ def_EHelper(vcompress) {
     }
   }
   vstart->val = 0;
+  vp_set_dirty();
 }
 
 def_EHelper(vmandnot) {
@@ -1025,10 +1033,16 @@ def_EHelper(vfmvfs) {
   if (s->vm == 0) {
     longjmp_exception(EX_II);
   }
-  if (vtype->vsew <= 1) {
+  if (vtype->vsew == 0) {
+    Loge("fp8 not supported");
+    longjmp_exception(EX_II);
+  }
+#ifndef CONFIG_RV_ZVFH
+  else if (vtype->vsew == 1) {
     Loge("ZVFH not supported");
     longjmp_exception(EX_II);
   }
+#endif
   get_vreg(id_src2->reg, 0, s0, vtype->vsew, vtype->vlmul, 1, 0);
   if (vtype->vsew < 3) {
       *s0 = *s0 | (UINT64_MAX << (8 << vtype->vsew));
@@ -1046,10 +1060,16 @@ def_EHelper(vfmvsf) {
   if (s->vm == 0) {
     longjmp_exception(EX_II);
   }
-  if (vtype->vsew <= 1) {
+  if (vtype->vsew == 0) {
+    Loge("fp8 not supported");
+    longjmp_exception(EX_II);
+  }
+#ifndef CONFIG_RV_ZVFH
+  else if (vtype->vsew == 1) {
     Loge("ZVFH not supported");
     longjmp_exception(EX_II);
   }
+#endif
   if (vl->val > 0 && vstart->val < vl->val) {
     rtl_mv(s, s1, &fpreg_l(id_src1->reg)); // f[rs1]
     check_isFpCanonicalNAN(s1, vtype->vsew);

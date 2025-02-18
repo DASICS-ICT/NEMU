@@ -1,12 +1,61 @@
 menu "ISA-dependent Options for riscv64"
 
+config HAS_CLINT
+  bool
+  default y
+  help
+    NEMU's Core Local Interrupt (CLINT) provides MMIO ports for M-mode timer.
+
+    NEMU's CLINT defines two MMIO register mapping: 
+    - mtimecmp at 0x4000
+    - mtime at 0xBFF8.
+
+    NEMU does not support multicore and M-mode inter-processor interrupts. So
+    there is no register mapping for this feature.
+
+if HAS_CLINT
+
 config CLINT_MMIO
   hex "MMIO address of CLINT"
   default 0xa2000000
+  help
+    This option controls the base address of CLINT MMIO.
+
+endif # HAS_CLINT
+
+config CYCLES_PER_MTIME_TICK
+  int "The number of cycles per mtime tick"
+  depends on DETERMINISTIC
+  default 128
+  help
+    This option controls the ratio between the the main frequency and RTC
+    (mtime) frequency.
+
+    As NEMU works as a hart with CPI (cycles per instruction) of 1, this
+    describes how many instructions are executed for each increment of mtime
+    by 1.
+
+    For linux workload, mtime frequency is specified via "timebase-frequency"
+    option in device tree (dts). Ensure that "timebase-frequency" is aligned
+    with this option.
+
+config WFI_TIMEOUT_TICKS
+  int "The number of ticks for instruction wfi timeout"
+  default 8192
+  help
+    This option controls the maximum number of ticks that WFI (Wait for
+    interrupt) instructions can wait. If set to 0, WFI acts as NOP.
 
 config MULTICORE_DIFF
   bool "(Beta) Enable multi-core difftest APIs for RISC-V"
   default false
+
+config RV_MBMC
+  bool "RISC-V MBMC (Memory-isolation BitMap Check) Register"
+  default n
+  help
+    This option enables the MBMC register, which is used to verify the memory
+    isolation of the Confidential Virtual Machine(CVM) using a bitmap.
 
 config RVB
   bool "RISC-V Bitmanip Extension v1.0"
@@ -44,9 +93,20 @@ config RVV
   bool "RISC-V Vector Extension v1.0"
   default y
 
+config DIFFTEST_DIRTY_FS_VS
+  depends on RVV
+  depends on DIFFTEST_REF_SPIKE
+  bool "Sync dirty FS and VS to Spike"
+  default n
+
 config RV_ZVFH_MIN
   bool "RISC-V Zvfhmin Extension V1.0"
   depends on RVV
+  default y
+
+config RV_ZVFH
+  bool "RISC-V Zvfh Extension V1.0"
+  depends on RV_ZVFH_MIN
   default y
 
 config RV_DEBUG
@@ -71,6 +131,26 @@ config RV_SDTRIG
   depends on RV_DEBUG
   default n
 
+config TDATA1_MCONTROL6
+  bool "TDATA1 Support mcontrol6 Type of Trigger"
+  depends on RV_SDTRIG
+  default n
+
+config TDATA1_ICOUNT
+  bool "TDATA1 Support icount Type of Trigger"
+  depends on RV_SDTRIG
+  default n
+
+config TDATA1_ITRIGGER
+  bool "TDATA1 Support itrigger Type of Trigger"
+  depends on RV_SDTRIG
+  default n
+
+config TDATA1_ETRIGGER
+  bool "TDATA1 Support etrigger Type of Trigger"
+  depends on RV_SDTRIG
+  default n
+
 config TRIGGER_NUM
   int "Number of supported triggers"
   depends on RV_SDTRIG
@@ -82,7 +162,7 @@ config SDTRIG_EXTRA
   default n
   help
     This includes the following optional CSRs in Sdtrig extension:
-    tdata3, mcontext.
+    tdata3, mcontext, hcontext, scontext.
 
 config RV_AIA
   bool "(Beta) RISC-V Advanced Interrupt Architecture v1.0"
@@ -116,6 +196,11 @@ config MDT_INIT
   bool "Init mstatus.mdt to 1"
   depends on RV_SMDBLTRP
   default n
+  help
+    This config control the init value of mstatus.mdt. As software not support
+    Smdbltrp yet, the default value of this config is set to n. After software
+    support, this config should be open.
+
 
 config RV_SSDBLTRP
   bool "RISC-V S-Mode Double Trap Extension"
@@ -126,6 +211,10 @@ config NMIE_INIT
   bool "Init mnstatus.nmie to 1 and allow software to clear"
   depends on RV_SMRNMI
   default y
+  help
+    This config control the init value of mnstatus.nmie and whether allow software
+    to clear. As software not support Smrnmi yet, the default value of this config
+    is set to y. After software support, this config should be close.
 
 menuconfig RV_ZICNTR
   bool "RISC-V Zicntr Extensions for Base Counters and Timers, v2.0"
@@ -149,6 +238,10 @@ config RV_CSR_TIME
     register.
 
 endif # RV_ZICNTR
+
+config RV_ZIHINTPAUSE
+    bool "RISC-V Zihintpause for Pause Hint, v2.0"
+    default y
 
 config RV_ZIHPM
   bool "RISC-V Zihpm Extensions for Hardware Performance Counters, v2.0" 
@@ -306,19 +399,45 @@ config RV_SV48
 #   bool "Sv57"
 #   help
 #     Support Sv39, Sv48 and Sv57.
-    
+
 #     The MODE field of CSR satp and vsatp could be set to Bare, Sv39, Sv48 or
 #     Sv47, and the MODE field of CSR hgatp could be set to Bare, Sv39x4, Sv48x4
 #     or Sv57x4.
 
 endchoice
 
-config RV_SVNAPOT
-  bool "RISC-V Svnapot extension for NAPOT Translation Contiguity (alpha)"
+config RV_SSNPM
+  bool "RISC-V Ssnpm extension (part of RISC-V pointer masking extension)"
   default n
   help
-    This allows the N bit of the leaf PTEs to be set. Beyond this, this option
-    DOES NOT SUPPORT other requirements of the Svnapot extension.
+    A supervisor-level extension that provides pointer masking for the next
+    lower privilege mode (U-mode), and for VS- and VU-modes if the H extension
+    is present.
+
+config RV_SMNPM
+  bool "RISC-V Smnpm extension (part of RISC-V pointer masking extension)"
+  default n
+  help
+    A machine-level extension that provides pointer masking for the next lower
+    privilege mode (S/HS if S-mode is implemented, or U-mode otherwise).
+
+config RV_SMMPM
+  bool "RISC-V Smmpm extension (part of RISC-V pointer masking extension)"
+  default n
+  help
+    A machine-level extension that provides pointer masking for M-mode.
+
+config RV_SVNAPOT
+  bool "RISC-V Svnapot extension for NAPOT Translation Contiguity (beta)"
+  default n
+  help
+    This supports RISC-V Svnapot extension.
+
+    If y, when a PTE has N=1, the PTE represents a translation that is part of
+    a range of contiguous virtual-to-physical translations with the same values
+    for PTE bits 5–0.
+
+    If n, when a PTE has N=1, Page Fault or Guest Page Fault will occur.
 
 config RV_SVPBMT
   bool "RISC-V Svpbmt extension for Page-Based Memory Types (alpha)"
@@ -416,5 +535,20 @@ config RV_ZIMOP
 config RV_ZCB
   bool "RISC-V Zcb Extension, Version 1.0.0"
   default n
+
+config RESERVATION_SET_WIDTH
+  int "The Width of the Reservation Set Size"
+  default 0
+
+config RV_ZACAS
+  bool "RISC-V Extension for Atomic Compare-and-Swap(CAS) Instructions, Version 1.0.0"
+  default n
+
+config RV_ZAWRS
+  bool "RISC-V Extension for Wait-on-Reservation-Set instructions, Version 1.01"
+  default n
+  help
+    This extension adds the WRS instruction which waits until the reservation set is empty.
+    In NEMU, WRS instruction currently acts as nop.
 
 endmenu

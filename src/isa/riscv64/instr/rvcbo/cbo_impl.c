@@ -1,0 +1,150 @@
+/***************************************************************************************
+* Copyright (c) 2020-2025 Institute of Computing Technology, Chinese Academy of Sciences
+*
+* NEMU is licensed under Mulan PSL v2.
+* You can use this software according to the terms and conditions of the Mulan PSL v2.
+* You may obtain a copy of Mulan PSL v2 at:
+*          http://license.coscl.org.cn/MulanPSL2
+*
+* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+*
+* See the Mulan PSL v2 for more details.
+***************************************************************************************/
+
+#include "cbo_impl.h"
+#include "../local-include/intr.h"
+#include "../local-include/trigger.h"
+#include <common.h>
+#include <rtl/rtl.h>
+#include <device/mmio.h>
+#include <cpu/decode.h>
+#include <cpu/difftest.h>
+#include <cpu/cpu.h>
+
+#define CACHE_BLOCK_SHIFT        6
+#define CACHE_BLOCK_SIZE         (1UL << CACHE_BLOCK_SHIFT)
+#define CACHE_BLOCK_MASK         (CACHE_BLOCK_SIZE - 1)
+
+#define CACHE_OP_SPLIT_SIZE      8
+#define CACHE_BLOCK_OPS          (CACHE_BLOCK_SIZE / CACHE_OP_SPLIT_SIZE)
+
+
+static void paddr_check(paddr_t paddr, vaddr_t vaddr) {
+  check_paddr(paddr, 8, MEM_TYPE_WRITE, MEM_TYPE_WRITE, cpu.mode, vaddr);
+  if (!in_pmem(paddr)) {
+    cpu.trapInfo.tval = paddr;
+    cpu.amo = false;
+    longjmp_exception(EX_SAF);
+  }
+}
+
+static void trigger_check(vaddr_t vaddr){
+#ifdef CONFIG_TDATA1_MCONTROL6
+  vaddr_t block_addr = vaddr & ~CACHE_BLOCK_MASK;
+  for (uint64_t offset = 0; offset < CACHE_BLOCK_SIZE; offset++) {
+    trig_action_t action = check_triggers_mcontrol6(cpu.TM, TRIG_OP_STORE, block_addr + offset, TRIGGER_NO_VALUE);
+    trigger_handler(TRIG_TYPE_MCONTROL6, action, vaddr);
+  }
+#endif // CONFIG_TDATA1_MCONTROL6
+}
+
+static paddr_t translate_and_check(vaddr_t vaddr) {
+  Logm("Checking mmu when MMU_DYN");
+  trigger_check(vaddr);
+  paddr_t mmu_ret = isa_mmu_check(vaddr, 8, MEM_TYPE_WRITE);
+  paddr_t paddr = (mmu_ret & ~PAGE_MASK) | (vaddr & PAGE_MASK);
+  paddr_check(paddr, vaddr);
+  return paddr;
+}
+
+static void not_translate_check(vaddr_t vaddr) {
+  trigger_check(vaddr);
+  paddr_check(vaddr, vaddr);
+}
+
+
+
+void cbo_zero(Decode *s){
+  rtlreg_t* addr_p = dsrc1;
+
+  not_translate_check(*addr_p);
+
+  rtlreg_t block_addr = *addr_p & ~CACHE_BLOCK_MASK;
+  for (uint64_t i = 0; i < CACHE_BLOCK_OPS; i++) {
+    // write zero to block_addr
+    rtl_sm(s, rz, &block_addr, 0, CACHE_OP_SPLIT_SIZE, MMU_DIRECT);
+    block_addr += CACHE_OP_SPLIT_SIZE;
+  }
+}
+
+void cbo_inval(Decode *s){
+  rtlreg_t* addr_p = dsrc1;
+
+  not_translate_check(*addr_p);
+
+  // do nothing
+  IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
+}
+
+void cbo_flush(Decode *s){
+  rtlreg_t* addr_p = dsrc1;
+
+  not_translate_check(*addr_p);
+
+  // do nothing
+  IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
+}
+
+void cbo_clean(Decode *s){
+  rtlreg_t* addr_p = dsrc1;
+
+  not_translate_check(*addr_p);
+
+  // do nothing
+  IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
+}
+
+/*
+ * MMU impl
+ */
+void cbo_zero_mmu(Decode *s){
+  rtlreg_t* addr_p = dsrc1;
+
+  paddr_t base_addr_p = translate_and_check(*addr_p);
+
+  rtlreg_t  block_addr = base_addr_p & ~CACHE_BLOCK_MASK;
+  for (uint64_t i = 0; i < CACHE_BLOCK_OPS; i++) {
+    // write zero to block_addr
+    rtl_sm(s, rz, &block_addr, 0, CACHE_OP_SPLIT_SIZE, MMU_TRANSLATE);
+    block_addr += CACHE_OP_SPLIT_SIZE;
+  }
+}
+
+void cbo_inval_mmu(Decode *s){
+  rtlreg_t* addr_p = dsrc1;
+
+  translate_and_check(*addr_p);
+
+  // do nothing
+  IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
+}
+
+void cbo_flush_mmu(Decode *s){
+  rtlreg_t* addr_p = dsrc1;
+
+  translate_and_check(*addr_p);
+
+  // do nothing
+  IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
+}
+
+void cbo_clean_mmu(Decode *s){
+  rtlreg_t* addr_p = dsrc1;
+
+  translate_and_check(*addr_p);
+
+  // do nothing
+  IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
+}

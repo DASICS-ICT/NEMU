@@ -20,6 +20,7 @@
 #include <difftest.h>
 #include "../local-include/intr.h"
 #include "../local-include/csr.h"
+#include "../local-include/trigger.h"
 #include <generated/autoconf.h>
 #include <stdlib.h>
 
@@ -38,16 +39,13 @@ void ramcmp() {
 // csr_prepare() & csr_writeback() are used to maintain
 // a compact mirror of critical CSRs
 // For processor difftest only
-#ifdef CONFIG_RVH
-#define MIDELEG_FORCED_MASK ((1 << 12) | (1 << 10) | (1 << 6) | (1 << 2))
-#endif //CONFIG_RVH
 
 void csr_prepare() {
-  cpu.mstatus = gen_status_sd(mstatus->val) | mstatus->val;
+  cpu.mstatus = mstatus_read();
   cpu.mcause  = mcause->val;
   cpu.mepc    = mepc->val;
 
-  cpu.sstatus = gen_status_sd(mstatus->val) | (mstatus->val & SSTATUS_RMASK); // sstatus
+  cpu.sstatus = sstatus_read(false, true);
   cpu.scause  = scause->val;
   cpu.sepc    = sepc->val;
 
@@ -129,13 +127,13 @@ void csr_prepare() {
   cpu.mtval2  = mtval2->val;
   cpu.mtinst  = mtinst->val;
   cpu.hstatus = hstatus->val;
-  cpu.hideleg = hideleg->val;
+  cpu.hideleg = get_hideleg();
   cpu.hedeleg = hedeleg->val;
   cpu.hcounteren = hcounteren->val;
   cpu.htval   = htval->val;
   cpu.htinst  = htinst->val;
   cpu.hgatp   = hgatp->val;
-  cpu.vsstatus= gen_status_sd(vsstatus->val) | vsstatus->val;
+  cpu.vsstatus= sstatus_read(true, false);
   cpu.vstvec  = vstvec->val;
   cpu.vsepc   = vsepc->val;
   cpu.vscause = vscause->val;
@@ -145,7 +143,7 @@ void csr_prepare() {
 #endif
 #ifdef CONFIG_RV_SDTRIG
   cpu.tselect  = tselect->val;
-  cpu.tdata1   = tdata1->val;
+  cpu.tdata1   = get_tdata1(cpu.TM);
   cpu.tinfo    = tinfo->val;
 #endif // CONFIG_RV_SDTRIG
 #ifndef CONFIG_FPU_NONE
@@ -261,7 +259,7 @@ void csr_writeback() {
 #endif
 #ifdef CONFIG_RV_SDTRIG
   tselect->val  = cpu.tselect;
-  tdata1->val   = cpu.tdata1;
+  cpu.TM->triggers[tselect->val].tdata1.val = cpu.tdata1; // update alias tdata1 to trigger module
   tinfo->val    = cpu.tinfo;
 #endif // CONFIG_RV_SDTRIG
 #ifndef CONFIG_FPU_NONE
@@ -388,7 +386,15 @@ void isa_difftest_raise_intr(word_t NO, uint64_t restore_count) {
 void isa_difftest_raise_intr(word_t NO) {
 #endif // CONFIG_LIGHTQS
   //ramcmp();
+#ifdef CONFIG_TDATA1_ICOUNT
+  trig_action_t icount_action = check_triggers_icount(cpu.TM);
+  trigger_handler(TRIG_TYPE_ICOUNT, icount_action, 0);
+#endif // CONFIG_TDATA1_ICOUNT
+  IFDEF(CONFIG_TDATA1_ITRIGGER, trig_action_t itrigger_action = check_triggers_itrigger(cpu.TM, NO));
+
   cpu.pc = raise_intr(NO, cpu.pc);
+
+  IFDEF(CONFIG_TDATA1_ITRIGGER, trigger_handler(TRIG_TYPE_ITRIG, itrigger_action, 0));
 
 #ifdef CONFIG_LIGHTQS
   // after processing, take another snapshot
@@ -445,13 +451,6 @@ void isa_difftest_guided_exec(void * guide) {
 #endif // CONFIG_LIGHTQS
 }
 #endif
-
-#ifdef CONFIG_BR_LOG
-extern struct br_info br_log[];
-void * isa_difftest_query_br_log() {
-  return (void *)br_log;
-}
-#endif // CONFIG_BR_LOG
 
 #ifdef CONFIG_QUERY_REF
 void isa_difftest_query_ref(void *result_buffer, uint64_t type) {
@@ -531,9 +530,41 @@ void isa_update_mip(unsigned lcofip) {
 
 void isa_update_mhpmcounter_overflow(uint64_t mhpmeventOverflowVec) {
 #ifdef CONFIG_RV_SSCOFPMF
+  scountovf_t* scountovf = (scountovf_t*)&csr_array[CSR_SCOUNTOVF];
+  scountovf->ofvec = mhpmeventOverflowVec;
   for (int i = 0; i < 29; i++) {
     mhpmevent3_t* current_hpm = (mhpmevent3_t*)&csr_array[CSR_MHPMEVENT_BASE + i];
     current_hpm->of = (mhpmeventOverflowVec >> i) & 0x1;
   }
 #endif
+}
+
+#ifdef CONFIG_RV_IMSIC
+void isa_update_external_interrupt_select() {
+  if (cpu.non_reg_interrupt_pending.from_aia_meip || cpu.non_reg_interrupt_pending.from_aia_seip) {
+    cpu.external_interrupt_select = true;
+  } else {
+    cpu.external_interrupt_select = false;
+  }
+}
+
+void isa_update_mtopi() {
+  update_mtopi();
+}
+
+void isa_update_stopi() {
+  update_stopi();
+}
+
+void isa_update_vstopi() {
+  update_vstopi();
+}
+
+void isa_update_hgeip() {
+  hgeip->val = cpu.fromaia.hgeip;
+}
+#endif
+
+void isa_sync_custom_mflushpwr(bool l2FlushDone) {
+  mflushpwr->l2flushed = l2FlushDone;
 }

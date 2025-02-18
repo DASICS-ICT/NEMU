@@ -138,6 +138,22 @@ config DEBUG
     Enable debug features, which include instruction tracing and watchpoint.
     Add -l <logfile path> to enable instruction tracing and log dump.
 
+config SIMPLE_LOG
+  bool "Make log output simpler"
+  default n
+  help
+    Make the log output simpler, without color, file path and line number.
+
+config SHARE_OUTPUT_LOG_TO_FILE
+  bool "Output log to file"
+  depends on SHARE
+  default n
+  help
+    If y, NEMU will output log to files named "nemu-hart-*.log".
+
+    Note: This option is only effective in SHARE mode. For standalone mode, 
+    use the corresponding command option.
+
 config DIFFTEST
   depends on !SHARE
   bool "Enable differential testing"
@@ -189,10 +205,6 @@ config DIFFTEST_REF_NAME
   default "nemu-interpreter" if DIFFTEST_REF_NEMU
   default "none"
 
-config DETERMINISTIC
-  bool "Make the behavior of NEMU deterministic"
-  default n
-
 config IQUEUE
   bool "Record the last instrucitons executed"
   default n
@@ -225,6 +237,27 @@ config TRACE_BB
 config SIMPOINT_LOG
   bool "Enable Log for simpoint profiling"
   default n
+
+config BR_LOG
+  bool "Enable branch log"
+  default n
+  help
+    Branch Log (br_log) is mainly used for lightssss (LightQS) to run ahead of
+    DUT. But it could also used for debugging.
+
+config BR_LOG_SIZE
+  int "The size of branch log"
+  depends on BR_LOG
+  default 50000000
+  help
+    When br_log is overflow, it will overwrite from beginning.
+
+config BR_LOG_OUTPUT
+  bool "Enable branch log output"
+  default n
+  help
+    Enable br_log output when NEMU exits. As a reference, You could use
+    br_log_dump() to dump br_log whenever you want.
 
 endmenu
 
@@ -338,6 +371,23 @@ config TIMER_CLOCK_GETTIME
   bool "clock_gettime"
 endchoice
 
+config DETERMINISTIC
+  bool "Make the behavior of NEMU deterministic"
+  default y
+  help
+    If enabled, NEMU's execution will be fully deterministic, ensuring that
+    running same workload multiple times produces identical instruction trace
+    and results.
+
+    If enabled, the update of timer and devices will no longer depend on host
+    alarm. Also, the value of timer (RTC) will depend on instruction counting,
+    rather than host real time.
+
+config DISABLE_HOST_ALARM
+  bool
+  default y if SHARE || DETERMINISTIC
+  default n
+
 config MEMORY_REGION_ANALYSIS
   bool "Enable Program memory segment analysis"
   default n
@@ -374,15 +424,40 @@ config BB_POOL_SIZE
   int "Number of entries in basic block metadata pool"
   default 1024
 
-if !DEBUG && !SHARE
-config DISABLE_INSTR_CNT
-  bool "Disable instruction counting (single step is also disabled)"
-  default y
-endif
 endif
 
+choice
+  prompt "Instruction counting accuracy"
+  default INSTR_CNT_BY_BB if PERF_OPT
+  default INSTR_CNT_BY_INSTR_NORMAL if !PERF_OPT
+
+config INSTR_CNT_DISABLED
+  bool "Disabled"
+  depends on !DEBUG && !SHARE
+
+config INSTR_CNT_BY_BB
+  bool "By Basic Block (BB)"
+  depends on PERF_OPT
+
+config INSTR_CNT_BY_INSTR_PERF_OPT
+  bool "By Instruction"
+  depends on PERF_OPT
+  select INSTR_CNT_BY_INSTR
+
+config INSTR_CNT_BY_INSTR_NORMAL
+  bool "By Instruction"
+  depends on !PERF_OPT
+  select INSTR_CNT_BY_INSTR
+
+endchoice
+
+config INSTR_CNT_BY_INSTR
+  bool
+  default n
+
 config ENABLE_INSTR_CNT
-  bool "Enable instruction counting"
-  default n if DISABLE_INSTR_CNT
-  default y
+  bool
+  default y if INSTR_CNT_BY_INSTR || INSTR_CNT_BY_BB
+  default n
+
 endmenu

@@ -63,6 +63,9 @@ static inline bool in_pmem(paddr_t addr) {
 word_t paddr_read(paddr_t addr, int len, int type, int trap_type, int mode, vaddr_t vaddr);
 void paddr_write(paddr_t addr, int len, word_t data, int mode, vaddr_t vaddr);
 bool check_paddr(paddr_t addr, int len, int type, int trap_type, int mode, vaddr_t vaddr);
+#ifdef CONFIG_RV_MBMC
+word_t bitmap_read(paddr_t addr, int type, int mode);
+#endif
 uint8_t *get_pmem();
 
 #if CONFIG_ENABLE_MEM_DEDUP || CONFIG_USE_MMAP
@@ -77,6 +80,17 @@ void set_pmem(bool pass_pmem_from_dut, uint8_t *_pmem);
 #ifdef CONFIG_USE_SPARSEMM
 void * get_sparsemm();
 #endif
+
+#ifdef CONFIG_STORE_LOG
+typedef struct {
+#ifdef CONFIG_LIGHTQS
+  uint64_t inst_cnt;
+#endif // CONFIG_LIGHTQS
+  paddr_t addr;
+  word_t orig_data;
+  // new value and write length makes no sense for restore
+} store_log_t;
+#endif // CONFIG_STORE_LOG
 
 #ifdef CONFIG_DIFFTEST_STORE_COMMIT
 
@@ -101,6 +115,8 @@ void store_commit_queue_push(uint64_t addr, uint64_t data, int len, int cross_pa
  */
 store_commit_t store_commit_queue_pop(int *flag);
 int check_store_commit(uint64_t *addr, uint64_t *data, uint8_t *mask);
+
+store_commit_t get_store_commit_info();
 #endif
 
 //#define CONFIG_MEMORY_REGION_ANALYSIS

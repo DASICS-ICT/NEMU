@@ -32,18 +32,6 @@ CONF   := $(KCONFIG_PATH)/build/conf
 MCONF  := $(KCONFIG_PATH)/build/mconf
 FIXDEP := $(FIXDEP_PATH)/build/fixdep
 
-LIB_CPT_PATH = resource/gcpt_restore
-CPT_BIN = $(LIB_CPT_PATH)/build/gcpt.bin
-CPT_LAYOUT_HEADER = $(LIB_CPT_PATH)/src/restore_rom_addr.h
-
-CPT_CROSS_COMPILE ?= riscv64-unknown-linux-gnu-
-
-$(CPT_LAYOUT_HEADER):
-	$(shell git clone https://github.com/OpenXiangShan/LibCheckpointAlpha.git $(LIB_CPT_PATH))
-
-$(CPT_BIN): $(CPT_LAYOUT_HEADER)
-	$(Q)$(MAKE) $(silent) -C $(LIB_CPT_PATH) CROSS_COMPILE=$(CPT_CROSS_COMPILE)
-
 $(CONF):
 	$(Q)$(MAKE) $(silent) -C $(KCONFIG_PATH) NAME=conf
 
@@ -60,7 +48,7 @@ menuconfig: $(MCONF) $(CONF) $(FIXDEP)
 savedefconfig: $(CONF)
 	$(Q)$< $(silent) --$@=configs/defconfig $(Kconfig)
 
-%defconfig: $(CONF) $(FIXDEP) $(CPT_LAYOUT_HEADER) $(CPT_BIN)
+%defconfig: $(CONF) $(FIXDEP)
 	$(Q)$< $(silent) --defconfig=configs/$@ $(Kconfig)
 	$(Q)$< $(silent) --syncconfig $(Kconfig)
 

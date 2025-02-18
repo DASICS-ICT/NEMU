@@ -19,21 +19,32 @@
 #include <rtl/rtl.h>
 #include "../local-include/trigger.h"
 #include "../local-include/intr.h"
-#include "../local-include/trapinfo.h"
 #include "cpu/difftest.h"
 __attribute__((cold))
 def_rtl(amo_slow_path, rtlreg_t *dest, const rtlreg_t *src1, const rtlreg_t *src2) {
   uint32_t funct5 = s->isa.instr.r.funct7 >> 2;
+  int rd = s->isa.instr.r.rd;
+  int rs2 = s->isa.instr.r.rs2;
   int width = s->isa.instr.r.funct3 & 1 ? 8 : 4;
+  width = BITS(s->isa.instr.r.funct3, 2, 2) == 0 ? width : 16;
 
-  if (funct5 == 0b00010) { // lr
-    IFDEF(CONFIG_RV_SDTRIG, trigger_check(cpu.TM->check_timings.br, cpu.TM, TRIG_OP_LOAD, *src1, TRIGGER_NO_VALUE));
-  } else if(funct5 == 0b00011) { // sc
-    IFDEF(CONFIG_RV_SDTRIG, trigger_check(cpu.TM->check_timings.bw, cpu.TM, TRIG_OP_STORE, *src1, TRIGGER_NO_VALUE));
-  } else{ // amo
-    IFDEF(CONFIG_RV_SDTRIG, trigger_check(cpu.TM->check_timings.br, cpu.TM, TRIG_OP_LOAD, *src1, TRIGGER_NO_VALUE));
-    IFDEF(CONFIG_RV_SDTRIG, trigger_check(cpu.TM->check_timings.bw, cpu.TM, TRIG_OP_STORE, *src1, TRIGGER_NO_VALUE));
+  if (funct5 == 0b00101) { // amocas
+    if (width == 16 && ((rd % 2 == 1) || (rs2 % 2 == 1))) { // amocas.q 128-bit
+      longjmp_exception(EX_II);
+    }
   }
+
+#ifdef CONFIG_TDATA1_MCONTROL6
+  trig_action_t action = TRIG_ACTION_NONE;
+  if (funct5 == 0b00010) { // lr
+    action = check_triggers_mcontrol6(cpu.TM, TRIG_OP_LOAD, *src1, TRIGGER_NO_VALUE); trigger_handler(TRIG_TYPE_MCONTROL6, action, *src1);
+  } else if(funct5 == 0b00011) { // sc
+    action = check_triggers_mcontrol6(cpu.TM, TRIG_OP_STORE, *src1, TRIGGER_NO_VALUE); trigger_handler(TRIG_TYPE_MCONTROL6, action, *src1);
+  } else { // amo
+    action = check_triggers_mcontrol6(cpu.TM, TRIG_OP_LOAD, *src1, TRIGGER_NO_VALUE); trigger_handler(TRIG_TYPE_MCONTROL6, action, *src1);
+    action = check_triggers_mcontrol6(cpu.TM, TRIG_OP_STORE, *src1, TRIGGER_NO_VALUE); trigger_handler(TRIG_TYPE_MCONTROL6, action, *src1);
+  }
+#endif // CONFIG_TDATA1_MCONTROL6
 
   // AMO does not support misalign operation
   // So check misalign before real memory access
@@ -55,7 +66,7 @@ def_rtl(amo_slow_path, rtlreg_t *dest, const rtlreg_t *src1, const rtlreg_t *src
     cpu.amo = true;
 #endif
     // should check overlapping instead of equality
-    int success = (cpu.lr_addr == *src1) && cpu.lr_valid;
+    int success = ((cpu.lr_addr ^ *src1) >> CONFIG_RESERVATION_SET_WIDTH == 0) && cpu.lr_valid;
     Logti("cpu sc addr=%lx scr1=%lx vaild=%ld success=%d", cpu.lr_addr,*src1, cpu.lr_valid,success);
     cpu.lr_valid = 0;
     if (success) {
@@ -75,7 +86,7 @@ def_rtl(amo_slow_path, rtlreg_t *dest, const rtlreg_t *src1, const rtlreg_t *src
       // Even if scInvalid, SAF (if raised) also needs to be reported
       // Check address space range and pmp
       if (!in_pmem(paddr) || !isa_pmp_check_permission(paddr, width, MEM_TYPE_WRITE, cpu.mode)) {
-        trapInfo.tval = *src1;
+        cpu.trapInfo.tval = *src1;
         longjmp_exception(EX_SAF);
       }
     }
@@ -85,6 +96,57 @@ def_rtl(amo_slow_path, rtlreg_t *dest, const rtlreg_t *src1, const rtlreg_t *src
 #endif
     return;
   }
+
+#ifdef CONFIG_RV_ZACAS
+  if (funct5 == 0b00101) { // amocas
+    cpu.amo = true;
+    // check store behavior before actually load or store
+    uint64_t paddr = *dsrc1;
+    if (isa_mmu_check(*dsrc1, width, MEM_TYPE_WRITE) == MMU_TRANSLATE) {
+      paddr = isa_mmu_translate(*dsrc1, width, MEM_TYPE_WRITE);
+    }
+    if (!in_pmem(paddr) || !isa_pmp_check_permission(paddr, width, MEM_TYPE_WRITE, cpu.mode)) {
+      cpu.trapInfo.tval = *src1;
+      longjmp_exception(EX_SAF);
+    }
+    switch (width) {
+      case 4:
+        rtl_lms(s, s0, src1, 0, 4, MMU_DYNAMIC);
+        if ((int32_t)*dest == (int32_t)*s0) {
+          *s1 = *src2;
+          rtl_sm(s, s1, src1, 0, 4, MMU_DYNAMIC);
+        }
+        rtl_mv(s, dest, s0);
+        break;
+      case 8:
+        rtl_lms(s, s0, src1, 0, 8, MMU_DYNAMIC);
+        if ((int64_t)*dest == (int64_t)*s0) {
+          *s1 = *src2;
+          rtl_sm(s, s1, src1, 0, 8, MMU_DYNAMIC);
+        }
+        rtl_mv(s, dest, s0);
+        break;
+      case 16:
+        rtl_lms(s, s0, src1, 0, 8, MMU_DYNAMIC);
+        rtl_lms(s, s1, src1, 8, 8, MMU_DYNAMIC);
+        *t0 = rd == 0 ? 0 : *(dest + 1);
+        if ((int64_t)*dest == (int64_t)*s0 && (int64_t)*t0 == (int64_t)*s1) {
+          *s2 = *src2;
+          *t0 = rs2 == 0 ? 0 : *(src2 + 1);
+          rtl_sm(s, s2, src1, 0, 8, MMU_DYNAMIC);
+          rtl_sm(s, t0, src1, 8, 8, MMU_DYNAMIC);
+        }
+        if (rd) {
+          rtl_mv(s, dest, s0);
+          rtl_mv(s, dest + 1, s1);
+        }
+        break;
+      default : assert(0);
+    }
+    cpu.amo = false;
+    return ;
+  }
+#endif // CONFIG_RV_ZACAS
 
   cpu.amo = true;
   rtl_lms(s, s0, src1, 0, width, MMU_DYNAMIC);

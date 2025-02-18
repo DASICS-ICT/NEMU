@@ -19,23 +19,16 @@
 #include <memory/sparseram.h>
 #include "local-include/csr.h"
 
-#ifndef CONFIG_SHARE
-static const uint32_t img [] = {
-  0x800002b7,  // lui t0,0x80000
-  0x0002a023,  // sw  zero,0(t0)
-  0x0002a503,  // lw  a0,0(t0)
-  0x0000006b,  // nemu_trap
-};
-#endif
-
 void init_csr();
 #ifdef CONFIG_RV_SDTRIG
 void init_trigger();
 #endif // CONFIG_RV_SDTRIG
-
-#if !defined(CONFIG_SHARE) || defined(CONFIG_LIGHTQS)
-void init_clint();
+#ifdef CONFIG_RV_IMSIC
+void init_iprio();
 #endif
+void init_custom_csr();
+
+void init_riscv_timer();
 void init_device();
 
 #define CSR_ZERO_INIT(name, addr) name->val = 0;
@@ -50,6 +43,8 @@ void init_isa() {
   }
   init_csr();
 
+  init_custom_csr();
+
 #ifndef CONFIG_RESET_FROM_MMIO
   cpu.pc = RESET_VECTOR;
 #else
@@ -60,6 +55,8 @@ void init_isa() {
   cpu.gpr[0]._64 = 0;
 
   cpu.mode = MODE_M;
+  clear_trapinfo();
+  IFDEF(CONFIG_RV_SMDBLTRP, cpu.critical_error = 0);
   // For RV64 systems, the SXL and UXL fields are WARL fields that
   // control the value of XLEN for S-mode and U-mode, respectively.
   // For RV64 systems, if S-mode is not supported, then SXL is hardwired to zero.
@@ -200,6 +197,10 @@ void init_isa() {
   init_trigger();
 #endif // CONFIG_RV_SDTRIG
 
+#ifdef CONFIG_RV_IMSIC
+  init_iprio();
+#endif
+
 #define MSTATEEN0_RESET  0xdc00000000000001ULL
 #define HSTATEEN0_RESET  0xdc00000000000001ULL
 #define SSTATEEN0_RESET  0x0000000000000001ULL
@@ -209,21 +210,7 @@ void init_isa() {
   sstateen0->val = SSTATEEN0_RESET;
 #endif // CONFIG_RV_SMSTATEEN
 
-#ifndef CONFIG_SHARE
-  extern char *cpt_file;
-  extern bool checkpoint_restoring;
-  if (cpt_file == NULL && !checkpoint_restoring) {
-    #ifdef CONFIG_USE_SPARSEMM
-    sparse_mem_write(get_sparsemm(), RESET_VECTOR, sizeof(img), img);
-    #else
-    memcpy(guest_to_host(RESET_VECTOR), img, sizeof(img));
-    #endif
-  }
-#endif
-
-  #if defined(CONFIG_LIGHTQS) || !defined(CONFIG_SHARE)
-  init_clint();
-  #endif
+  init_riscv_timer();
 
   if (!is_second_call) {
     IFDEF(CONFIG_SHARE, init_device());

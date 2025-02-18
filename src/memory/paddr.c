@@ -25,9 +25,6 @@
 #include <cpu/cpu.h>
 #include "../local-include/csr.h"
 #include "../local-include/intr.h"
-#include "../local-include/trapinfo.h"
-
-bool is_in_mmio(paddr_t addr);
 
 unsigned long MEMORY_SIZE = CONFIG_MSIZE;
 unsigned int PMEM_HARTID = 0;
@@ -55,23 +52,6 @@ static uint8_t pmem[CONFIG_MSIZE] PG_ALIGN = {};
 #ifdef CONFIG_USE_SPARSEMM
 void* sparse_mm = NULL;
 #endif
-
-#ifdef CONFIG_STORE_LOG
-struct store_log {
-#ifdef CONFIG_LIGHTQS
-  uint64_t inst_cnt;
-#endif // CONFIG_LIGHTQS
-  paddr_t addr;
-  word_t orig_data;
-  // new value and write length makes no sense for restore
-} store_log_buf[CONFIG_STORE_LOG_SIZE];
-
-uint64_t store_log_ptr = 0;
-#ifdef CONFIG_LIGHTQS
-struct store_log spec_store_log_buf[CONFIG_STORE_LOG_SIZE];
-uint64_t spec_store_log_ptr = CONFIG_SPEC_GAP;
-#endif // CONFIG_LIGHTQS
-#endif // CONFIG_STORE_LOG
 
 #define HOST_PMEM_OFFSET (uint8_t *)(pmem - CONFIG_MBASE)
 
@@ -134,7 +114,7 @@ static inline void pmem_write(paddr_t addr, int len, word_t data, int cross_page
 }
 
 static inline void raise_access_fault(int cause, vaddr_t vaddr) {
-  trapInfo.tval = vaddr;
+  cpu.trapInfo.tval = vaddr;
   // cpu.amo flag must be reset to false before longjmp_exception,
   // including longjmp_exception(access fault), longjmp_exception(page fault)
   cpu.amo = false;
@@ -157,7 +137,7 @@ static inline void isa_mmio_misalign_data_addr_check(paddr_t paddr, vaddr_t vadd
     Logm("addr misaligned happened: paddr:" FMT_PADDR " vaddr:" FMT_WORD " len:%d type:%d pc:%lx", paddr, vaddr, len, type, cpu.pc);
     if (ISDEF(CONFIG_MMIO_AC_SOFT)) {
       int ex = cpu.amo || type == MEM_TYPE_WRITE ? EX_SAM : EX_LAM;
-      trapInfo.tval = vaddr;
+      cpu.trapInfo.tval = vaddr;
       longjmp_exception(ex);
     }
   }
@@ -225,14 +205,24 @@ bool check_paddr(paddr_t addr, int len, int type, int trap_type, int mode, vaddr
       raise_read_access_fault(trap_type, vaddr);
     }
     return false;
-  } else {
-    return true;
   }
+  #ifdef CONFIG_RV_MBMC
+  if (!isa_bmc_check_permission(addr, len, type, mode)){
+    if (type == MEM_TYPE_WRITE) {
+      raise_access_fault(EX_SAF, vaddr);
+    } else {
+      Log("isa mbmc check failed");
+      raise_read_access_fault(type, vaddr);
+    }
+    return false;
+  }
+  #endif
+  return true;
 }
 
 word_t paddr_read(paddr_t addr, int len, int type, int trap_type, int mode, vaddr_t vaddr) {
 
-  int cross_page_load = (mode & CROSS_PAGE_LD_FLAG) != 0;
+  __attribute__((unused)) int cross_page_load = (mode & CROSS_PAGE_LD_FLAG) != 0;
   mode &= ~CROSS_PAGE_LD_FLAG;
 
   assert(type == MEM_TYPE_READ || type == MEM_TYPE_IFETCH_READ || type == MEM_TYPE_IFETCH || type == MEM_TYPE_WRITE_READ);
@@ -242,9 +232,17 @@ word_t paddr_read(paddr_t addr, int len, int type, int trap_type, int mode, vadd
 #ifndef CONFIG_SHARE
   if (likely(in_pmem(addr))) return pmem_read(addr, len);
   else {
-    // check if the address is misaligned
-    isa_mmio_misalign_data_addr_check(addr, vaddr, len, MEM_TYPE_READ, cross_page_load);
-    if (likely(is_in_mmio(addr))) return mmio_read(addr, len);
+    if (likely(is_in_mmio(addr))) {
+      // check if the address is misaligned
+      isa_mmio_misalign_data_addr_check(addr, vaddr, len, MEM_TYPE_READ, cross_page_load);
+#ifdef CONFIG_ENABLE_CONFIG_MMIO_SPACE
+      if (!mmio_is_real_device(addr)) {
+        raise_read_access_fault(trap_type, vaddr);
+        return 0;
+      }
+#endif // CONFIG_ENABLE_CONFIG_MMIO_SPACE
+      return mmio_read(addr, len);
+    }
     else raise_read_access_fault(trap_type, vaddr);
     return 0;
   }
@@ -258,10 +256,18 @@ word_t paddr_read(paddr_t addr, int len, int type, int trap_type, int mode, vadd
     return rdata;
   }
   else {
-    // check if the address is misaligned
-    isa_mmio_misalign_data_addr_check(addr, vaddr, len, MEM_TYPE_READ, cross_page_load);
 #ifdef CONFIG_HAS_FLASH
-    if (likely(is_in_mmio(addr))) return mmio_read(addr, len);
+    if (likely(is_in_mmio(addr))) {
+      // check if the address is misaligned
+      isa_mmio_misalign_data_addr_check(addr, vaddr, len, MEM_TYPE_READ, cross_page_load);
+#ifdef CONFIG_ENABLE_CONFIG_MMIO_SPACE
+      if (!mmio_is_real_device(addr)) {
+        raise_read_access_fault(trap_type, vaddr);
+        return 0;
+      }
+#endif // CONFIG_ENABLE_CONFIG_MMIO_SPACE
+      return mmio_read(addr, len);
+    }
 #endif
     if(dynamic_config.ignore_illegal_mem_access)
       return 0;
@@ -271,6 +277,12 @@ word_t paddr_read(paddr_t addr, int len, int type, int trap_type, int mode, vadd
   return 0;
 #endif // CONFIG_SHARE
 }
+
+#ifdef CONFIG_RV_MBMC
+word_t bitmap_read(paddr_t addr, int type, int mode) {
+  return pmem_read(addr, 1);
+}
+#endif
 
 #ifdef CONFIG_STORE_LOG
 #ifdef CONFIG_LIGHTQS
@@ -284,15 +296,14 @@ void pmem_record_store(paddr_t addr) {
   addr = (addr >> 3) << 3;
   uint64_t rdata = pmem_read(addr, 8);
   //assert(g_nr_guest_instr >= stable_log_begin);
-  store_log_buf[store_log_ptr].inst_cnt = g_nr_guest_instr;
-  store_log_buf[store_log_ptr].addr = addr;
-  store_log_buf[store_log_ptr].orig_data = rdata;
-  ++store_log_ptr;
+  store_log_t log = {
+    .inst_cnt = g_nr_guest_instr,
+    .addr = addr,
+    .orig_data = rdata
+  };
+  store_log_stack_push(log);
   if (g_nr_guest_instr >= spec_log_begin) {
-    spec_store_log_buf[spec_store_log_ptr].inst_cnt = g_nr_guest_instr;
-    spec_store_log_buf[spec_store_log_ptr].addr = addr;
-    spec_store_log_buf[spec_store_log_ptr].orig_data = rdata;
-    ++spec_store_log_ptr;
+    spec_store_log_stack_push(log);
   }
 }
 
@@ -301,12 +312,14 @@ void pmem_record_store(paddr_t addr) {
 void pmem_record_restore(uint64_t restore_inst_cnt) {
   if (spec_log_begin <= restore_inst_cnt) {
     // use speculative rather than old stable
-    memcpy(store_log_buf, spec_store_log_buf, sizeof(store_log_buf));
-    store_log_ptr = spec_store_log_ptr;
+    spec_store_log_stack_copy();
   }
-  for (int i = store_log_ptr - 1; i >= 0; i--) {
-    if (store_log_buf[i].inst_cnt > restore_inst_cnt) {
-      pmem_write(store_log_buf[i].addr, 8, store_log_buf[i].orig_data, 0);
+  while(!store_log_stack_empty()) {
+    store_log_t log = store_log_stack_top();
+    pmem_write(log.addr, 8, log.orig_data, 0);
+    if (log.inst_cnt > restore_inst_cnt) {
+      pmem_write(log.addr, 8, log.orig_data, 0);
+      store_log_stack_pop();
     } else {
       break;
     }
@@ -318,22 +331,26 @@ void pmem_record_store(paddr_t addr) {
     // align to 8 byte
     addr = (addr >> 3) << 3;
     uint64_t rdata = pmem_read(addr, 8);
-    store_log_buf[store_log_ptr].addr = addr;
-    store_log_buf[store_log_ptr].orig_data = rdata;
-    ++store_log_ptr;
+    store_log_t log = {
+      .addr = addr,
+      .orig_data = rdata
+    };
+    store_log_stack_push(log);
   }
 }
 
 void pmem_record_restore() {
-  for (int i = store_log_ptr - 1; i >= 0; i--) {
-    pmem_write(store_log_buf[i].addr, 8, store_log_buf[i].orig_data, 0);
+  while(!store_log_stack_empty()) {
+    store_log_t log = store_log_stack_top();
+    pmem_write(log.addr, 8, log.orig_data, 0);
+    store_log_stack_pop();
   }
 }
 #endif // CONFIG_LIGHTQS
 
 
 void pmem_record_reset() {
-  store_log_ptr = 0;
+  store_log_stack_reset();
 }
 
 #endif // CONFIG_STORE_LOG
@@ -348,9 +365,17 @@ void paddr_write(paddr_t addr, int len, word_t data, int mode, vaddr_t vaddr) {
 #ifndef CONFIG_SHARE
   if (likely(in_pmem(addr))) pmem_write(addr, len, data, cross_page_store);
   else {
-    // check if the address is misaligned
-    isa_mmio_misalign_data_addr_check(addr, vaddr, len, MEM_TYPE_WRITE, cross_page_store);
-    if (likely(is_in_mmio(addr))) mmio_write(addr, len, data);
+    if (likely(is_in_mmio(addr))) {
+      // check if the address is misaligned
+      isa_mmio_misalign_data_addr_check(addr, vaddr, len, MEM_TYPE_WRITE, cross_page_store);
+#ifdef CONFIG_ENABLE_CONFIG_MMIO_SPACE
+      if (!mmio_is_real_device(addr)) {
+        raise_access_fault(EX_SAF, vaddr);
+        return;
+      }
+#endif // CONFIG_ENABLE_CONFIG_MMIO_SPACE
+      mmio_write(addr, len, data);
+    }
     else raise_access_fault(EX_SAF, vaddr);
   }
 #else
@@ -364,9 +389,17 @@ void paddr_write(paddr_t addr, int len, word_t data, int mode, vaddr_t vaddr) {
     }
     return pmem_write(addr, len, data, cross_page_store);
   } else {
-    // check if the address is misaligned
-    isa_mmio_misalign_data_addr_check(addr, vaddr, len, MEM_TYPE_WRITE, cross_page_store);
-    if (likely(is_in_mmio(addr))) mmio_write(addr, len, data);
+    if (likely(is_in_mmio(addr))) {
+      // check if the address is misaligned
+      isa_mmio_misalign_data_addr_check(addr, vaddr, len, MEM_TYPE_WRITE, cross_page_store);
+#ifdef CONFIG_ENABLE_CONFIG_MMIO_SPACE
+      if (!mmio_is_real_device(addr)) {
+        raise_access_fault(EX_SAF, vaddr);
+        return;
+      }
+#endif // CONFIG_ENABLE_CONFIG_MMIO_SPACE
+      mmio_write(addr, len, data);
+    }
     else {
       if(dynamic_config.ignore_illegal_mem_access)
         return;
@@ -429,7 +462,7 @@ bool analysis_memory_isuse(uint64_t page) {
 #endif
 
 #ifdef CONFIG_DIFFTEST_STORE_COMMIT
-
+#define LIMITING_SHIFT(x) (((uint64_t)(x)) < ((uint64_t)63ULL) ? ((uint64_t)(x)) : ((uint64_t)63ULL))
 void miss_align_store_commit_queue_push(uint64_t addr, uint64_t data, int len) {
   // align with dut
   uint8_t inside_16bytes_bound = ((addr >> 4) & 1ULL) == (((addr + len - 1) >> 4) & 1ULL);
@@ -443,7 +476,7 @@ void miss_align_store_commit_queue_push(uint64_t addr, uint64_t data, int len) {
     if ((addr % 16ULL) > 8) {
       low_addr_st.data = 0;
     } else {
-      low_addr_st.data = (data & st_data_mask) << ((addr % 16ULL) << 3);
+      low_addr_st.data = (data & st_data_mask) << LIMITING_SHIFT((addr % 16ULL) << 3);
     }
     low_addr_st.mask = (st_mask << (addr % 16ULL)) & 0xffULL;
     low_addr_st.pc   = prev_s->pc;
@@ -453,12 +486,12 @@ void miss_align_store_commit_queue_push(uint64_t addr, uint64_t data, int len) {
     // printf("[DEBUG] inside 16 bytes region addr: %lx, data: %lx, mask: %lx\n", low_addr_st->addr, low_addr_st->data, (uint64_t)(low_addr_st->mask));
   } else {
     low_addr_st.addr = addr - (addr % 8ULL);
-    low_addr_st.data = (data & (st_data_mask >> ((addr % len) << 3))) << ((8 - len + (addr % len)) << 3);
+    low_addr_st.data = (data & (st_data_mask >> ((addr % len) << 3))) << LIMITING_SHIFT((8 - len + (addr % len)) << 3);
     low_addr_st.mask = (st_mask >> (addr % len)) << (8 - len + (addr % len));
     low_addr_st.pc   = prev_s->pc;
 
     high_addr_st.addr = addr - (addr % 16ULL) + 16ULL;
-    high_addr_st.data = (data >> ((len - (addr % len)) << 3)) & (st_data_mask >> ((len - (addr % len)) << 3));
+    high_addr_st.data = (data >> LIMITING_SHIFT((len - (addr % len)) << 3)) & (st_data_mask >> LIMITING_SHIFT((len - (addr % len)) << 3));
     high_addr_st.mask = st_mask >> (len - (addr % len));
     high_addr_st.pc   = prev_s->pc;
 
@@ -468,7 +501,6 @@ void miss_align_store_commit_queue_push(uint64_t addr, uint64_t data, int len) {
     // printf("[DEBUG] split low addr store addr: %lx, data: %lx, mask: %lx\n", low_addr_st->addr, low_addr_st->data, (uint64_t)(low_addr_st->mask));
     // printf("[DEBUG] split high addr store addr: %lx, data: %lx, mask: %lx\n", high_addr_st->addr, high_addr_st->data, (uint64_t)(high_addr_st->mask));
   }
-
 }
 
 void store_commit_queue_push(uint64_t addr, uint64_t data, int len, int cross_page_store) {
@@ -538,10 +570,12 @@ store_commit_t store_commit_queue_pop(int *flag) {
     *flag = 0;
     return result;
   }
-  result = store_queue_fornt();
+  result = store_queue_front();
   store_queue_pop();
   return result;
 }
+
+store_commit_t store_commit_data;
 
 int check_store_commit(uint64_t *addr, uint64_t *data, uint8_t *mask) {
   int result = 0;
@@ -550,16 +584,20 @@ int check_store_commit(uint64_t *addr, uint64_t *data, uint8_t *mask) {
     result = 1;
   }
   else {
-    store_commit_t commit = store_queue_fornt();
+    store_commit_data = store_queue_front();
     store_queue_pop();
-    if (*addr != commit.addr || *data != commit.data || *mask != commit.mask) {
-      *addr = commit.addr;
-      *data = commit.data;
-      *mask = commit.mask;
+    if (*addr != store_commit_data.addr || *data != store_commit_data.data || *mask != store_commit_data.mask) {
+      *addr = store_commit_data.addr;
+      *data = store_commit_data.data;
+      *mask = store_commit_data.mask;
       result = 1;
     }
   }
   return result;
+}
+
+store_commit_t get_store_commit_info() {
+  return store_commit_data;
 }
 
 #endif

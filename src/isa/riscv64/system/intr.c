@@ -15,17 +15,21 @@
 ***************************************************************************************/
 
 #include <cpu/difftest.h>
-#include <cpu/cpu.h>
 #include "../local-include/trigger.h"
 #include "../local-include/csr.h"
 #include "../local-include/intr.h"
-#include "../local-include/trapinfo.h"
+#include "../local-include/aia.h"
 
 void update_mmu_state();
 
-trap_info_t trapInfo = {};
 
 #ifdef CONFIG_RVH
+word_t gen_gva(word_t NO, bool is_hls, bool is_mem_access_virtual) {
+  return ((NO == EX_IAM || NO == EX_IAF || NO == EX_BP || NO == EX_IPF) && cpu.v) ||
+         ((NO == EX_LAM || NO == EX_LAF || NO == EX_SAM || NO == EX_SAF || NO == EX_LPF || NO == EX_SPF) && (is_hls || cpu.v || is_mem_access_virtual)) ||
+         (NO == EX_IGPF || NO == EX_LGPF || NO == EX_SGPF);
+}
+
 bool intr_deleg_S(word_t exceptionNO) {
   bool isNMI = MUXDEF(CONFIG_RV_SMRNMI, cpu.hasNMI && (exceptionNO & INTR_BIT), false);
   word_t deleg = (exceptionNO & INTR_BIT ? mideleg->val : medeleg->val);
@@ -35,7 +39,7 @@ bool intr_deleg_S(word_t exceptionNO) {
 bool intr_deleg_VS(word_t exceptionNO){
   bool isNMI = MUXDEF(CONFIG_RV_SMRNMI, cpu.hasNMI && (exceptionNO & INTR_BIT), false);
   bool delegS = intr_deleg_S(exceptionNO);
-  word_t deleg = (exceptionNO & INTR_BIT ? hideleg->val : hedeleg->val);
+  word_t deleg = (exceptionNO & INTR_BIT ? get_hideleg() : hedeleg->val);
   bool delegVS = cpu.v && ((deleg & (1 << (exceptionNO & 0xff))) != 0) && (cpu.mode < MODE_M) && !isNMI;
   return delegS && delegVS;
 }
@@ -55,7 +59,7 @@ bool intr_deleg_S(word_t exceptionNO) {
 #endif
 
 void clear_trapinfo(){
-  memset(&trapInfo, 0, sizeof(trap_info_t));
+  memset(&cpu.trapInfo, 0, sizeof(trap_info_t));
 }
 
 static word_t get_trap_pc(word_t xtvec, word_t xcause) {
@@ -111,7 +115,19 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     case EX_SPF: difftest_skip_dut(1, 2); break;
   }
 #endif
-  MUXDEF(CONFIG_RV_SMRNMI,Assert( mnstatus->nmie, "critical error: trap when nmie close"), );
+#ifdef CONFIG_RV_SMRNMI
+  if (!mnstatus->nmie){
+#ifdef CONFIG_SHARE
+    IFDEF(CONFIG_RV_SMDBLTRP, cpu.critical_error = true);// this will compare in difftest
+#else
+    printf("\33[1;31mHIT CRITICAL ERROR\33[0m: trap when mnstatus.nmie close, please check if software cause a double trap.\n");
+    nemu_state.state = NEMU_END;
+    nemu_state.halt_pc = epc;
+    nemu_state.halt_ret = 0;
+#endif // CONFIG_SHARE
+    return 0;
+  }
+#endif // CONFIG_RV_SMRNMI
   bool isNMI = MUXDEF(CONFIG_RV_SMRNMI, cpu.hasNMI && (NO & INTR_BIT), false);
   bool delegS = intr_deleg_S(NO);
   bool delegM = !delegS && !isNMI;
@@ -126,9 +142,25 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
   bool delegVS = intr_deleg_VS(NO);
   delegM = !delegS && !delegVS && !isNMI;
   delegS &= !delegVS;
+#ifdef CONFIG_RV_IMSIC
+  if (NO & INTR_BIT) {
+    delegS  =  no_mtopi() && !no_stopi() && !isNMI;
+    delegVS =  no_mtopi() &&  no_stopi() && !no_vstopi() && !isNMI;
+    delegM = !delegS && !delegVS && !isNMI;
+  }
+#endif
   bool vs_EX_DT = MUXDEF(CONFIG_RV_SSDBLTRP, delegVS && vsstatus->sdt, false);
   m_EX_DT = MUXDEF(CONFIG_RV_SMDBLTRP, delegM && mstatus->mdt, false);
   if ((delegVS && !vs_EX_DT) || (virtualInterruptIsHvictlInject && !isNMI)){
+#ifdef CONFIG_RV_IMSIC
+    int vs_guest_no = NO & 0xff;
+    bool vs_host_no = (vs_guest_no == IRQ_VSSIP) || (vs_guest_no == IRQ_VSTIP) || (vs_guest_no == IRQ_VSEIP);
+    if ((NO & INTR_BIT) && vs_host_no) {
+      vscause->val = ((NO & (~INTR_BIT)) - 1) | INTR_BIT;
+    } else {
+      vscause->val = NO;
+    }
+#else
     if (virtualInterruptIsHvictlInject) {
       vscause->val = NO | INTR_BIT;
 #ifdef CONFIG_RV_IMSIC
@@ -137,12 +169,13 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     } else {
       vscause->val = NO & INTR_BIT ? ((NO & (~INTR_BIT)) - 1) | INTR_BIT : NO;
     }
+#endif // CONFIG_RV_IMSIC
     vsepc->val = epc;
     vsstatus->spp = cpu.mode;
     vsstatus->spie = vsstatus->sie;
     vsstatus->sie = 0;
     vsstatus->sdt = MUXDEF(CONFIG_RV_SSDBLTRP, henvcfg->dte && menvcfg->dte, 0);
-    vstval->val = trapInfo.tval;
+    vstval->val = cpu.trapInfo.tval;
     switch (NO) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
@@ -153,7 +186,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
         switch (trigger_action) {
           case TRIG_ACTION_NONE: vstval->val = epc; break;
           case TRIG_ACTION_BKPT_EXCPT:
-            vstval->val = triggered_addr;
+            vstval->val = triggered_tval;
             trigger_action = TRIG_ACTION_NONE;
             break;
           default: panic("Unsupported trigger action %d", trigger_action);  break;
@@ -172,15 +205,12 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     trap_pc = get_trap_pc(vstvec->val, vscause->val);
   }
   else if(delegS && !s_EX_DT){
-    int v = (mstatus->mprv)? mstatus->mpv : cpu.v;
-    hstatus->gva = (NO == EX_IGPF || NO == EX_LGPF || NO == EX_SGPF ||
-                    ((v || hld_st_temp) && ((0 <= NO && NO <= 7 && NO != 2) || NO == EX_IPF || NO == EX_LPF || NO == EX_SPF)));
+    hstatus->gva = gen_gva(NO, hld_st_temp, false);
     hstatus->spv = cpu.v;
     if(cpu.v){
       hstatus->spvp = cpu.mode;
     }
     cpu.v = 0;
-    set_sys_state_flag(SYS_STATE_FLUSH_TCACHE);
 #else
   bool vs_EX_DT = false;
   if (delegS && !s_EX_DT) {
@@ -191,9 +221,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     mstatus->spie = mstatus->sie;
     mstatus->sie = 0;
     mstatus->sdt = MUXDEF(CONFIG_RV_SSDBLTRP, menvcfg->dte, 0);
-    IFDEF(CONFIG_RVH, htval->val = trapInfo.tval2);
-    IFDEF(CONFIG_RVH, htinst->val = trapInfo.tinst);
-    stval->val = trapInfo.tval;
+    IFDEF(CONFIG_RVH, htval->val = cpu.trapInfo.tval2);
+    IFDEF(CONFIG_RVH, htinst->val = cpu.trapInfo.tinst);
+    stval->val = cpu.trapInfo.tval;
     switch (NO) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
@@ -216,7 +246,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
         switch (trigger_action) {
           case TRIG_ACTION_NONE: stval->val = epc; break;
           case TRIG_ACTION_BKPT_EXCPT:
-            stval->val = triggered_addr;
+            stval->val = triggered_tval;
             trigger_action = TRIG_ACTION_NONE;
             break;
           default: panic("Unsupported trigger action %d", trigger_action);  break;
@@ -239,20 +269,19 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     trap_pc = get_trap_pc(stvec->val, scause->val);
   } else if((delegM || vs_EX_DT || s_EX_DT) && !m_EX_DT){
 #ifdef CONFIG_RVH
-    int v = (mstatus->mprv)? mstatus->mpv : cpu.v;
-    mstatus->gva = (NO == EX_IGPF || NO == EX_LGPF || NO == EX_SGPF ||
-                    ((v || hld_st_temp) && ((0 <= NO && NO <= 7 && NO != 2) || NO == EX_IPF || NO == EX_LPF || NO == EX_SPF)));
+    bool is_mem_access_virtual = mstatus->mprv && mstatus->mpv && (mstatus->mpp != MODE_M);
+    mstatus->gva = gen_gva(NO, hld_st_temp, is_mem_access_virtual);
     mstatus->mpv = cpu.v;
-    cpu.v = 0;set_sys_state_flag(SYS_STATE_FLUSH_TCACHE);
+    cpu.v = 0;
 #endif
     mcause->val = NO;
     mepc->val = epc;
     mstatus->mpp = cpu.mode;
     mstatus->mpie = mstatus->mie;
     mstatus->mie = 0;
-    mtval->val = trapInfo.tval;
-    IFDEF(CONFIG_RVH, mtval2->val = trapInfo.tval2);
-    IFDEF(CONFIG_RVH, mtinst->val = trapInfo.tinst);
+    mtval->val = cpu.trapInfo.tval;
+    IFDEF(CONFIG_RVH, mtval2->val = cpu.trapInfo.tval2);
+    IFDEF(CONFIG_RVH, mtinst->val = cpu.trapInfo.tinst);
     switch (NO) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
@@ -275,7 +304,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
         switch (trigger_action) {
           case TRIG_ACTION_NONE: mtval->val = epc; break;
           case TRIG_ACTION_BKPT_EXCPT:
-            mtval->val = triggered_addr;
+            mtval->val = triggered_tval;
             trigger_action = TRIG_ACTION_NONE;
             break;
           default: panic("Unsupported trigger action %d", trigger_action);  break;
@@ -327,7 +356,8 @@ word_t isa_query_intr() {
     IRQ_MEIP, IRQ_MSIP, IRQ_MTIP,
     IRQ_SEIP, IRQ_SSIP, IRQ_STIP,
     IRQ_UEIP, IRQ_USIP, IRQ_UTIP,
-    IRQ_VSEIP, IRQ_VSSIP, IRQ_VSTIP, IRQ_SGEI,
+    IRQ_SGEI,
+    IRQ_VSEIP, IRQ_VSSIP, IRQ_VSTIP,
 #ifdef CONFIG_RV_SSCOFPMF
     IRQ_LCOFI
 #endif
@@ -352,7 +382,7 @@ word_t isa_query_intr() {
     if (intr_vec & (1 << irq)) {
       bool deleg = (mideleg->val & (1 << irq)) != 0;
 #ifdef CONFIG_RVH
-      bool hdeleg = (hideleg->val & (1 << irq)) != 0;
+      bool hdeleg = (get_hideleg() & (1 << irq)) != 0;
       bool global_enable = (hdeleg & deleg)? (cpu.v && cpu.mode == MODE_S && vsstatus->sie) || (cpu.v && cpu.mode < MODE_S):
                            (deleg)? ((cpu.mode == MODE_S) && mstatus->sie) || (cpu.mode < MODE_S) || cpu.v:
                            ((cpu.mode == MODE_M) && mstatus->mie) || (cpu.mode < MODE_M);

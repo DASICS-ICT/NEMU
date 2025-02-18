@@ -21,6 +21,7 @@
 #include <memory/sparseram.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <device/flash.h>
 #include <sys/mman.h>
 #ifdef CONFIG_MEM_COMPRESS
 #include <unistd.h>
@@ -31,18 +32,19 @@
 #ifndef CONFIG_MODE_USER
 
 #ifdef CONFIG_MEM_COMPRESS
-long load_gz_img(const char *filename) {
+long load_gz_img(const char *filename, uint8_t* load_start, size_t img_size) {
   gzFile compressed_mem = gzopen(filename, "rb");
   Assert(compressed_mem, "Can not open '%s'", filename);
 
   const uint32_t chunk_size = 16384;
   uint8_t *temp_page = (uint8_t *)calloc(chunk_size, sizeof(long));
-  uint8_t *pmem_start = (uint8_t *)guest_to_host(RESET_VECTOR);
+  uint8_t *pmem_start = (uint8_t *)load_start;
   uint8_t *pmem_current;
 
   // load file byte by byte to pmem
+  size_t load_size = img_size == 0 ? MEMORY_SIZE : img_size;
   uint64_t curr_size = 0;
-  while (curr_size < MEMORY_SIZE) {
+  while (curr_size < load_size) {
     uint32_t bytes_read = gzread(compressed_mem, temp_page, chunk_size);
     if (bytes_read == 0) {
       break;
@@ -66,7 +68,7 @@ long load_gz_img(const char *filename) {
   return curr_size;
 }
 
-long load_zstd_img(const char *filename){
+long load_zstd_img(const char *filename, uint8_t* load_start, size_t img_size){
   assert(filename);
 
   int fd = -1;
@@ -138,12 +140,13 @@ long load_zstd_img(const char *filename){
   }
 
   // def phymem
-  uint8_t *pmem_start = (uint8_t *)guest_to_host(RESET_VECTOR);
+  uint8_t *pmem_start = (uint8_t *)(load_start);
   uint64_t *pmem_current;
 
   // decompress and write in memory
   uint64_t total_write_size = 0;
-  while (total_write_size < MEMORY_SIZE) {
+  size_t load_size = img_size == 0 ? MEMORY_SIZE : img_size;
+  while (total_write_size < load_size) {
 
     ZSTD_outBuffer output = {decompress_file_buffer, decompress_file_buffer_size * sizeof(uint64_t), 0};
 
@@ -194,12 +197,10 @@ long load_zstd_img(const char *filename){
 
 #endif  //  CONFIG_MEM_COMPRESS
 
-// Return whether a file is a gz file, determined by its name.
-// If the filename ends with ".gz", we treat it as a gz file.
-
-
-long load_img(char* img_name, char *which_img, uint64_t load_start, size_t img_size) {
-  char *loading_img = img_name;
+// Will check the magic number in file, if not gz or zstd archive,
+// will read in as a raw image
+long load_img(const char* img_name, const char *which_img, uint8_t* load_start, size_t img_size) {
+  const char *loading_img = img_name;
   Log("Loading %s: %s\n", which_img, img_name);
   if (img_name == NULL) {
     Log("No image is given. Use the default built-in image/restorer.");
@@ -209,7 +210,7 @@ long load_img(char* img_name, char *which_img, uint64_t load_start, size_t img_s
   if (is_gz_file(loading_img)) {
 #ifdef CONFIG_MEM_COMPRESS
     Log("Loading GZ image %s", loading_img);
-    return load_gz_img(loading_img);
+    return load_gz_img(loading_img, load_start, img_size);
 #else
     panic("CONFIG_MEM_COMPRESS is disabled, turn it on in memuconfig!");
 #endif
@@ -218,14 +219,13 @@ long load_img(char* img_name, char *which_img, uint64_t load_start, size_t img_s
   if (is_zstd_file(loading_img)) {
 #ifdef CONFIG_MEM_COMPRESS
     Log("Loading Zstd image %s", loading_img);
-    return load_zstd_img(loading_img);
+    return load_zstd_img(loading_img, load_start, img_size);
 #else
     panic("CONFIG_MEM_COMPRESS is disabled, turn it on in memuconfig!");
 #endif
   }
 
   // RAW image
-
   FILE *fp = fopen(loading_img, "rb");
   Assert(fp, "Can not open '%s'", loading_img);
 
@@ -239,6 +239,7 @@ long load_img(char* img_name, char *which_img, uint64_t load_start, size_t img_s
     size = img_size;
   }
 
+
 #ifdef CONFIG_USE_SPARSEMM
   if (file_is_elf(loading_img)) {
     sparse_mem_elf(get_sparsemm(), loading_img);
@@ -247,18 +248,69 @@ long load_img(char* img_name, char *which_img, uint64_t load_start, size_t img_s
   } else {
     int fd = open(loading_img, O_RDONLY);
     char *buf = (char *)mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-    sparse_mem_write(get_sparsemm(), load_start, size, buf);
+    paddr_t load_start_paddr = host_to_guest(load_start);
+    sparse_mem_write(get_sparsemm(), load_start_paddr, size, buf);
     close(fd);
     munmap(buf, size);
   }
 #else
-  int ret = fread(guest_to_host(load_start), size, 1, fp);
+  int ret = fread((uint8_t*)(load_start), size, 1, fp);
   assert(ret == 1);
 #endif
-  Log("Read %lu bytes from file %s to 0x%lx", size, img_name, load_start);
+  Log("Read %lu bytes from file %s to 0x%p", size, img_name, load_start);
 
   fclose(fp);
   return size;
+}
+
+
+// Notes:
+//
+// |                      | enable flash device | disable flash device |
+// |  cpt_image not null  |    override flash   |   override memory    |
+// | flash_image not null |   write into flash  |  undefined behavior  |
+//
+// img_file used to fill memory, flash_image used to fill flash, cpt_image used to override memory or flash
+//
+void fill_memory(const char* img_file, const char* flash_image, const char* cpt_image, int64_t* img_size, int64_t* flash_size) {
+  assert(img_file);
+  uint8_t* bbl_start = (uint8_t*)get_pmem();
+  *img_size = load_img(img_file, "image (checkpoint/bare metal app/bbl) form cmdline", bbl_start, 0);
+
+#ifdef CONFIG_HAS_FLASH
+  uint8_t* flash_start = get_flash_base();
+  if(flash_image) {
+    *flash_size = load_img(flash_image, "flash image from cmdline", flash_start, get_flash_size());
+  }
+#else
+  if(flash_image) {
+    Log("The flash image %s will not load into flash", flash_image);
+  }
+#endif
+
+  if (cpt_image) {
+    FILE *restore_fp = fopen(cpt_image, "rb");
+    Assert(restore_fp, "Can not open '%s'", cpt_image);
+
+    int restore_size = 0;
+    int restore_jmp_inst = 0;
+
+    int ret = fread(&restore_jmp_inst, sizeof(int), 1, restore_fp);
+    assert(ret == 1);
+    assert(restore_jmp_inst != 0);
+
+    ret = fread(&restore_size, sizeof(int), 1, restore_fp);
+    assert(ret == 1);
+    assert(restore_size != 0);
+
+    fclose(restore_fp);
+
+#ifdef CONFIG_HAS_FLASH
+    load_img(cpt_image, "Gcpt restorer form cmdline", flash_start, restore_size);
+#else
+    load_img(cpt_image, "Gcpt restorer form cmdline", bbl_start, restore_size);
+#endif
+  }
 }
 
 #endif  // CONFIG_MODE_USER

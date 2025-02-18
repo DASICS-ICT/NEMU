@@ -15,6 +15,7 @@
 
 #include <utils.h>
 #include <device/map.h>
+#include <device/flash.h>
 #include <sys/mman.h>
 
 // put flash below the physical memory and allow a max size of 256MB.
@@ -29,7 +30,7 @@ static void flash_io_handler(uint32_t offset, int len, bool is_write) {
 
 void load_flash_contents(const char *flash_img) {
   // create mmap with zero contents
-  assert(CONFIG_FLASH_SIZE < 0x10000000UL);
+  assert(CONFIG_FLASH_SIZE <= 0x20000000UL);
   void *ret = mmap((void *)flash_base, CONFIG_FLASH_SIZE, PROT_READ | PROT_WRITE,
     MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
   if (ret != flash_base) {
@@ -52,12 +53,22 @@ void load_flash_contents(const char *flash_img) {
       "img size %d is larger than flash size %d",
       size, CONFIG_FLASH_SIZE
     );
-    flash_base = new_space(CONFIG_FLASH_SIZE);
     ret = fread(flash_base, 1, size, fp);
     fclose(fp);
   }
 }
 
+uint8_t* get_flash_base() {
+  return flash_base;
+}
+
+uint64_t get_flash_size() {
+  return CONFIG_FLASH_SIZE;
+}
+
 void init_flash() {
-  add_mmio_map("flash", CONFIG_FLASH_START_ADDR, flash_base, CONFIG_FLASH_SIZE, flash_io_handler);
+#ifndef CONFIG_SHARE
+  IFDEF(CONFIG_HAS_FLASH, load_flash_contents(__FLASH_IMG_PATH__));
+#endif // CONFIG_SHARE
+  add_mmio_map_with_diff("flash", CONFIG_FLASH_START_ADDR, flash_base, CONFIG_FLASH_SIZE, SKIP_FREE, flash_io_handler);
 }

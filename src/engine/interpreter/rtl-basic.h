@@ -196,12 +196,10 @@ extern uint64_t get_abs_instr_count();
 extern void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type);
 #endif  // CONFIG_RV_DASICS
 
-extern uint64_t br_count;
-
-#ifdef CONFIG_BR_LOG
-extern struct br_info br_log[];
-#endif // CONFIG_BR_LOG
-
+// This rtl_j is only used in normal mode.
+// rtl_j for PERF_OPT is defined as a marco in cpu-exec.c
+// Note: rtl_j can ONLY be called directly in EHelper.
+#ifndef CONFIG_PERF_OPT
 static inline def_rtl(j, vaddr_t target) {
   // uint64_t orig_pc = cpu.pc, real_target;
 #ifdef CONFIG_GUIDED_EXEC
@@ -219,10 +217,11 @@ static inline def_rtl(j, vaddr_t target) {
 
   cpu.pc = target;
   // real_target = target;
+  // CONFIG_BR_LOG: We cannot commit br_log here, because rtl_j is used by all jump and branch.
 
 #ifndef CONFIG_SHARE
   if (profiling_state == SimpointProfiling && workload_loaded) {
-    simpoint_profiling(cpu.pc, true, get_abs_instr_count());
+    simpoint_profiling(cpu.pc, true, get_abs_instr_count() - checkpoint_icount_base);
   }
 #endif // CONFIG_SHARE
 
@@ -231,7 +230,12 @@ end_of_rtl_j:
 ; // make compiler happy
 #endif
 }
+#endif // ndef CONFIG_PERF_OPT
 
+// This rtl_jr is only used in normal mode.
+// rtl_jr for PERF_OPT is defined as a marco in cpu-exec.c
+// Note: rtl_jr can ONLY be called directly in EHelper.
+#ifndef CONFIG_PERF_OPT
 static inline def_rtl(jr, rtlreg_t *target) {
 #ifdef CONFIG_BR_LOG
   uint64_t real_target;
@@ -258,7 +262,7 @@ static inline def_rtl(jr, rtlreg_t *target) {
 
 #ifndef CONFIG_SHARE
   if (profiling_state == SimpointProfiling && workload_loaded) {
-    simpoint_profiling(cpu.pc, true, get_abs_instr_count());
+    simpoint_profiling(cpu.pc, true, get_abs_instr_count() - checkpoint_icount_base);
   }
 #endif // CONFIG_SHARE
 
@@ -267,31 +271,21 @@ end_of_rtl_jr:
 ; // make compiler happy
 #endif
 
-#ifdef CONFIG_BR_LOG
-  br_log[br_count].pc = s->pc; // orig_pc - 4;
-  br_log[br_count].target = real_target;
-  br_log[br_count].taken = 1;
-  br_log[br_count].type = 1;
-  br_count++;
-#endif // CONFIG_BR_LOG
+  IFDEF(CONFIG_BR_LOG, br_log_commit(s->pc, real_target, 1, BR_JUMP));
 }
+#endif // ndef CONFIG_PERF_OPT
 
+// This rtl_jrelop is only used in normal mode.
+// rtl_jrelop for PERF_OPT is defined as a marco in cpu-exec.c
+// Note: rtl_jrelop can ONLY be called directly in EHelper.
+#ifndef CONFIG_PERF_OPT
 static inline def_rtl(jrelop, uint32_t relop,
     const rtlreg_t *src1, const rtlreg_t *src2, vaddr_t target) {
   bool is_jmp = interpret_relop(relop, *src1, *src2);
-  // printf("%lx,%lx,%d,%d,%lx\n", br_count, cpu.pc, is_jmp, 0, target);
-#ifdef CONFIG_BR_LOG
-  br_log[br_count].pc = s->pc; // cpu.pc - 4;
-  br_log[br_count].target = target;
-  br_log[br_count].taken = is_jmp;
-  br_log[br_count].type = 0;
-  br_count++;
-#endif // CONFIG_BR_LOG
-// #ifdef CONFIG_RV_DASICS
-//   if (is_jmp) dasics_redirect_helper(s->pc, target, s->snpc);
-// #endif  // CONFIG_RV_DASICS
+  IFDEF(CONFIG_BR_LOG, br_log_commit(s->pc, target, is_jmp, BR_BRANCH));
   rtl_j(s, (is_jmp ? target : s->snpc));
 }
+#endif // ndef CONFIG_PERF_OPT
 
 static inline def_rtl(priv_jr, rtlreg_t *target) {
 #ifdef CONFIG_GUIDED_EXEC

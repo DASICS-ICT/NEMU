@@ -21,6 +21,7 @@
 #ifdef CONFIG_RVV
 #include "../instr/rvv/vreg.h"
 #endif // CONFIG_RVV
+#include "../local-include/trapinfo.h"
 
 #define FORCE_RAISE_PF
 
@@ -49,7 +50,16 @@ struct NonRegInterruptPending {
   bool platform_irp_stip;
   bool platform_irp_vseip;
   bool platform_irp_vstip;
+  bool from_aia_meip;
+  bool from_aia_seip;
   bool lcofi_req;
+};
+
+struct FromAIA {
+  uint64_t mtopei;
+  uint64_t stopei;
+  uint64_t vstopei;
+  uint64_t hgeip;
 };
 
 struct DebugInfo {
@@ -72,6 +82,8 @@ struct MemEventQueryResult {
 #endif
 
 typedef struct TriggerModule TriggerModule;
+typedef struct IpriosModule IpriosModule;
+typedef struct IpriosSort IpriosSort;
 
 typedef struct {
   // Below will be synced by regcpy when run difftest, DO NOT TOUCH
@@ -183,6 +195,24 @@ typedef struct {
 #endif
 #ifdef CONFIG_RV_IMSIC
   bool virtualInterruptIsHvictlInject;
+#endif
+#ifdef CONFIG_RV_SMDBLTRP
+  bool critical_error;
+#endif
+
+  trap_info_t trapInfo;
+
+#ifdef CONFIG_RV_IMSIC
+  struct FromAIA fromaia;
+  IpriosModule*  MIprios;
+  IpriosModule*  MIprios_rdata;
+  IpriosModule*  SIprios;
+  IpriosModule*  SIprios_rdata;
+  IpriosModule* VSIprios;
+  IpriosSort*    MIpriosSort;
+  IpriosSort*    SIpriosSort;
+  IpriosSort*   VSIpriosSort;
+  bool external_interrupt_select;
 #endif
 
 } riscv64_CPU_state;

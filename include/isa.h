@@ -35,6 +35,7 @@ extern CPU_state cpu;
 extern rtlreg_t csr_array[4096];
 void isa_reg_display();
 word_t isa_reg_str2val(const char *name, bool *success);
+const char * isa_get_privilege_mode_str();
 
 // exec
 struct Decode;
@@ -44,16 +45,26 @@ void isa_hostcall(uint32_t id, rtlreg_t *dest, const rtlreg_t *src1,
 
 // memory
 enum { MMU_DIRECT, MMU_TRANSLATE, MMU_DYNAMIC };
-enum { MEM_TYPE_IFETCH, MEM_TYPE_READ, MEM_TYPE_WRITE, MEM_TYPE_IFETCH_READ, MEM_TYPE_WRITE_READ }; // the last two is for ptw
-enum { MEM_RET_OK, MEM_RET_FAIL, MEM_RET_CROSS_PAGE };
+enum { MEM_TYPE_IFETCH, MEM_TYPE_READ, MEM_TYPE_WRITE, MEM_TYPE_IFETCH_READ, MEM_TYPE_WRITE_READ, IFDEF(CONFIG_RV_MBMC, MEM_TYPE_BM_READ) }; // The second to last and the third to last are prepared for PTW.
+enum { MEM_RET_OK, MEM_RET_FAIL};
 #ifndef isa_mmu_state
 int isa_mmu_state();
 #endif
 #ifndef isa_mmu_check
 int isa_mmu_check(vaddr_t vaddr, int len, int type);
 #endif
+#ifndef get_effective_address
+vaddr_t get_effective_address(vaddr_t vaddr, int type);
+#endif
 paddr_t isa_mmu_translate(vaddr_t vaddr, int len, int type);
 bool isa_pmp_check_permission(paddr_t addr, int len, int type, int mode);
+#ifdef CONFIG_RV_MBMC
+/**
+ * @brief Check if the address is in the confidential memory.
+ * return true if the address is in the Confidential Memory, otherwise return false.
+ */
+bool isa_bmc_check_permission(paddr_t addr, int len, int type, int out_mode);
+#endif
 
 // interrupt
 vaddr_t raise_intr(word_t NO, vaddr_t epc);
@@ -80,13 +91,18 @@ void isa_difftest_guided_exec(void *guide);
 #endif
 
 void isa_difftest_query_ref(void *result_buffer, uint64_t type);
-#ifdef CONFIG_BR_LOG
-void *isa_difftest_query_br_log(void);
-#endif // CONFIG_BR_LOG
 #ifdef CONFIG_MULTICORE_DIFF
 void isa_difftest_set_mhartid(int n);
 #endif
 void isa_update_mip(unsigned lcofip);
 void isa_update_mhpmcounter_overflow(uint64_t mhpmeventOverflowVec);
+#ifdef CONFIG_RV_IMSIC
+void isa_update_mtopi();
+void isa_update_stopi();
+void isa_update_vstopi();
+void isa_update_hgeip();
+void isa_update_external_interrupt_select();
+#endif
+void isa_sync_custom_mflushpwr(bool l2FlushDone);
 
 #endif

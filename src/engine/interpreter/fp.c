@@ -99,6 +99,10 @@ def_rtl(fpcall, rtlreg_t *dest, const rtlreg_t *src1, const rtlreg_t *src2, uint
       case FPCALL_LT: *dest = f16_lt(fsrc1, fsrc2); break;
       case FPCALL_EQ: *dest = f16_eq(fsrc1, fsrc2); break;
 
+      case FPCALL_SGNJ:  *dest = fsgnj16(fsrc1, fsrc2, false, false); break;
+      case FPCALL_SGNJN: *dest = fsgnj16(fsrc1, fsrc2, true, false); break;
+      case FPCALL_SGNJX: *dest = fsgnj16(fsrc1, fsrc2, false, true); break;
+
       case FPCALL_I32ToF: *dest = my_i32_to_f16 (*src1).v; break;
       case FPCALL_U32ToF: *dest = my_ui32_to_f16(*src1).v; break;
       case FPCALL_I64ToF: *dest = my_i64_to_f16 (*src1).v; break;
@@ -212,17 +216,13 @@ def_rtl(vfpcall, rtlreg_t *dest, const rtlreg_t *src1, const rtlreg_t *src2, uin
   uint32_t w = FPCALL_W(cmd);
   uint32_t op = FPCALL_OP(cmd);
   isa_fp_csr_check();
-
-  if (op < FPCALL_VP_NEED_RM) {
-    // all vector instructions need to read and check rounding mode
-    softfloat_roundingMode = isa_fp_get_frm();
-    isa_fp_rm_check(softfloat_roundingMode);
-  }
+  softfloat_roundingMode = isa_fp_get_frm();
 
   if (w == FPCALL_W8) {
     // w8 only can hold int/uint
     switch (op) {
       case FPCALL_SToDF: *dest = i32_to_f16((int32_t)(int8_t)*src1).v; break;
+      case FPCALL_UToDF: *dest = ui32_to_f16(*src1).v; break;
     }
   } else if (w == FPCALL_W16) {
     float16_t fsrc1 = rtlToVF16(*src1);
@@ -240,14 +240,14 @@ def_rtl(vfpcall, rtlreg_t *dest, const rtlreg_t *src1, const rtlreg_t *src2, uin
       case FPCALL_REC7:   *dest = f16_recip7(fsrc1).v; break;
       case FPCALL_CLASS:  *dest = f16_classify(fsrc1); break;
 
-      case FPCALL_MADD:  *dest = f16_mulAdd(rtlToF16(*dest), fsrc1, fsrc2).v; break;
-      case FPCALL_NMADD: *dest = f16_mulAdd(f16_neg(rtlToF16(*dest)), fsrc1, f16_neg(fsrc2)).v; break;
-      case FPCALL_MSUB:  *dest = f16_mulAdd(rtlToF16(*dest), fsrc1, f16_neg(fsrc2)).v; break;
-      case FPCALL_NMSUB: *dest = f16_mulAdd(f16_neg(rtlToF16(*dest)), fsrc1, fsrc2).v; break;
-      case FPCALL_MACC:  *dest = f16_mulAdd(fsrc1, fsrc2, rtlToF16(*dest)).v; break;
-      case FPCALL_NMACC: *dest = f16_mulAdd(f16_neg(fsrc2), fsrc1, f16_neg(rtlToF16(*dest))).v; break;
-      case FPCALL_MSAC:  *dest = f16_mulAdd(fsrc1, fsrc2, f16_neg(rtlToF16(*dest))).v; break;
-      case FPCALL_NMSAC: *dest = f16_mulAdd(f16_neg(fsrc1), fsrc2, rtlToF16(*dest)).v; break;
+      case FPCALL_MADD:  *dest = f16_mulAdd(rtlToVF16(*dest), fsrc1, fsrc2).v; break;
+      case FPCALL_NMADD: *dest = f16_mulAdd(f16_neg(rtlToVF16(*dest)), fsrc1, f16_neg(fsrc2)).v; break;
+      case FPCALL_MSUB:  *dest = f16_mulAdd(rtlToVF16(*dest), fsrc1, f16_neg(fsrc2)).v; break;
+      case FPCALL_NMSUB: *dest = f16_mulAdd(f16_neg(rtlToVF16(*dest)), fsrc1, fsrc2).v; break;
+      case FPCALL_MACC:  *dest = f16_mulAdd(fsrc1, fsrc2, rtlToVF16(*dest)).v; break;
+      case FPCALL_NMACC: *dest = f16_mulAdd(f16_neg(fsrc2), fsrc1, f16_neg(rtlToVF16(*dest))).v; break;
+      case FPCALL_MSAC:  *dest = f16_mulAdd(fsrc1, fsrc2, f16_neg(rtlToVF16(*dest))).v; break;
+      case FPCALL_NMSAC: *dest = f16_mulAdd(f16_neg(fsrc1), fsrc2, rtlToVF16(*dest)).v; break;
       
       case FPCALL_LE: *dest = f16_le(fsrc1, fsrc2); break;
       case FPCALL_LT: *dest = f16_lt(fsrc1, fsrc2); break;
@@ -291,14 +291,14 @@ def_rtl(vfpcall, rtlreg_t *dest, const rtlreg_t *src1, const rtlreg_t *src2, uin
       fsrc1 = rtlToVF32(*src1);
       fsrc2 = rtlToVF32(*src2);
     } else if (w == FPCALL_SRC1_W16_to_32) {
-      fsrc1 = f16_to_f32(rtlToF16(*src1));
+      fsrc1 = f16_to_f32(rtlToVF16(*src1));
       fsrc2 = rtlToVF32(*src2);
     } else if (w == FPCALL_SRC2_W16_to_32) {
       fsrc1 = rtlToVF32(*src1);
-      fsrc2 = f16_to_f32(rtlToF16(*src2));
+      fsrc2 = f16_to_f32(rtlToVF16(*src2));
     } else {
-      fsrc1 = f16_to_f32(rtlToF16(*src1));
-      fsrc2 = f16_to_f32(rtlToF16(*src2));
+      fsrc1 = f16_to_f32(rtlToVF16(*src1));
+      fsrc2 = f16_to_f32(rtlToVF16(*src2));
     }
 
     switch (op) {

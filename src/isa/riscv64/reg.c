@@ -14,11 +14,13 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include <stdlib.h>
 #include <isa.h>
 //#include <monitor/difftest.h>
 #include "local-include/reg.h"
 #include "local-include/csr.h"
 #include "local-include/trigger.h"
+#include "instr/rvv/vreg.h"
 //#include "local-include/intr.h"
 
 const char *regsl[] = {
@@ -35,116 +37,251 @@ const char *fpregsl[] = {
   "fs8", "fs9", "fs10", "fs11", "ft8", "ft9", "ft10", "ft11"
 };
 
+const char * isa_get_privilege_mode_str() {
+  if (MUXDEF(CONFIG_RV_SDEXT, cpu.debug_mode, 0)) {
+    return "D";
+  }
+  if (MUXDEF(CONFIG_RVH, cpu.v, 0)) {
+    switch (cpu.mode) {
+      case MODE_U: return "VU";
+      case MODE_S: return "VS";
+    }
+  } else {
+    switch (cpu.mode) {
+      case MODE_U: return "U";
+      case MODE_S: return "S";
+      case MODE_M: return "M";
+    }
+  }
+  return "Reserved";
+}
+
+#define FMT_CSR_NAME "%9s"
+
+#define DISPLAY_CSR(name, val) \
+  printf(" " FMT_CSR_NAME ": " FMT_WORD, name, val)
+
+// HR: Horizontal Rule
+#define DISPLAY_HR(name) \
+  printf("---------------- %s ----------------\n", name)
+
 void isa_reg_display() {
   csr_prepare();
-  int i;
-  for (i = 0; i < 32; i ++) {
+
+  DISPLAY_HR("Intger Registers");
+  for (int i = 0; i < 32; i ++) {
     printf("%4s: " FMT_WORD " ", regsl[i], cpu.gpr[i]._64);
     if (i % 4 == 3) {
       printf("\n");
     }
   }
-#ifndef CONFIG_FPU_NONE
-  for (i = 0; i < 32; i ++) {
-    printf("%4s: " FMT_WORD " ", fpregsl[i], cpu.fpr[i]._64);
-    if (i % 4 == 3) {
-      printf("\n");
+
+  #ifndef CONFIG_FPU_NONE
+    DISPLAY_HR("Float Registers");
+    for (int i = 0; i < 32; i ++) {
+      printf("%4s: " FMT_WORD " ", fpregsl[i], cpu.fpr[i]._64);
+      if (i % 4 == 3) {
+        printf("\n");
+      }
     }
-  }
-#endif // CONFIG_FPU_NONE
-  printf("pc: " FMT_WORD " mstatus: " FMT_WORD " mcause: " FMT_WORD " mepc: " FMT_WORD "\n",
-      cpu.pc, cpu.mstatus, mcause->val, mepc->val);
-  printf("%22s sstatus: " FMT_WORD " scause: " FMT_WORD " sepc: " FMT_WORD "\n",
-      "", cpu.sstatus, scause->val, sepc->val);
-  printf("satp: " FMT_WORD "\n", satp->val);
-  printf("mip: " FMT_WORD " mie: " FMT_WORD " mscratch: " FMT_WORD " sscratch: " FMT_WORD "\n",
-      get_mip(), mie->val, mscratch->val, sscratch->val);
-  printf("mideleg: " FMT_WORD " medeleg: " FMT_WORD "\n",
-      mideleg->val, medeleg->val);
-  printf("mtval: " FMT_WORD " stval: " FMT_WORD " mtvec: " FMT_WORD " stvec: " FMT_WORD "\n",
-      mtval->val, stval->val, mtvec->val, stvec->val);
-#ifdef CONFIG_RV_IMSIC 
-  printf("miselect: " FMT_WORD " siselect: " FMT_WORD " mireg: " FMT_WORD " sireg: " FMT_WORD "\n",
-      miselect->val, siselect->val, mireg->val, sireg->val);
-  printf("mtopi: " FMT_WORD " stopi: " FMT_WORD " mvien: " FMT_WORD " mvip: " FMT_WORD "\n",
-      mtopi->val, stopi->val, mvien->val, mvip->val);
-  printf("mtopei: " FMT_WORD " stopei: " FMT_WORD "\n",
-      mtopei->val, stopei->val);
-#endif // CONFIG_RV_IMSIC
-#ifndef CONFIG_FPU_NONE
-  printf("fcsr: " FMT_WORD "\n", cpu.fcsr);
-#endif // CONFIG_FPU_NONE
-#ifdef CONFIG_RV_DASICS
-  printf("dumcfg: " FMT_WORD " dumbound0: " FMT_WORD " dumbound1: " FMT_WORD "\n",
-      dumcfg->val, dumbound0->val, dumbound1->val);
-  printf("dmaincall: " FMT_WORD " dretpc: " FMT_WORD "\n",
-      dmaincall->val, dretpc->val);
-  printf("dlcfg0: " FMT_WORD "\n",
-      dlcfg0->val);
-  for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
-    printf("%2d: cfg:0x%02x boundlo:0x%016lx boundhi :0x%016lx", i, dasics_libcfg_from_index(i), \
-      dasics_libbound_from_index(i << 1), dasics_libbound_from_index((i << 1) + 1));
-    if (i % 2 == 1) printf("\n");
-    else printf("|");
-  }
-  printf("djcfg: " FMT_WORD "\n", djcfg->val);
-  for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
-    printf("%2d: cfg:0x%02x boundlo: 0x%016lx boundhi: 0x%016lx", i, dasics_jumpcfg_from_index(i), \
-      dasics_jumpbound_low_from_index(i), dasics_jumpbound_high_from_index(i));
-    if (i % 2 == 1) printf("\n");
-    else printf("|");
-  }
-#endif  // CONFIG_RV_DASICS
-#ifdef CONFIG_RVH
-  printf("mtval2: " FMT_WORD " mtinst: " FMT_WORD " hstatus: " FMT_WORD " hideleg: " FMT_WORD "\n",
-      mtval2->val, mtinst->val, hstatus->val, hideleg->val);
-  printf("hedeleg: " FMT_WORD " hcounteren: " FMT_WORD " htval: " FMT_WORD " htinst: " FMT_WORD "\n",
-      hedeleg->val, hcounteren->val, htval->val, htinst->val);
-  printf("hgatp: " FMT_WORD " vsscratch: " FMT_WORD " vsstatus: " FMT_WORD " vstvec: " FMT_WORD "\n",
-      hgatp->val, vsscratch->val, cpu.vsstatus, vstvec->val);
-  printf("vsepc: " FMT_WORD " vscause: " FMT_WORD " vstval: " FMT_WORD " vsatp: " FMT_WORD "\n",
-      vsepc->val, vscause->val, vstval->val, vsatp->val);
-#ifdef CONFIG_RV_IMSIC
-  printf("hvien: " FMT_WORD " hvictl: " FMT_WORD " hviprio1: " FMT_WORD " hviprio2: " FMT_WORD "\n",
-      hvien->val, hvictl->val, hviprio1->val, hviprio2->val);
-  printf("vsiselect: " FMT_WORD " vsireg: " FMT_WORD " vstopi: " FMT_WORD "\n",
-      vsiselect->val, vsireg->val, vstopi->val);
-  printf("vstopei: " FMT_WORD "\n", vstopei->val);
-#endif // CONFIG_RV_IMSIC
-  printf("virtualization mode: %ld\n", cpu.v);
-#endif
-  printf("privilege mode:%ld\n", cpu.mode);
-#ifdef CONFIG_RV_PMP_CSR
-  printf("pmp: %d entries active, details:\n", CONFIG_RV_PMP_ACTIVE_NUM);
-  for (int i = 0; i < CONFIG_RV_PMP_NUM; i++) {
-    printf("%2d: cfg:0x%02x addr:0x%016lx", i, pmpcfg_from_index(i), pmpaddr_from_index(i));
-    if (i % 2 == 1) printf("\n");
-    else printf("|");
-  }
-#ifndef CONFIG_RV_PMP_CHECK
-  printf("pmp csr rw: enable, pmp check: disable\n");
-#endif
-#endif // CONFIG_RV_PMP_CSR
 
-#ifdef CONFIG_RVV
-  //vector register
-  extern const char * vregsl[];
-  for(i = 0; i < 32; i ++) {
-    printf("%s: ", vregsl[i]);
-    printf("0x%016lx_%016lx  ",
-      cpu.vr[i]._64[1], cpu.vr[i]._64[0]);
-    if(i%2) printf("\n");
-  }
-  printf("vtype: " FMT_WORD " vstart: " FMT_WORD " vxsat: " FMT_WORD "\n", vtype->val, vstart->val, vxsat->val);
-  printf("vxrm: " FMT_WORD " vl: " FMT_WORD " vcsr: " FMT_WORD "\n", vxrm->val, vl->val, vcsr->val);
-#endif // CONFIG_RVV
+    #undef FMT_CSR_NAME
+    #define FMT_CSR_NAME "%s"
 
-#ifdef CONFIG_RV_SDTRIG
-  printf("tselect: " FMT_WORD "\n", tselect->val);
-  for(i = 0; i < CONFIG_TRIGGER_NUM + 1; i++) {
-    printf("%2d: tdata1: " FMT_WORD " tdata2: " FMT_WORD "\n", i, cpu.TM->triggers[i].tdata1.val, cpu.TM->triggers[i].tdata2.val);
-  }
-#endif // CONFIG_RV_SDTRIG
+    DISPLAY_CSR("fcsr", cpu.fcsr);
+    DISPLAY_CSR("fflags", fflags->val);
+    DISPLAY_CSR("frm", frm->val);
+    printf("\n");
+  #endif // CONFIG_FPU_NONE
+
+  DISPLAY_HR("Privileged CSRs");
+
+  printf("pc: " FMT_WORD "  privilege mode: %s (mode: %ld  v: %ld  debug: %d)\n",
+      cpu.pc, isa_get_privilege_mode_str(),
+      cpu.mode, MUXDEF(CONFIG_RVH, cpu.v, (uint64_t)0), MUXDEF(CONFIG_RV_SDEXT, cpu.debug_mode, 0));
+
+  #undef FMT_CSR_NAME
+  #define FMT_CSR_NAME "%9s"
+
+  DISPLAY_CSR("mstatus", cpu.mstatus);
+  DISPLAY_CSR("sstatus", cpu.sstatus);
+  IFDEF(CONFIG_RVH, DISPLAY_CSR("vsstatus", cpu.vsstatus));
+  printf("\n");
+
+  IFDEF(CONFIG_RVH, DISPLAY_CSR("hstatus", cpu.hstatus));
+  IFDEF(CONFIG_RV_SMRNMI, DISPLAY_CSR("mnstatus", mnstatus->val));
+  printf("\n");
+
+  DISPLAY_CSR("mcause", mcause->val);
+  DISPLAY_CSR("mepc", mepc->val);
+  DISPLAY_CSR("mtval", mtval->val);
+  printf("\n");
+
+  DISPLAY_CSR("scause", scause->val);
+  DISPLAY_CSR("sepc", sepc->val);
+  DISPLAY_CSR("stval", stval->val);
+  printf("\n");
+
+  #ifdef CONFIG_RVH
+    DISPLAY_CSR("vscause", vscause->val);
+    DISPLAY_CSR("vsepc", vsepc->val);
+    DISPLAY_CSR("vstval", vstval->val);
+    printf("\n");
+  #endif // CONFIG_RVH
+
+  #ifdef CONFIG_RV_SMRNMI
+    DISPLAY_CSR("mncause", mncause->val);
+    DISPLAY_CSR("mnepc", mnepc->val);
+    DISPLAY_CSR("mnscratch", mnscratch->val);
+    printf("\n");
+  #endif // CONFIG_RV_SMRNMI
+
+  #ifdef CONFIG_RVH
+    DISPLAY_CSR("mtval2", mtval2->val);
+    DISPLAY_CSR("htval", htval->val);
+    printf("\n");
+    DISPLAY_CSR("mtinst", mtinst->val);
+    DISPLAY_CSR("htinst", htinst->val);
+    printf("\n");
+  #endif // CONFIG_RVH
+
+  DISPLAY_CSR("mscratch", mscratch->val);
+  DISPLAY_CSR("sscratch", sscratch->val);
+  IFDEF(CONFIG_RVH, DISPLAY_CSR("vsscratch", vsscratch->val));
+  printf("\n");
+
+  DISPLAY_CSR("mtvec", mtvec->val);
+  DISPLAY_CSR("stvec", stvec->val);
+  IFDEF(CONFIG_RVH, DISPLAY_CSR("vstvec", vstvec->val));
+  printf("\n");
+
+  DISPLAY_CSR("mip", get_mip());
+  DISPLAY_CSR("mie", mie->val);
+  printf("\n");
+
+  DISPLAY_CSR("mideleg", mideleg->val);
+  DISPLAY_CSR("medeleg", medeleg->val);
+  printf("\n");
+
+  #ifdef CONFIG_RVH
+    DISPLAY_CSR("hideleg", get_hideleg());
+    DISPLAY_CSR("hedeleg", hedeleg->val);
+    printf("\n");
+  #endif // CONFIG_RVH
+
+  DISPLAY_CSR("satp", satp->val);
+  #ifdef CONFIG_RVH
+    DISPLAY_CSR("hgatp", hgatp->val);
+    DISPLAY_CSR("vsatp", vsatp->val);
+  #endif // CONFIG_RVH
+  printf("\n");
+
+  #ifdef CONFIG_RV_DASICS
+    printf("dumcfg: " FMT_WORD " dumbound0: " FMT_WORD " dumbound1: " FMT_WORD "\n",
+        dumcfg->val, dumbound0->val, dumbound1->val);
+    printf("dmaincall: " FMT_WORD " dretpc: " FMT_WORD "\n",
+        dmaincall->val, dretpc->val);
+    printf("dlcfg0: " FMT_WORD "\n",
+        dlcfg0->val);
+    for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
+      printf("%2d: cfg:0x%02x boundlo:0x%016lx boundhi :0x%016lx", i, dasics_libcfg_from_index(i), \
+        dasics_libbound_from_index(i << 1), dasics_libbound_from_index((i << 1) + 1));
+      if (i % 2 == 1) printf("\n");
+      else printf("|");
+    }
+    printf("djcfg: " FMT_WORD "\n", djcfg->val);
+    for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
+      printf("%2d: cfg:0x%02x boundlo: 0x%016lx boundhi: 0x%016lx", i, dasics_jumpcfg_from_index(i), \
+        dasics_jumpbound_low_from_index(i), dasics_jumpbound_high_from_index(i));
+      if (i % 2 == 1) printf("\n");
+      else printf("|");
+    }
+  #endif  // CONFIG_RV_DASICS
+
+  DISPLAY_CSR("mcounteren", mcounteren->val);
+  DISPLAY_CSR("scounteren", scounteren->val);
+  IFDEF(CONFIG_RVH, DISPLAY_CSR("hcounteren", hcounteren->val));
+  printf("\n");
+
+  #ifdef CONFIG_RV_IMSIC
+    DISPLAY_CSR("miselect", miselect->val);
+    DISPLAY_CSR("siselect", siselect->val);
+    IFDEF(CONFIG_RVH, DISPLAY_CSR("vsiselect", vsiselect->val));
+    printf("\n");
+    DISPLAY_CSR("mireg", mireg->val);
+    DISPLAY_CSR("sireg", sireg->val);
+    IFDEF(CONFIG_RVH, DISPLAY_CSR("vsireg", vsireg->val));
+    printf("\n");
+    DISPLAY_CSR("mtopi", mtopi->val);
+    DISPLAY_CSR("stopi", stopi->val);
+    IFDEF(CONFIG_RVH, DISPLAY_CSR("vstopi", vstopi->val));
+    printf("\n");
+    DISPLAY_CSR("mvien", mvien->val);
+    IFDEF(CONFIG_RVH, DISPLAY_CSR("hvien", hvien->val));
+    DISPLAY_CSR("mvip", mvip->val);
+    printf("\n");
+    DISPLAY_CSR("mtopei", mtopei->val);
+    DISPLAY_CSR("stopei", stopei->val);
+    IFDEF(CONFIG_RVH, DISPLAY_CSR("vstopei", vstopei->val));
+    printf("\n");
+    #ifdef CONFIG_RVH
+      DISPLAY_CSR("hvictl", hvictl->val);
+      DISPLAY_CSR("hviprio1", hviprio1->val);
+      DISPLAY_CSR("hviprio2", hviprio2->val);
+      printf("\n");
+    #endif // CONFIG_RVH
+  #endif // CONFIG_RV_IMSIC
+
+   #ifdef CONFIG_RV_MBMC
+     DISPLAY_CSR("mbmc", mbmc->val);
+     printf("\n");
+   #endif
+
+  #ifdef CONFIG_RV_PMP_CSR
+    DISPLAY_HR("PMP CSRs");
+    printf("pmp: %d entries active, details:\n", CONFIG_RV_PMP_ACTIVE_NUM);
+    for (int i = 0; i < CONFIG_RV_PMP_NUM; i++) {
+      printf("%2d: cfg:0x%02x addr:0x%016lx", i, pmpcfg_from_index(i), pmpaddr_from_index(i));
+      if (i % 2 == 1) printf("\n");
+      else printf("|");
+    }
+    #ifndef CONFIG_RV_PMP_CHECK
+      printf("pmp csr rw: enable, pmp check: disable\n");
+    #endif
+  #endif // CONFIG_RV_PMP_CSR
+
+  #ifdef CONFIG_RVV
+    //vector register
+    DISPLAY_HR("Vector Registers");
+    extern const char * vregsl[];
+    for(int i = 0; i < 32; i ++) {
+      printf("%s: ", vregsl[i]);
+      printf("0x%016lx_%016lx  ",
+        cpu.vr[i]._64[1], cpu.vr[i]._64[0]);
+      if(i%2) printf("\n");
+    }
+
+    #undef FMT_CSR_NAME
+    #define FMT_CSR_NAME "%6s"
+
+    DISPLAY_CSR("vtype", vtype->val);
+    DISPLAY_CSR("vstart", vstart->val);
+    DISPLAY_CSR("vxsat", vxsat->val);
+    printf("\n");
+    DISPLAY_CSR("vxrm", vxrm->val);
+    DISPLAY_CSR("vl", vl->val);
+    DISPLAY_CSR("vcsr", vcsr->val);
+    printf("\n");
+  #endif // CONFIG_RVV
+
+  #ifdef CONFIG_RV_SDTRIG
+    DISPLAY_HR("Triggers");
+    DISPLAY_CSR("tselect", tselect->val);
+    printf("\n");
+    for(int i = 0; i < CONFIG_TRIGGER_NUM + 1; i++) {
+      printf("%2d: tdata1: " FMT_WORD " tdata2: " FMT_WORD "\n", i, cpu.TM->triggers[i].tdata1.val, cpu.TM->triggers[i].tdata2.val);
+    }
+  #endif // CONFIG_RV_SDTRIG
   fflush(stdout);
 }
 
@@ -154,6 +291,25 @@ rtlreg_t isa_reg_str2val(const char *s, bool *success) {
   for (i = 0; i < 32; i ++) {
     if (strcmp(regsl[i], s) == 0) return reg_l(i);
   }
+
+#ifndef CONFIG_FPU_NONE
+  for (i = 0; i < 32; i ++) {
+    if (strcmp(fpregsl[i], s) == 0) return fpreg_l(i);
+  }
+#endif // CONFIG_FPU_NONE
+
+#ifdef CONFIG_RVV
+  //vector register
+  const char *underscore_pos = strchr(s, '_');
+  if (underscore_pos != NULL) {
+    size_t prefix_len = underscore_pos - s;
+    int offset = atoi(underscore_pos + 1);
+    extern const char * vregsl[];
+    for (i = 0; i < 32; i ++) {
+      if (strncmp(vregsl[i], s, prefix_len) == 0) return vreg_l(i, offset);
+    }
+  }
+#endif // CONFIG_RVV
 
   if (strcmp("pc", s) == 0) return cpu.pc;
 

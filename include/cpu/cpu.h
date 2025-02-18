@@ -28,6 +28,9 @@ enum {
   NEMU_EXEC_EXCEPTION
 };
 
+uint64_t get_abs_instr_count();
+uint64_t get_abs_instr_count_csr();
+
 void cpu_exec(uint64_t n);
 
 #define CONTEXT_STACK_SIZE 5
@@ -73,6 +76,9 @@ struct lightqs_reg_ss {
   uint64_t mstatus, mcause, mepc, sstatus, scause, sepc,
   satp, mip, mie, mscratch, sscratch, mideleg, medeleg,
   mtval, stval, mtvec, stvec;
+#ifdef CONFIG_RV_MBMC
+  uint64_t mbmc;
+#endif
 #ifdef CONFIG_RVV
   uint64_t vtype, vstart, vxsat, vxrm, vl;
 #endif // CONFIG_RVV

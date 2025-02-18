@@ -28,8 +28,15 @@
   f(amomin_w) f(amomax_w) f(amominu_w) f(amomaxu_w) \
   f(amoadd_d) f(amoswap_d) f(amoxor_d) f(amoor_d) f(amoand_d) \
   f(amomin_d) f(amomax_d) f(amominu_d) f(amomaxu_d)
+#ifdef CONFIG_RV_ZACAS
+#define AMO_CAS_INSTR(f) \
+  f(amocas_w) f(amocas_d) f(amocas_q)
+#else // CONFIG_RV_ZACAS
+#define AMO_CAS_INSTR(f)
+#endif // CONFIG_RV_ZACAS
 #else
 #define AMO_INSTR_BINARY(f)
+#define AMO_CAS_INSTR(f)
 #define AMO_INSTR_TERNARY(f) f(atomic)
 #endif
 
@@ -54,15 +61,23 @@
 #else
 #define SYS_NMI_NULLARY(f)
 #endif
+#ifdef CONFIG_RV_ZAWRS
+#define SYS_ZAWRS_NULLARY(f) \
+  f(wrs_nto) f(wrs_sto)
+#else
+#define SYS_ZAWRS_NULLARY(f)
+#endif
 #ifdef CONFIG_RV_SVINVAL
 #define SYS_INSTR_NULLARY(f) \
   f(ecall) f(ebreak) f(c_ebreak) f(mret) f(sret) f(uret) f(wfi) \
+  SYS_ZAWRS_NULLARY(f) \
   f(sfence_w_inval) f(sfence_inval_ir)
 #define SYS_INSTR_BINARY(f) \
   f(sfence_vma) f(sinval_vma) RVH_INST_BINARY(f)
 #else
 #define SYS_INSTR_NULLARY(f) \
-  f(ecall) f(ebreak) f(c_ebreak) f(mret) f(sret) f(uret) f(wfi)
+  f(ecall) f(ebreak) f(c_ebreak) f(mret) f(sret) f(uret) f(wfi) \
+  SYS_ZAWRS_NULLARY(f)
 #define SYS_INSTR_BINARY(f) \
   f(sfence_vma) RVH_INST_BINARY(f)
 #endif
@@ -140,7 +155,8 @@
 
 #ifdef CONFIG_RV_CBO
 #define CBO_INSTR_TERNARY(f) \
-  f(cbo_zero) f(cbo_zero_mmu) f(cbo_inval) f(cbo_flush) f(cbo_clean)
+  f(cbo_zero) f(cbo_inval) f(cbo_flush) f(cbo_clean) \
+  f(cbo_zero_mmu) f(cbo_inval_mmu) f(cbo_flush_mmu) f(cbo_clean_mmu)
 #else // CONFIG_RV_CBO
 #define CBO_INSTR_TERNARY(f)
 #endif // CONFIG_RV_CBO
@@ -193,6 +209,7 @@
 #ifdef CONFIG_RV_ZFH_MIN
 #define ZFH_MIN_INSTR_BINARY(f) \
   f(flh) f(fsh) \
+  f(flh_mmu) f(fsh_mmu) \
   f(fmv_x_h) f(fmv_h_x)  \
   f(fcvt_s_h) f(fcvt_h_s) f(fcvt_d_h) f(fcvt_h_d) 
 #else //CONFIG_RV_ZFH_MIN
@@ -336,8 +353,16 @@
 #define DASICS_INSTR_TERNARY(f)
 #endif  // CONFIG_RV_DASICS
 
+#ifdef CONFIG_RV_ZIHINTPAUSE
+#define ZIHINTPAUSE_INSTR_NULLARY(f) \
+  f(pause)
+#else
+#define ZIHINTPAUSE_INSTR_NULLARY(f)
+#endif //CONFIG_RV_ZIHINTPAUSE
+
 #define INSTR_NULLARY(f) \
   f(inv) f(rt_inv) f(nemu_trap) \
+  ZIHINTPAUSE_INSTR_NULLARY(f) \
   f(fence_i) f(fence) \
   SYS_INSTR_NULLARY(f)   \
   SYS_NMI_NULLARY(f) \
@@ -380,6 +405,7 @@
   f(p_blez) f(p_bgez) f(p_bltz) f(p_bgtz) \
   f(p_inc) f(p_dec) \
   AMO_INSTR_TERNARY(f) \
+  AMO_CAS_INSTR(f) \
   FLOAT_INSTR_TERNARY(f) \
   BITMANIP_INSTR_TERNARY(f) \
   CRYPTO_INSTR_TERNARY(f) \

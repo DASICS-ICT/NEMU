@@ -41,15 +41,6 @@ config LIGHTQS_DEBUG
   depends on LIGHTQS
   default n
 
-config BR_LOG
-  bool "Enable branch log"
-  default n
-
-config BR_LOG_SIZE
-  int "The size of branch log"
-  depends on BR_LOG
-  default 50000000
-
 config BBL_OFFSET_WITH_CPT
   hex "The offset of bbl / baremetal app with using gcpt"
   default 0x100000
@@ -91,5 +82,20 @@ config MEM_COMPRESS
   default n
   help
     Must have zlib installed.
+
+config ENABLE_CONFIG_MMIO_SPACE
+  bool "Configure the MMIO space"
+  default y
+  help
+    The MMIO space can be freely configured without the need to actually specify device.
+
+config MMIO_SPACE_RANGE
+  string "MMIO address space range"
+  default "0x0, 0x7FFFFFFF"
+  depends on ENABLE_CONFIG_MMIO_SPACE
+  help
+    Please use the upper and lower boundary pairing for configuration, the specified upper and lower boundary addresses are included. For example: 0x0, 0x7FFFFFFF, 0x100000000, 0x100001000
+    This will specify the MMIO address space area as [0x0, 0x7FFFFFFF] and [0x100000000, 0x100001000].
+    Specifying the MMIO address space is not the same as specifying the peripherals, this is just to ensure PMA for RISC-V.
 
 endmenu #MEMORY

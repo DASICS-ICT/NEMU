@@ -13,7 +13,9 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "rtl/fp.h"
 #include <common.h>
+#include <stdint.h>
 #ifdef CONFIG_RVV
 
 #include "vcompute_impl.h"
@@ -103,12 +105,105 @@ uint32_t vf_allowed_e16[] = {
   FWCVT_FF,       // vfwcvt_ffv
   FNCVT_FF,       // vfncvt_ffw
 #endif
+
+#ifdef CONFIG_RV_ZVFH
+  //33.13
+  FADD,
+  FSUB,
+  FRSUB,
+  //FWADD_W,//fwadd use fadd
+  //FWSUB_W,//fwsub use fsub
+  FMUL,
+  FDIV,
+  FRDIV,
+  FWMUL,
+  FMACC,
+  FNMACC,
+  FMSAC,
+  FNMSAC,
+  FMADD,
+  FNMADD,
+  FMSUB,
+  FNMSUB,
+  FWMACC,
+  FWNMACC,
+  FWMSAC,
+  FWNMSAC,
+  FSQRT,
+  FRSQRT7,
+  FREC7,
+  FMIN,
+  FMAX,
+  FSGNJ,
+  FSGNJN,
+  FSGNJX,
+  MFEQ,
+  MFNE,
+  MFLT,
+  MFLE,
+  MFGT,
+  MFGE,
+  FCLASS,
+  FMERGE,
+  //FMV_V_F == FMERGE,
+  FCVT_XUF,
+  FCVT_XF,
+  FCVT_RTZ_XUF,
+  FCVT_RTZ_XF,
+  FCVT_FXU,
+  FCVT_FX,
+  FWCVT_XUF,
+  FWCVT_XF,
+  FWCVT_RTZ_XUF,
+  FWCVT_RTZ_XF,
+  FWCVT_FXU,
+  FWCVT_FX,
+  FWCVT_FF,
+  FNCVT_XUF,
+  FNCVT_XF,
+  FNCVT_RTZ_XUF,
+  FNCVT_RTZ_XF,
+  FNCVT_FXU,
+  FNCVT_FX,
+  FNCVT_FF,
+  FNCVT_ROD_FF,
+  FREDOSUM,
+  FREDUSUM,
+  FREDMAX,
+  FREDMIN,
+  FWREDOSUM,
+  FWREDUSUM,
+  FSLIDE1UP, 
+  FSLIDE1DOWN,
+#endif
 };
+
+# ifdef CONFIG_RV_ZVFH
+
+uint32_t vf_allowed_e8[] = {
+  FWCVT_FXU,
+  FWCVT_FX,
+  FNCVT_XUF,
+  FNCVT_XF,
+  FNCVT_RTZ_XUF,
+  FNCVT_RTZ_XF,
+};
+#endif
 
 static bool is_vf_allowed_e16(uint32_t opcode) {
   int len = sizeof(vf_allowed_e16) / sizeof(vf_allowed_e16[0]);
   for (int i = 0; i < len; i++) {
     if (vf_allowed_e16[i] == opcode) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool is_vf_allowed_e8(uint32_t opcode) {
+  int len = sizeof(vf_allowed_e8) / sizeof(vf_allowed_e8[0]);
+  for (int i = 0; i < len; i++) {
+    if (vf_allowed_e8[i] == opcode) {
       return true;
     }
   }
@@ -414,7 +509,10 @@ void arthimetic_instr(int opcode, int is_signed, int widening, int narrow, int d
     }
   }
   check_vstart_exception(s);
-  if(check_vstart_ignore(s)) return;
+  if(check_vstart_ignore(s)) {
+    vp_set_dirty();
+    return;
+  }
   for(word_t idx = vstart->val; idx < vl->val; idx ++) {
     // mask
     rtlreg_t mask = get_mask(0, idx);
@@ -509,8 +607,14 @@ void arthimetic_instr(int opcode, int is_signed, int widening, int narrow, int d
         break;
       case SRC_VI :
         shift_mask = 0x1f;
-        if(is_signed) rtl_li(s, s1, s->isa.instr.v_opsimm.v_simm5);
-        else {
+        if(is_signed) {
+          if (opcode == NCLIP) {
+            // vnclip use unsigned imm, signed vs2
+            rtl_li(s, s1, s->isa.instr.v_opimm.v_imm5);
+          } else {
+            rtl_li(s, s1, s->isa.instr.v_opsimm.v_simm5);
+          }
+        } else {
           if (opcode == MSLEU || opcode == MSGTU || opcode == SADDU) {
             rtl_li(s, s1, s->isa.instr.v_opsimm.v_simm5);
             switch (vtype->vsew) {
@@ -1026,6 +1130,8 @@ void floating_arthimetic_instr(int opcode, int is_signed, int widening, int dest
   require_float();
   require_vector(true);
   uint32_t rm = isa_fp_get_frm();
+  isa_fp_rm_check(rm);
+
   if (dest_mask) {
     if (s->src_vmode == SRC_VV) {
       vector_mvv_check(s, true);
@@ -1061,21 +1167,49 @@ void floating_arthimetic_instr(int opcode, int is_signed, int widening, int dest
   }
 
   // check whether the fp16 instruction is supported
-  if (vtype->vsew == 1 && !is_vf_allowed_e16(opcode)) {
-    Loge("zvh extension not supported");
+#ifdef CONFIG_RV_ZVFH
+  if ((vtype->vsew == 1 && !is_vf_allowed_e16(opcode)) || (vtype->vsew == 0 && !is_vf_allowed_e8(opcode))) {
     longjmp_exception(EX_II);
   }
-
+#else
+  if (vtype->vsew == 1 && !is_vf_allowed_e16(opcode)) {
+    Loge("ZVFH extension is not enabled, please make menuconfig!");
+    longjmp_exception(EX_II);
+  }
+#endif
   word_t FPCALL_TYPE = FPCALL_W64;
   // fpcall type
   switch (vtype->vsew) {
+#ifdef CONFIG_RV_ZVFH
+    case 0 :
+      switch (widening) {
+        case vdWidening  : FPCALL_TYPE = FPCALL_W8; break;
+        case vdNarrow    : FPCALL_TYPE = FPCALL_W16; break;
+      }
+      break;   
+#else
     case 0 : Loge("f8 not supported"); longjmp_exception(EX_II); break;
+#endif
+
+#ifdef CONFIG_RV_ZVFH
+    case 1 :
+      switch (widening) {
+        case noWidening  :
+        case vdWidening  : FPCALL_TYPE = FPCALL_W16; break;
+        case vdNarrow    : FPCALL_TYPE = FPCALL_W32; break;
+        case vsdWidening : FPCALL_TYPE = FPCALL_W16_to_32; break;//fwadd fwsub
+        case vsWidening  : FPCALL_TYPE = FPCALL_SRC2_W16_to_32; break;
+      }
+      break;
+
+#else
     case 1 :
       switch (widening) {
         case vdWidening  : FPCALL_TYPE = FPCALL_W16; break;
         case vdNarrow    : FPCALL_TYPE = FPCALL_W32; break;
       }
       break;
+#endif
     case 2 : 
       switch (widening) {
         case vsdWidening : FPCALL_TYPE = FPCALL_W32_to_64; break;
@@ -1371,6 +1505,8 @@ void reduction_instr(int opcode, int is_signed, int wide, Decode *s) {
 }
 
 void float_reduction_instr(int opcode, int widening, Decode *s) {
+  isa_fp_rm_check(isa_fp_get_frm());
+
   vector_reduction_check(s, widening);
   if (widening)
     get_vreg(id_src->reg, 0, s1, vtype->vsew+1, vtype->vlmul, 0, 0);
@@ -1385,7 +1521,16 @@ void float_reduction_instr(int opcode, int widening, Decode *s) {
   // fpcall type
   switch (vtype->vsew) {
     case 0 : Loge("f8 not supported"); longjmp_exception(EX_II); break;
-    case 1 : Loge("ZVFH not supported"); longjmp_exception(EX_II); break;
+#ifdef CONFIG_RV_ZVFH
+    case 1 :
+      switch (widening) {
+        case vsWidening : FPCALL_TYPE = FPCALL_SRC1_W16_to_32; break;
+        case noWidening : FPCALL_TYPE = FPCALL_W16; break;
+      }
+      break;
+#else
+    case 1 : Loge("ZVFH extension is not enabled, please make menuconfig!"); longjmp_exception(EX_II); break;
+#endif
     case 2 : 
       switch (widening) {
         case vsWidening : FPCALL_TYPE = FPCALL_SRC1_W32_to_64; break;
@@ -1479,7 +1624,11 @@ void float_reduction_step2(uint64_t src, Decode *s) {
   // fpcall type
   switch (vtype->vsew) {
     case 0 : Loge("f8 not supported"); longjmp_exception(EX_II); break;
-    case 1 : Loge("ZVFH not supported"); longjmp_exception(EX_II); break;
+#ifdef CONFIG_RV_ZVFH
+    case 1 : FPCALL_TYPE = FPCALL_W16; break;
+#else
+    case 1 : Loge("ZVFH extension is not enabled, please make menuconfig!"); longjmp_exception(EX_II); break;
+#endif
     case 2 : FPCALL_TYPE = FPCALL_W32; break;
     case 3 : FPCALL_TYPE = FPCALL_W64; break;
     default: Loge("other fp type not supported"); longjmp_exception(EX_II); break;
@@ -1504,7 +1653,11 @@ void float_reduction_step1(uint64_t src1, uint64_t src2, Decode *s) {
   // fpcall type
   switch (vtype->vsew) {
     case 0 : Loge("f8 not supported"); longjmp_exception(EX_II); break;
-    case 1 : Loge("ZVFH not supported"); longjmp_exception(EX_II); break;
+#ifdef CONFIG_RV_ZVFH
+    case 1 : FPCALL_TYPE = FPCALL_W16; break;
+#else
+    case 1 : Loge("ZVFH extension is not enabled, please make menuconfig!"); longjmp_exception(EX_II); break;
+#endif
     case 2 : FPCALL_TYPE = FPCALL_W32; break;
     case 3 : FPCALL_TYPE = FPCALL_W64; break;
     default: Loge("other fp type not supported"); longjmp_exception(EX_II); break;
@@ -1521,6 +1674,7 @@ void float_reduction_step1(uint64_t src1, uint64_t src2, Decode *s) {
 }
 
 void float_reduction_computing(Decode *s) {
+  isa_fp_rm_check(isa_fp_get_frm());
   vector_reduction_check(s, false);
   word_t FPCALL_TYPE = FPCALL_W64;
   uint64_t active_num = 0;
@@ -1528,7 +1682,11 @@ void float_reduction_computing(Decode *s) {
   // fpcall type
   switch (vtype->vsew) {
     case 0 : Loge("f8 not supported"); longjmp_exception(EX_II); break;
-    case 1 : Loge("ZVFH not supported"); longjmp_exception(EX_II); break;
+#ifdef CONFIG_RV_ZVFH
+    case 1 : FPCALL_TYPE = FPCALL_W16; break;
+#else
+    case 1 : Loge("ZVFH extension is not enabled, please make menuconfig!"); longjmp_exception(EX_II); break;
+#endif
     case 2 : FPCALL_TYPE = FPCALL_W32; break;
     case 3 : FPCALL_TYPE = FPCALL_W64; break;
     default: Loge("other fp type not supported"); longjmp_exception(EX_II); break;

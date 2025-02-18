@@ -16,6 +16,7 @@
 
 #include <isa.h>
 #include <memory/paddr.h>
+#include <memory/store_queue_wrapper.h>
 #include <memory/sparseram.h>
 #include <cpu/cpu.h>
 #include <difftest.h>
@@ -167,6 +168,11 @@ int difftest_store_commit(uint64_t *saddr, uint64_t *sdata, uint8_t *smask) {
 #endif
 }
 #endif
+#ifdef CONFIG_RV_SMDBLTRP
+bool difftest_raise_critical_error() {
+  return cpu.critical_error;
+}
+#endif
 
 void difftest_exec(uint64_t n) {
   cpu_exec(n);
@@ -208,7 +214,7 @@ void difftest_guided_exec(void * guide) {
 
 #ifdef CONFIG_BR_LOG
 void *difftest_query_br_log() {
-  return (void *)isa_difftest_query_br_log();
+  return br_log_query();
 }
 #endif // CONFIG_BR_LOG
 
@@ -252,6 +258,35 @@ void difftest_raise_mhpmevent_overflow(uint64_t mhpmeventOverflowVec) {
 void difftest_non_reg_interrupt_pending(void *nonRegInterruptPending) {
   memcpy(&cpu.non_reg_interrupt_pending, nonRegInterruptPending, sizeof(struct NonRegInterruptPending));
   isa_update_mip(cpu.non_reg_interrupt_pending.lcofi_req);
+#ifdef CONFIG_RV_IMSIC
+  if (cpu.non_reg_interrupt_pending.platform_irp_meip || cpu.non_reg_interrupt_pending.from_aia_meip ||
+      cpu.non_reg_interrupt_pending.platform_irp_seip || cpu.non_reg_interrupt_pending.from_aia_seip) {
+    isa_update_external_interrupt_select();
+  }
+  isa_update_mtopi();
+  isa_update_stopi();
+  isa_update_vstopi();
+#endif
+}
+
+#ifdef CONFIG_DIFFTEST_STORE_COMMIT
+void difftest_get_store_event_other_info(void *info) {
+  *(uint64_t*)info = get_store_commit_info().pc;
+}
+#endif //CONFIG_DIFFTEST_STORE_COMMIT
+
+
+
+void difftest_sync_aia(void *src) {
+#ifdef CONFIG_RV_IMSIC
+  memcpy(&cpu.fromaia, src, sizeof(struct FromAIA));
+  isa_update_vstopi();
+  isa_update_hgeip();
+#endif
+}
+
+void difftest_sync_custom_mflushpwr(bool l2FlushDone) {
+  isa_sync_custom_mflushpwr(l2FlushDone);
 }
 
 void difftest_enable_debug() {
@@ -276,6 +311,13 @@ void difftest_runahead_init() {
 }
 
 void difftest_init() {
+#ifdef CONFIG_SHARE_OUTPUT_LOG_TO_FILE
+  char log_file_name[20];
+  sprintf(log_file_name, "nemu-hart-%d.log", PMEM_HARTID);
+  void init_log(const char *log_file, const bool fast_log, const bool small_log);
+  init_log(log_file_name, false, false);
+#endif // CONFIG_SHARE_OUTPUT_LOG_TO_FILE
+
   init_mem();
 
   /* Perform ISA dependent initialization. */

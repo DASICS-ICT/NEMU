@@ -70,18 +70,6 @@ enum {
 
 #define INTR_BIT (1ULL << 63)
 
-#define MIP_SSIP   (1ULL << IRQ_SSIP)
-#define MIP_VSSIP  (1ULL << IRQ_VSSIP)
-#define MIP_MSIP   (1ULL << IRQ_MSIP)
-#define MIP_STIP   (1ULL << IRQ_STIP)
-#define MIP_VSTIP  (1ULL << IRQ_VSTIP)
-#define MIP_MTIP   (1ULL << IRQ_MTIP)
-#define MIP_SEIP   (1ULL << IRQ_SEIP)
-#define MIP_VSEIP  (1ULL << IRQ_VSEIP)
-#define MIP_MEIP   (1ULL << IRQ_MEIP)
-#define MIP_SGEIP  (1ULL << IRQ_SGEI)
-#define MIP_LCOFIP (1ULL << IRQ_LCOFI)
-
 #define VSI_MASK   (MIP_VSSIP | MIP_VSTIP | MIP_VSEIP)
 #define HSI_MASK   (VSI_MASK | MIP_SGEIP)
 #define SI_MASK    (MIP_SSIP | MIP_STIP | MIP_SEIP)
@@ -93,6 +81,7 @@ enum {
 
 word_t raise_intr(word_t NO, vaddr_t epc);
 #define return_on_mem_ex() do { if (cpu.mem_exception != MEM_OK) return; } while (0)
+word_t gen_gva(word_t NO, bool is_hls, bool is_mem_access_virtual);
 bool intr_deleg_S(word_t exceptionNO);
 bool intr_deleg_VS(word_t exceptionNO);
 

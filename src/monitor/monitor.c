@@ -32,7 +32,7 @@ void init_log(const char *log_file, const bool fast_log, const bool small_log);
 void init_mem();
 void init_regex();
 void init_wp_pool();
-void init_difftest(char *ref_so_file, long img_size, int port);
+void init_difftest(char *ref_so_file, long img_size, long flash_size, int port);
 void init_device();
 
 static char *log_file = NULL;
@@ -40,9 +40,11 @@ bool small_log = false;
 bool fast_log = false;
 static char *diff_so_file = NULL;
 static char *img_file = NULL;
+static char *flash_image = NULL;
 static int batch_mode = false;
 static int difftest_port = 1234;
 char *max_instr = NULL;
+static bool store_cpt_in_flash = false;
 char compress_file_format = 0; // default is gz
 
 extern char *mapped_cpt_file;  // defined in paddr.c
@@ -73,7 +75,7 @@ void sig_handler(int signum) {
       recvd_manual_oneshot_cpt = true;
     } else if (checkpoint_state==ManualUniformCheckpointing) {
       recvd_manual_uniform_cpt = true;
-      reset_inst_counters();
+      start_profiling();
     } else {
       panic("Received SIGINT when not waiting for it");
     }
@@ -98,8 +100,9 @@ static inline int parse_args(int argc, char *argv[]) {
     {"workload-name"      , required_argument, NULL, 'w'},
     {"config-name"        , required_argument, NULL, 'C'},
 
+    {"flash-image"        , required_argument, NULL, 16},
+
     // restore cpt
-    {"restore"            , no_argument      , NULL, 'c'},
     {"cpt-restorer"       , required_argument, NULL, 'r'},
     {"map-img-as-outcpt"  , no_argument      , NULL, 13},
 
@@ -113,6 +116,7 @@ static inline int parse_args(int argc, char *argv[]) {
     {"cpt-mmode"          , no_argument      , NULL, 7},
     {"map-cpt"            , required_argument, NULL, 10},
     {"checkpoint-format"  , required_argument, NULL, 12},
+    {"store-cpt-in-flash", no_argument, NULL, 17},
 
     // profiling
     {"simpoint-profile"   , no_argument      , NULL, 3},
@@ -148,9 +152,16 @@ static inline int parse_args(int argc, char *argv[]) {
       case 'w': workload_name = optarg; break;
       case 'C': config_name = optarg; break;
 
-      case 'c':
-        checkpoint_restoring = true;
-        Log("Restoring from checkpoint");
+      case 16:
+        flash_image = optarg;
+        break;
+
+      case 17:
+      #ifdef CONFIG_HAS_FLASH
+        store_cpt_in_flash = true;
+      #else
+        assert(0);
+      #endif
         break;
 
       case 'r':
@@ -259,20 +270,21 @@ static inline int parse_args(int argc, char *argv[]) {
         printf("\t-w,--workload=WORKLOAD  the name of sub_dir of this run in STAT_DIR\n");
         printf("\t-C,--config=CONFIG      running configuration\n");
 
-        printf("\t-c,--restore            restoring from CPT FILE\n");
         printf("\t-r,--cpt-restorer=R     binary of gcpt restorer\n");
 //        printf("\t--map-img-as-outcpt     map to image as output checkpoint, do not truncate it.\n"); //comming back soon
 
-        printf("\t-S,--simpoint-dir=SIMPOINT_DIR   simpoints dir\n");
+        printf("\t-S,--simpoint-dir=SIMPOINT_DIR        simpoints dir\n");
         printf("\t-u,--uniform-cpt        uniformly take cpt with fixed interval\n");
         printf("\t--cpt-interval=INTERVAL cpt interval: the profiling period for simpoint; the checkpoint interval for uniform cpt\n");
         printf("\t--warmup-interval=INTERVAL warmup interval: the warmup interval for SimPoint cpt\n");
         printf("\t--cpt-mmode             force to take cpt in mmode, which might not work.\n");
         printf("\t--manual-oneshot-cpt    Manually take one-shot cpt by send signal.\n");
         printf("\t--manual-uniform-cpt    Manually take uniform cpt by send signal.\n");
-        printf("\t--checkpoint-format     Specify the checkpoint format('gz' or 'zstd'), default: 'gz'.\n");
+        printf("\t--checkpoint-format=FORMAT            Specify the checkpoint format('gz' or 'zstd'), default: 'gz'.\n");
+        printf("\t--store-cpt-in-flash    Use this option to save the checkpoint to flash storage.\n");
 //        printf("\t--map-cpt               map to this file as pmem, which can be treated as a checkpoint.\n"); //comming back soon
 
+        printf("\t--flash-image=FLASH_IMAGE             image path of flash\n");
         printf("\t--simpoint-profile      simpoint profiling\n");
         printf("\t--dont-skip-boot        profiling/checkpoint immediately after boot\n");
         printf("\t--mem_use_record_file   result output file for analyzing the memory use segment\n");
@@ -310,19 +322,18 @@ void init_monitor(int argc, char *argv[]) {
   if (map_image_as_output_cpt) {
     assert(!mapped_cpt_file);
     mapped_cpt_file = img_file;
-    checkpoint_restoring = true;
   }
 
   extern void init_path_manager();
   extern void simpoint_init();
-  extern void init_serializer();
+  extern void init_serializer(bool store_cpt_in_flash);
 
   //checkpoint and profiling set output
   bool output_features_enabled = checkpoint_state != NoCheckpoint || profiling_state == SimpointProfiling;
   if (output_features_enabled) {
     init_path_manager();
     simpoint_init();
-    init_serializer();
+    init_serializer(store_cpt_in_flash);
   }
 
   /* Initialize memory. */
@@ -338,40 +349,15 @@ void init_monitor(int argc, char *argv[]) {
   /* Perform ISA dependent initialization. */
   init_isa();
 
-  int64_t img_size = 0;
-
-  assert(img_file);
-  uint64_t bbl_start = RESET_VECTOR;
-  if (restorer) {
-    bbl_start += CONFIG_BBL_OFFSET_WITH_CPT;
-  }
-  img_size = load_img(img_file, "image (checkpoint/bare metal app/bbl) form cmdline", bbl_start, 0);
-
-  if (restorer) {
-    FILE *restore_fp = fopen(restorer, "rb");
-    Assert(restore_fp, "Can not open '%s'", restorer);
-
-    int restore_size = 0;
-    int restore_jmp_inst = 0;
-
-    int ret = fread(&restore_jmp_inst, sizeof(int), 1, restore_fp);
-    assert(ret == 1);
-    assert(restore_jmp_inst != 0);
-
-    ret = fread(&restore_size, sizeof(int), 1, restore_fp);
-    assert(ret == 1);
-    assert(restore_size != 0);
-
-    fclose(restore_fp);
-
-    load_img(restorer, "Gcpt restorer form cmdline", RESET_VECTOR, restore_size);
-  }
-
-  /* Initialize differential testing. */
-  init_difftest(diff_so_file, img_size, difftest_port);
-
   /* Initialize devices. */
   init_device();
+
+  int64_t img_size = 0;
+  int64_t flash_size = 0;
+  fill_memory(img_file, flash_image, restorer, &img_size, &flash_size);
+
+  /* Initialize differential testing. */
+  init_difftest(diff_so_file, img_size, flash_size, difftest_port);
 
 #endif
 
