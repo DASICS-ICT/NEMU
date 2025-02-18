@@ -1927,8 +1927,8 @@ static void csr_write(uint32_t csrid, word_t src) {
 
 #ifdef CONFIG_RV_DASICS
     case CSR_DUMCFG: dumcfg->val = mask_bitset(dumcfg->val, DUMCFG_MASK, src); break;
-    case CSR_DLBOUND0 ... CSR_DLBOUND0 + MAX_DASICS_LIBBOUNDS*2:
-    case CSR_DJBOUND0 ... CSR_DJBOUND0 + MAX_DASICS_JUMPBOUNDS*2:
+    case CSR_DLBOUND0 ... CSR_DLBOUND0 + MAX_DASICS_LIBBOUNDS*2 - 1:
+    case CSR_DJBOUND0 ... CSR_DJBOUND0 + MAX_DASICS_JUMPBOUNDS*2 - 1:
       *dest = src & ~BOUND_ADDR_ALIGN; break;
 
 #endif  // CONFIG_RV_DASICS
