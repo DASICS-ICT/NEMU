@@ -564,8 +564,8 @@ static int execute(int n) {
 // attention: here our utimer-- logic is not executed per cycle,
 // this may differ from HDL, so don't use utimer when difftest.
   if (utimer->val > 1 && cpu.mode == MODE_U) utimer->val--;
-  else if (utimer->val == 1) mip->val |= 1 << 8; //IRQ_UEIP
-  else  mip->val &= ~(1 << 8); // utimer->val == 0
+  else if (utimer->val == 1) mip->val |= 1 << 4; //IRQ_UTIP
+  else  mip->val &= ~(1 << 4); // utimer->val == 0
 #endif //CONFIG_RVN
 
 
