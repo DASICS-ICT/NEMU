@@ -67,6 +67,19 @@
 #define MPK_CSRS(f)
 #endif
 
+// CSRs for Zicfilp (Control Flow Integrity - Landing Pad) extension
+#ifdef CONFIG_RV_ZICFILP
+  #ifdef CONFIG_RV_H_EXTENSION
+  #define ZICFILP_CSRS(f) \
+    f(menvcfg,     0x30a) f(senvcfg,     0x10a) f(henvcfg,     0x60a)
+  #else
+  #define ZICFILP_CSRS(f) \
+    f(menvcfg,     0x30a) f(senvcfg,     0x10a)
+  #endif  // CONFIG_RV_H_EXTENSION
+#else
+#define ZICFILP_CSRS(f)
+#endif  // CONFIG_RV_ZICFILP
+
 #ifndef CONFIG_SHARE
 #define CSRS(f) \
   f(mstatus    , 0x300) f(misa       , 0x301) f(medeleg    , 0x302) f(mideleg    , 0x303) \
@@ -75,6 +88,7 @@
   f(mtval      , 0x343) f(mip        , 0x344) \
   CSRS_PMP(f) \
   f(mhartid    , 0xf14) \
+  ZICFILP_CSRS(f) \
   f(sstatus    , 0x100) \
   f(sie        , 0x104) f(stvec      , 0x105) f(scounteren , 0x106) \
   f(sscratch   , 0x140) f(sepc       , 0x141) f(scause     , 0x142) \
@@ -91,6 +105,7 @@
   f(mtval      , 0x343) f(mip        , 0x344) \
   CSRS_PMP(f) \
   f(mhartid    , 0xf14) \
+  ZICFILP_CSRS(f) \
   f(sstatus    , 0x100) \
   f(sie        , 0x104) f(stvec      , 0x105) f(scounteren , 0x106) \
   f(sscratch   , 0x140) f(sepc       , 0x141) f(scause     , 0x142) \
@@ -403,6 +418,55 @@ CSR_STRUCT_START(srnctl)
   uint64_t reserve :63;
 CSR_STRUCT_END(srnctl)
 #endif
+
+// Zicfilp: menvcfg register structure
+#ifdef CONFIG_RV_ZICFILP
+CSR_STRUCT_START(menvcfg)
+  uint64_t fiom : 1;   // Fence of I/O implies Memory
+  uint64_t pad0 : 1;   // Reserved
+  uint64_t lpe  : 1;   // Landing Pad Enable (bit 2) - Zicfilp
+  uint64_t sse  : 1;   // Shadow Stack Enable (bit 3) - Zicfiss
+  uint64_t cbie : 2;   // Cache Block Invalidate instruction Enable
+  uint64_t cbcfe: 1;   // Cache Block Clean and Flush instruction Enable
+  uint64_t cbze : 1;   // Cache Block Zero instruction Enable
+  uint64_t pad1 :54;   // Reserved for future use
+  uint64_t pbmte: 1;   // Page Based Memory Types Enable (bit 62)
+  uint64_t stce : 1;   // STimecmp Enable (bit 63)
+CSR_STRUCT_END(menvcfg)
+
+CSR_STRUCT_START(senvcfg)
+  uint64_t fiom : 1;   // Fence of I/O implies Memory
+  uint64_t pad0 : 1;   // Reserved
+  uint64_t lpe  : 1;   // Landing Pad Enable (bit 2) - Zicfilp
+  uint64_t sse  : 1;   // Shadow Stack Enable (bit 3) - Zicfiss
+  uint64_t cbie : 2;   // Cache Block Invalidate instruction Enable
+  uint64_t cbcfe: 1;   // Cache Block Clean and Flush instruction Enable
+  uint64_t cbze : 1;   // Cache Block Zero instruction Enable
+  uint64_t pad1 :56;   // Reserved for future use
+CSR_STRUCT_END(senvcfg)
+
+// Optional: Hypervisor environment config (if H extension is enabled)
+#ifdef CONFIG_RV_H_EXTENSION
+CSR_STRUCT_START(henvcfg)
+  uint64_t fiom : 1;
+  uint64_t pad0 : 1;
+  uint64_t lpe  : 1;   // Landing Pad Enable
+  uint64_t sse  : 1;   // Shadow Stack Enable
+  uint64_t cbie : 2;
+  uint64_t cbcfe: 1;
+  uint64_t cbze : 1;
+  uint64_t pad1 :55;
+  uint64_t pbmte: 1;
+  uint64_t stce : 1;
+CSR_STRUCT_END(henvcfg)
+#endif  // CONFIG_RV_H_EXTENSION
+
+// Zicfilp specific constants
+#define MENVCFG_LPE   (1UL << 2)  // Landing Pad Enable bit
+#define SENVCFG_LPE   (1UL << 2)  // Landing Pad Enable bit
+#define HENVCFG_LPE   (1UL << 2)  // Landing Pad Enable bit
+
+#endif  // CONFIG_RV_ZICFILP
 
 #ifdef CONFIG_RV_DASICS
 CSR_STRUCT_START(upkru)
@@ -774,6 +838,9 @@ MAP(CSRS, CSRS_DECL)
 #ifdef CONFIG_RV_ARCH_CSRS
   MAP(ARCH_CSRS, CSRS_DECL)
 #endif // CONFIG_RV_ARCH_CSRS
+#ifdef CONFIG_RV_ZICFILP
+  MAP(ZICFILP_CSRS, CSRS_DECL)
+#endif // CONFIG_RV_ZICFILP
 #ifdef CONFIG_RV_DASICS
   MAP(DASICS_CSRS, CSRS_DECL)
 #endif // CONFIG_RV_DASICS
@@ -799,6 +866,25 @@ uint8_t pmpcfg_from_index(int idx);
 word_t pmpaddr_from_index(int idx);
 word_t pmpaddr_from_csrid(int id);
 word_t pmp_tor_mask();
+
+// Zicfilp helper functions
+#ifdef CONFIG_RV_ZICFILP
+// Check if Zicfilp is enabled for current privilege mode
+bool zicfilp_lp_enabled();
+
+// Set Expected Landing Pad (ELP) state
+void zicfilp_set_elp(uint32_t expected_label);
+
+// Clear Expected Landing Pad (ELP) state
+void zicfilp_clear_elp();
+
+// Validate landing pad at target address
+bool zicfilp_validate_lpad(vaddr_t target_pc, uint32_t expected_label);
+
+// Trigger Software Check Exception
+void zicfilp_trigger_exception(vaddr_t fault_pc);
+
+#endif  // CONFIG_RV_ZICFILP
 
 // DASICS
 #ifdef CONFIG_RV_DASICS
