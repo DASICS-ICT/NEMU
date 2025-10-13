@@ -32,6 +32,34 @@ config RV_DASICS
   bool "Enable DASICS Protection Mechanism for RV64"
   default y
 
+config RV_ZICFILP
+  bool "Enable RISC-V Zicfilp Extension (Landing Pad for CFI)"
+  default n
+  help
+    Enable support for RISC-V Zicfilp (Control-Flow Integrity Landing Pad)
+    extension. This provides forward-edge control flow integrity through
+    landing pad instructions that mark valid indirect jump/call targets.
+
+    When enabled, indirect jumps and calls must target valid landing pad
+    (LPAD) instructions, preventing Return-Oriented Programming (ROP) attacks.
+
+    Ratified as part of RISC-V privileged specification v1.13.
+
+    If unsure, say N.
+
+config RV_ZICFILP_LABEL_CHECK
+  depends on RV_ZICFILP
+  bool "Enable landing pad label checking"
+  default y
+  help
+    Enable strict label matching for landing pads using the x7 register.
+    When enabled, the landing pad label must match the expected value
+    stored in x7, providing stronger control flow integrity guarantees.
+
+    This adds additional overhead but increases security.
+
+    If unsure, say Y.
+
 config RV_PMP_CSR
   bool "Enable PMP CSR Read & Write"
   default y
