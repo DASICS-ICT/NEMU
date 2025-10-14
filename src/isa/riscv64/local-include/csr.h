@@ -433,14 +433,14 @@ CSR_STRUCT_END(srnctl)
 // Zicfilp: menvcfg register structure
 #ifdef CONFIG_RV_ZICFILP
 CSR_STRUCT_START(menvcfg)
-  uint64_t fiom : 1;   // Fence of I/O implies Memory
-  uint64_t pad0 : 1;   // Reserved
+  uint64_t fiom : 1;   // Fence of I/O implies Memory (bit 0)
+  uint64_t pad0 : 1;   // Reserved (bit 1)
   uint64_t lpe  : 1;   // Landing Pad Enable (bit 2) - Zicfilp
-  uint64_t sse  : 1;   // Shadow Stack Enable (bit 3) - Zicfiss
-  uint64_t cbie : 2;   // Cache Block Invalidate instruction Enable
-  uint64_t cbcfe: 1;   // Cache Block Clean and Flush instruction Enable
-  uint64_t cbze : 1;   // Cache Block Zero instruction Enable
-  uint64_t pad1 :54;   // Reserved for future use
+  uint64_t pad1 : 1;   // WPRI (bit 3) - Reserved for Zicfiss SSE
+  uint64_t cbie : 2;   // Cache Block Invalidate instruction Enable (bits 4-5)
+  uint64_t cbcfe: 1;   // Cache Block Clean and Flush instruction Enable (bit 6)
+  uint64_t cbze : 1;   // Cache Block Zero instruction Enable (bit 7)
+  uint64_t pad2 :54;   // Reserved for future use (bits 8-61)
   uint64_t pbmte: 1;   // Page Based Memory Types Enable (bit 62)
   uint64_t stce : 1;   // STimecmp Enable (bit 63)
 CSR_STRUCT_END(menvcfg)
@@ -449,11 +449,11 @@ CSR_STRUCT_START(senvcfg)
   uint64_t fiom : 1;   // Fence of I/O implies Memory
   uint64_t pad0 : 1;   // Reserved
   uint64_t lpe  : 1;   // Landing Pad Enable (bit 2) - Zicfilp
-  uint64_t sse  : 1;   // Shadow Stack Enable (bit 3) - Zicfiss
-  uint64_t cbie : 2;   // Cache Block Invalidate instruction Enable
-  uint64_t cbcfe: 1;   // Cache Block Clean and Flush instruction Enable
-  uint64_t cbze : 1;   // Cache Block Zero instruction Enable
-  uint64_t pad1 :56;   // Reserved for future use
+  uint64_t pad1 : 1;   // WPRI (bit 3) - Reserved for Zicfiss SSE
+  uint64_t cbie : 2;   // Cache Block Invalidate instruction Enable (bits 4-5)
+  uint64_t cbcfe: 1;   // Cache Block Clean and Flush instruction Enable (bit 6)
+  uint64_t cbze : 1;   // Cache Block Zero instruction Enable (bit 7)
+  uint64_t pad2 :56;   // Reserved for future use (bits 8-63)
 CSR_STRUCT_END(senvcfg)
 
 // Optional: Hypervisor environment config (if H extension is enabled)

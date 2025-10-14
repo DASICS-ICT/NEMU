@@ -741,7 +741,16 @@ static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
       switch (return_mode) {
         case MODE_M: lpe_enabled = (mseccfg->mlpe != 0); break;
         case MODE_S: lpe_enabled = (menvcfg->lpe != 0); break;
-        case MODE_U: lpe_enabled = (senvcfg->lpe != 0); break;
+        case MODE_U:
+          // In U-mode: check senvcfg.LPE if S-mode exists, else menvcfg.LPE (spec Table 3)
+#ifdef CONFIG_MODE_USER
+          // User-only build: no S-mode, fall back to menvcfg.LPE
+          lpe_enabled = (menvcfg->lpe != 0);
+#else
+          // Full system: S-mode exists, use senvcfg.LPE
+          lpe_enabled = (senvcfg->lpe != 0);
+#endif
+          break;
       }
       cpu.elp = lpe_enabled ? mstatus->spelp : 0;
       mstatus->spelp = 0;  // Clear SPELP after restoration
@@ -765,7 +774,16 @@ static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
       switch (return_mode) {
         case MODE_M: lpe_enabled = (mseccfg->mlpe != 0); break;
         case MODE_S: lpe_enabled = (menvcfg->lpe != 0); break;
-        case MODE_U: lpe_enabled = (senvcfg->lpe != 0); break;
+        case MODE_U:
+          // In U-mode: check senvcfg.LPE if S-mode exists, else menvcfg.LPE (spec Table 3)
+#ifdef CONFIG_MODE_USER
+          // User-only build: no S-mode, fall back to menvcfg.LPE
+          lpe_enabled = (menvcfg->lpe != 0);
+#else
+          // Full system: S-mode exists, use senvcfg.LPE
+          lpe_enabled = (senvcfg->lpe != 0);
+#endif
+          break;
       }
       cpu.elp = lpe_enabled ? mstatus->mpelp : 0;
       mstatus->mpelp = 0;  // Clear MPELP after restoration
@@ -881,8 +899,14 @@ bool zicfilp_lp_enabled() {
       // In S-mode, check menvcfg.LPE
       return (menvcfg->lpe != 0);
     case MODE_U:
-      // In U-mode, check senvcfg.LPE
+      // In U-mode: check senvcfg.LPE if S-mode exists, else menvcfg.LPE (spec Table 3)
+#ifdef CONFIG_MODE_USER
+      // User-only build: no S-mode, fall back to menvcfg.LPE
+      return (menvcfg->lpe != 0);
+#else
+      // Full system: S-mode exists, use senvcfg.LPE
       return (senvcfg->lpe != 0);
+#endif
 #ifdef CONFIG_RV_H_EXTENSION
     case MODE_H:
       // In HS-mode, check menvcfg.LPE

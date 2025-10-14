@@ -27,7 +27,8 @@
 //   - If label != 0: Check x7[19:0] == label
 static inline def_DHelper(lpad) {
   // Extract 20-bit label from imm[31:12]
-  uint32_t label = (uint32_t)s->isa.instr.u.simm31_12;
+  // Mask to 20 bits to prevent sign extension (spec §3.4: LPL is 20-bit unsigned)
+  uint32_t label = (uint32_t)s->isa.instr.u.simm31_12 & 0xFFFFF;
   
   // Operand 1: x7 register (conditional source)
   // Only read x7 if label != 0 (runtime label checking needed)

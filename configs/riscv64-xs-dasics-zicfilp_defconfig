@@ -26,10 +26,8 @@ CONFIG_RVN=y
 CONFIG_RV_DEBUG=y
 CONFIG_RV_DASICS=y
 # ============ Control-Flow Integrity Extensions ============
-# Zicfilp (新增的CFI landing pad)
+# Zicfilp (Control-Flow Integrity Landing Pad)
 CONFIG_RV_ZICFILP=y
-# 默认启用标签对比检查
-CONFIG_RV_ZICFILP_LABEL_CHECK=y
 # ===========================================================
 
 # CONFIG_RVV is not set

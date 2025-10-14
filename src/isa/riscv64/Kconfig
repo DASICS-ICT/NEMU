@@ -47,19 +47,6 @@ config RV_ZICFILP
 
     If unsure, say N.
 
-config RV_ZICFILP_LABEL_CHECK
-  depends on RV_ZICFILP
-  bool "Enable landing pad label checking"
-  default y
-  help
-    Enable strict label matching for landing pads using the x7 register.
-    When enabled, the landing pad label must match the expected value
-    stored in x7, providing stronger control flow integrity guarantees.
-
-    This adds additional overhead but increases security.
-
-    If unsure, say Y.
-
 config RV_PMP_CSR
   bool "Enable PMP CSR Read & Write"
   default y
