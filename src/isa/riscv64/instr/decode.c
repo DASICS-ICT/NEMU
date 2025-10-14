@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "../local-include/rtl.h"
+#include "../local-include/intr.h"
 #include <cpu/ifetch.h>
 #include <cpu/decode.h>
 #include <isa-all-instr.h>
@@ -116,6 +117,31 @@ int isa_fetch_decode(Decode *s) {
     s->isa.instr.val |= (hi << 16);
     idx = table_main(s);
   }
+
+#ifdef CONFIG_RV_ZICFILP
+  // Zicfilp: Pre-execution ELP check
+  // Per specification Section 3.1: When ELP is LP_EXPECTED, the next instruction
+  // MUST be a LPAD instruction (AUIPC with rd=x0), otherwise raise software-check exception.
+  if (zicfilp_lp_enabled() && cpu.elp) {
+    // Check 1: PC must be 4-byte aligned
+    if ((s->pc & 0x3) != 0) {
+      INTR_TVAL_REG(EX_SCE) = 2;  // landing pad fault (code=2)
+      longjmp_exception(EX_SCE);
+    }
+
+    // Check 2: Must be LPAD instruction (not RVC)
+    // LPAD encoding: opcode[6:0] = 0010111 (AUIPC), rd = 0
+    uint32_t opcode = s->isa.instr.val & 0x7F;
+    uint32_t rd = (s->isa.instr.val >> 7) & 0x1F;
+
+    if (opcode != 0x17 || rd != 0) {
+      // Not a LPAD instruction -> software-check exception
+      INTR_TVAL_REG(EX_SCE) = 2;  // landing pad fault (code=2)
+      longjmp_exception(EX_SCE);
+    }
+    // Label check will be performed by LPAD instruction itself
+  }
+#endif  // CONFIG_RV_ZICFILP
 
   s->prev_is_cfi = 0;
   s->prev_type   = CFI_NONE;
