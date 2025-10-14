@@ -170,6 +170,12 @@
 #define DASICS_INSTR_TERNARY(f)
 #endif  // CONFIG_RV_DASICS
 
+#ifdef CONFIG_RV_ZICFILP
+#define ZICFILP_INSTR_UNARY(f) f(lpad)
+#else
+#define ZICFILP_INSTR_UNARY(f)
+#endif  // CONFIG_RV_ZICFILP
+
 #define INSTR_NULLARY(f) \
   f(inv) f(rt_inv) f(nemu_trap) \
   f(fence_i) f(fence) \
@@ -192,7 +198,8 @@
   f(ld_mmu) f(lw_mmu) f(lh_mmu) f(lb_mmu) f(lwu_mmu) f(lhu_mmu) f(lbu_mmu) \
   f(sd_mmu) f(sw_mmu) f(sh_mmu) f(sb_mmu) \
   FLOAT_INSTR_BINARY(f) \
-  DASICS_INSTR_BINARY(f)
+  DASICS_INSTR_BINARY(f) \
+  ZICFILP_INSTR_UNARY(f)
 
 #define INSTR_TERNARY(f) \
   f(add) f(sll) f(srl) f(slt) f(sltu) f(xor) f(or) f(sub) f(sra) f(and) \
