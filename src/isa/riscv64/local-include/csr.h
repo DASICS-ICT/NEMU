@@ -149,32 +149,43 @@
   } concat(name, _t);
 
 CSR_STRUCT_START(mstatus)
-  uint64_t uie : 1;
-  uint64_t sie : 1;
-  uint64_t pad0: 1;
-  uint64_t mie : 1;
-  uint64_t upie: 1;
-  uint64_t spie: 1;
-  uint64_t pad1: 1;
-  uint64_t mpie: 1;
-  uint64_t spp : 1;
-  uint64_t vs: 2;
-  uint64_t mpp : 2;
-  uint64_t fs  : 2;
-  uint64_t xs  : 2;
-  uint64_t mprv: 1;
-  uint64_t sum : 1;
-  uint64_t mxr : 1;
-  uint64_t tvm : 1;
-  uint64_t tw  : 1;
-  uint64_t tsr : 1;
-  uint64_t pad3: 9;
-  uint64_t uxl : 2;
-  uint64_t sxl : 2;
-  uint64_t sbe : 1;
-  uint64_t mbe : 1;
-  uint64_t pad4:25;
-  uint64_t sd  : 1;
+  uint64_t uie : 1;   // bit 0
+  uint64_t sie : 1;   // bit 1
+  uint64_t pad0: 1;   // bit 2
+  uint64_t mie : 1;   // bit 3
+  uint64_t upie: 1;   // bit 4
+  uint64_t spie: 1;   // bit 5
+  uint64_t pad1: 1;   // bit 6
+  uint64_t mpie: 1;   // bit 7
+  uint64_t spp : 1;   // bit 8
+  uint64_t vs: 2;     // bits 9-10
+  uint64_t mpp : 2;   // bits 11-12
+  uint64_t fs  : 2;   // bits 13-14
+  uint64_t xs  : 2;   // bits 15-16
+  uint64_t mprv: 1;   // bit 17
+  uint64_t sum : 1;   // bit 18
+  uint64_t mxr : 1;   // bit 19
+  uint64_t tvm : 1;   // bit 20
+  uint64_t tw  : 1;   // bit 21
+  uint64_t tsr : 1;   // bit 22
+#ifdef CONFIG_RV_ZICFILP
+  uint64_t spelp: 1;  // bit 23: S-mode Previous Expected Landing Pad
+  uint64_t pad3: 8;   // bits 24-31
+#else
+  uint64_t pad3: 9;   // bits 23-31
+#endif
+  uint64_t uxl : 2;   // bits 32-33
+  uint64_t sxl : 2;   // bits 34-35
+  uint64_t sbe : 1;   // bit 36
+  uint64_t mbe : 1;   // bit 37
+  uint64_t pad4: 3;   // bits 38-40
+#ifdef CONFIG_RV_ZICFILP
+  uint64_t mpelp: 1;  // bit 41: M-mode Previous Expected Landing Pad
+  uint64_t pad5:21;   // bits 42-62
+#else
+  uint64_t pad5:22;   // bits 41-62
+#endif
+  uint64_t sd  : 1;   // bit 63
 CSR_STRUCT_END(mstatus)
 
 CSR_STRUCT_START(misa)
@@ -475,10 +486,12 @@ CSR_STRUCT_START(mseccfg)
 CSR_STRUCT_END(mseccfg)
 
 // Zicfilp specific constants
-#define MENVCFG_LPE   (1UL << 2)  // Landing Pad Enable bit
-#define SENVCFG_LPE   (1UL << 2)  // Landing Pad Enable bit
-#define HENVCFG_LPE   (1UL << 2)  // Landing Pad Enable bit
-#define MSECCFG_MLPE  (1UL << 10) // Machine Landing Pad Enable bit
+#define MENVCFG_LPE    (1UL << 2)   // Landing Pad Enable bit
+#define SENVCFG_LPE    (1UL << 2)   // Landing Pad Enable bit
+#define HENVCFG_LPE    (1UL << 2)   // Landing Pad Enable bit
+#define MSECCFG_MLPE   (1UL << 10)  // Machine Landing Pad Enable bit
+#define MSTATUS_SPELP  (1ULL << 23) // S-mode Previous Expected Landing Pad
+#define MSTATUS_MPELP  (1ULL << 41) // M-mode Previous Expected Landing Pad
 
 #endif  // CONFIG_RV_ZICFILP
 
@@ -864,6 +877,7 @@ MAP(CSRS, CSRS_DECL)
 
 #define SSTATUS_WMASK ((1 << 19) | (1 << 18) | (0x3 << 13)\
  IFDEF(CONFIG_RVV, | (0x3 << 9)) IFDEF(CONFIG_RVN, | (1 << 4) | (1 << 0))\
+ IFDEF(CONFIG_RV_ZICFILP, | (1 << 23))\
  | (1 << 8) | (1 << 5) | (1 << 1))
 
 #define SSTATUS_RMASK (SSTATUS_WMASK | (0x3 << 15) | (1ull << 63) | (3ull << 32))
