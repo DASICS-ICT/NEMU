@@ -71,10 +71,10 @@
 #ifdef CONFIG_RV_ZICFILP
   #ifdef CONFIG_RV_H_EXTENSION
   #define ZICFILP_CSRS(f) \
-    f(menvcfg,     0x30a) f(senvcfg,     0x10a) f(henvcfg,     0x60a)
+    f(menvcfg,     0x30a) f(senvcfg,     0x10a) f(henvcfg,     0x60a) f(mseccfg,     0x747)
   #else
   #define ZICFILP_CSRS(f) \
-    f(menvcfg,     0x30a) f(senvcfg,     0x10a)
+    f(menvcfg,     0x30a) f(senvcfg,     0x10a) f(mseccfg,     0x747)
   #endif  // CONFIG_RV_H_EXTENSION
 #else
 #define ZICFILP_CSRS(f)
@@ -461,10 +461,24 @@ CSR_STRUCT_START(henvcfg)
 CSR_STRUCT_END(henvcfg)
 #endif  // CONFIG_RV_H_EXTENSION
 
+// Machine Security Configuration register (mseccfg)
+// Used for M-mode Landing Pad Enable control
+CSR_STRUCT_START(mseccfg)
+  uint64_t mml  : 1;   // Machine Mode Lockdown (bit 0)
+  uint64_t mmwp : 1;   // Machine Mode Whitelist Policy (bit 1)
+  uint64_t rlb  : 1;   // Rule Locking Bypass (bit 2)
+  uint64_t pad0 : 5;   // Reserved (bits 3-7)
+  uint64_t useed: 1;   // User Seed (bit 8)
+  uint64_t sseed: 1;   // Supervisor Seed (bit 9)
+  uint64_t mlpe : 1;   // Machine Landing Pad Enable (bit 10) - Zicfilp
+  uint64_t pad1 :53;   // Reserved for future use
+CSR_STRUCT_END(mseccfg)
+
 // Zicfilp specific constants
 #define MENVCFG_LPE   (1UL << 2)  // Landing Pad Enable bit
 #define SENVCFG_LPE   (1UL << 2)  // Landing Pad Enable bit
 #define HENVCFG_LPE   (1UL << 2)  // Landing Pad Enable bit
+#define MSECCFG_MLPE  (1UL << 10) // Machine Landing Pad Enable bit
 
 #endif  // CONFIG_RV_ZICFILP
 
@@ -873,16 +887,11 @@ word_t pmp_tor_mask();
 bool zicfilp_lp_enabled();
 
 // Set Expected Landing Pad (ELP) state
-void zicfilp_set_elp(uint32_t expected_label);
+// Simply sets ELP = 1, no label parameter needed
+void zicfilp_set_elp();
 
 // Clear Expected Landing Pad (ELP) state
 void zicfilp_clear_elp();
-
-// Validate landing pad at target address
-bool zicfilp_validate_lpad(vaddr_t target_pc, uint32_t expected_label);
-
-// Trigger Software Check Exception
-void zicfilp_trigger_exception(vaddr_t fault_pc);
 
 #endif  // CONFIG_RV_ZICFILP
 

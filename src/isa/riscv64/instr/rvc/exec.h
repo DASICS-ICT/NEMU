@@ -41,10 +41,38 @@ def_EHelper(c_jr) {
   // See rvi/control.h:26. JALR should set the LSB to 0.
   rtl_andi(s, s0, dsrc1, ~1UL);
   IFDEF(CONFIG_RV_DASICS, rtl_dasics_jcheck(s, *(vaddr_t *)s0));
+
+  // Zicfilp: C.JR is equivalent to JALR with rd=x0, rs1=rs1
+  // Per specification (Listing 6): set ELP when (rs1 != x1) && (rs1 != x5) && (rs1 != x7)
+#ifdef CONFIG_RV_ZICFILP
+  if (zicfilp_lp_enabled()) {
+    // Get rs1 register index from decoded operand (preg points to cpu.gpr[rs1])
+    uint32_t rs1 = (id_src1->preg - &cpu.gpr[0]._64);
+    // Set ELP if rs1 is NOT x1 (ra), x5 (t0), or x7 (t2)
+    if (rs1 != 1 && rs1 != 5 && rs1 != 7) {
+      zicfilp_set_elp();
+    }
+  }
+#endif  // CONFIG_RV_ZICFILP
+
   rtl_jr(s, s0);
 #else
 //  IFDEF(CONFIG_ENGINE_INTERPRETER, rtl_andi(s, s0, s0, ~0x1u));
   IFDEF(CONFIG_RV_DASICS, rtl_dasics_jcheck(s, *(vaddr_t *)dsrc1));
+
+  // Zicfilp: C.JR is equivalent to JALR with rd=x0, rs1=rs1
+  // Per specification (Listing 6): set ELP when (rs1 != x1) && (rs1 != x5) && (rs1 != x7)
+#ifdef CONFIG_RV_ZICFILP
+  if (zicfilp_lp_enabled()) {
+    // Get rs1 register index from decoded operand (preg points to cpu.gpr[rs1])
+    uint32_t rs1 = (id_src1->preg - &cpu.gpr[0]._64);
+    // Set ELP if rs1 is NOT x1 (ra), x5 (t0), or x7 (t2)
+    if (rs1 != 1 && rs1 != 5 && rs1 != 7) {
+      zicfilp_set_elp();
+    }
+  }
+#endif  // CONFIG_RV_ZICFILP
+
   IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
   rtl_jr(s, dsrc1);
 #endif
@@ -55,10 +83,34 @@ def_EHelper(c_jalr) {
   // See rvi/control.h:26. JALR should set the LSB to 0.
   rtl_andi(s, s0, dsrc1, ~1UL);
   IFDEF(CONFIG_RV_DASICS, rtl_dasics_jcheck(s, *(vaddr_t *)s0));
+  // Zicfilp: C.JALR is equivalent to JALR with rd=x1, rs1=rs1
+  // Per specification (Listing 6): set ELP when (rs1 != x1) && (rs1 != x5) && (rs1 != x7)
+#ifdef CONFIG_RV_ZICFILP
+  if (zicfilp_lp_enabled()) {
+    // Get rs1 register index from decoded operand (preg points to cpu.gpr[rs1])
+    uint32_t rs1 = (id_src1->preg - &cpu.gpr[0]._64);
+    // Set ELP if rs1 is NOT x1 (ra), x5 (t0), or x7 (t2)
+    if (rs1 != 1 && rs1 != 5 && rs1 != 7) {
+      zicfilp_set_elp();
+    }
+  }
+#endif  // CONFIG_RV_ZICFILP
   rtl_li(s, &cpu.gpr[1]._64, s->snpc);
   rtl_jr(s, s0);
 #else
   IFDEF(CONFIG_RV_DASICS, rtl_dasics_jcheck(s, *(vaddr_t *)dsrc1));
+  // Zicfilp: C.JALR is equivalent to JALR with rd=x1, rs1=rs1
+  // Per specification (Listing 6): set ELP when (rs1 != x1) && (rs1 != x5) && (rs1 != x7)
+#ifdef CONFIG_RV_ZICFILP
+  if (zicfilp_lp_enabled()) {
+    // Get rs1 register index from decoded operand (preg points to cpu.gpr[rs1])
+    uint32_t rs1 = (id_src1->preg - &cpu.gpr[0]._64);
+    // Set ELP if rs1 is NOT x1 (ra), x5 (t0), or x7 (t2)
+    if (rs1 != 1 && rs1 != 5 && rs1 != 7) {
+      zicfilp_set_elp();
+    }
+  }
+#endif  // CONFIG_RV_ZICFILP
   rtl_li(s, &cpu.gpr[1]._64, s->snpc);
 //  IFDEF(CONFIG_ENGINE_INTERPRETER, rtl_andi(s, s0, s0, ~0x1lu));
   IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));

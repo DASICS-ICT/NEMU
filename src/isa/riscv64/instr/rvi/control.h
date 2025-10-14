@@ -28,6 +28,20 @@ def_EHelper(jalr) {
   rtl_andi(s, s0, s0, ~1UL);
 //  IFDEF(CONFIG_ENGINE_INTERPRETER, rtl_andi(s, s0, s0, ~0x1lu));
   IFDEF(CONFIG_RV_DASICS, rtl_dasics_jcheck(s, *(vaddr_t *)s0));
+
+  // Zicfilp: Set ELP for indirect jumps/calls
+  // Per specification (Listing 6): set ELP when (rs1 != x1) && (rs1 != x5) && (rs1 != x7)
+#ifdef CONFIG_RV_ZICFILP
+  if (zicfilp_lp_enabled()) {
+    // Get rs1 register index from decoded operand (dsrc1 points to cpu.gpr[rs1])
+    uint32_t rs1 = (dsrc1 - &cpu.gpr[0]._64);
+    // Set ELP = 1 if rs1 is NOT x1 (ra), x5 (t0), or x7 (t2)
+    if (rs1 != 1 && rs1 != 5 && rs1 != 7) {
+      zicfilp_set_elp();
+    }
+  }
+#endif  // CONFIG_RV_ZICFILP
+
 #ifdef CONFIG_GUIDED_EXEC
   if(cpu.guided_exec && cpu.execution_guide.force_set_jump_target) {
     rtl_li(s, ddest, cpu.execution_guide.jump_target);

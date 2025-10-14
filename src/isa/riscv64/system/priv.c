@@ -813,7 +813,7 @@ void isa_hostcall(uint32_t id, rtlreg_t *dest, const rtlreg_t *src1,
       ret = *src1 + 4;
       break;
 #else
-    case HOSTCALL_TRAP: 
+    case HOSTCALL_TRAP:
 #ifdef CONFIG_RV_DASICS
       bool hostcall_trusted = dasics_in_trusted_zone(pc);
 
@@ -838,3 +838,47 @@ void isa_hostcall(uint32_t id, rtlreg_t *dest, const rtlreg_t *src1,
   }
   if (dest) *dest = ret;
 }
+
+// ========== Zicfilp Helper Functions ==========
+#ifdef CONFIG_RV_ZICFILP
+
+// Check if Zicfilp landing pad checking is enabled for current privilege mode
+// According to specification, check the appropriate envcfg.LPE bit based on privilege level
+bool zicfilp_lp_enabled() {
+  switch (cpu.mode) {
+    case MODE_M:
+      // In M-mode, check mseccfg.MLPE (bit 10)
+      return (mseccfg->mlpe != 0);
+    case MODE_S:
+      // In S-mode, check menvcfg.LPE
+      return (menvcfg->lpe != 0);
+    case MODE_U:
+      // In U-mode, check senvcfg.LPE
+      return (senvcfg->lpe != 0);
+#ifdef CONFIG_RV_H_EXTENSION
+    case MODE_H:
+      // In HS-mode, check menvcfg.LPE
+      // In VS/VU-mode, check menvcfg.LPE, henvcfg.LPE, and possibly senvcfg.LPE
+      // For simplicity, check henvcfg.LPE
+      return (henvcfg->lpe != 0);
+#endif
+    default:
+      return false;
+  }
+}
+
+// Set Expected Landing Pad (ELP) state
+// Called when executing indirect jump/call instructions (JALR, C.JR, C.JALR)
+// Simply sets ELP = 1 (LP_EXPECTED)
+// Note: No label is set here - label checking is determined by the LPAD instruction itself
+void zicfilp_set_elp() {
+  cpu.elp = true;  // Set ELP to LP_EXPECTED (1)
+}
+
+// Clear Expected Landing Pad (ELP) state
+void zicfilp_clear_elp() {
+  cpu.elp = false;
+  cpu.lp_label = 0;
+}
+
+#endif  // CONFIG_RV_ZICFILP
