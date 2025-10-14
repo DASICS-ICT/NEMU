@@ -709,6 +709,10 @@ static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, vaddr_t p
 }
 
 static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
+#ifdef CONFIG_RV_ZICFILP
+  uint8_t return_mode;
+  bool lpe_enabled;
+#endif
   switch (op) {
 #ifndef CONFIG_MODE_USER
 #ifdef CONFIG_RVN
@@ -730,6 +734,18 @@ static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
           : 1);
       cpu.mode = mstatus->spp;
       if (mstatus->spp != MODE_M) { mstatus->mprv = 0; }
+#ifdef CONFIG_RV_ZICFILP
+      // Restore ELP state from SPELP if Zicfilp is enabled for return mode
+      return_mode = cpu.mode;  // cpu.mode already updated to return privilege
+      lpe_enabled = false;
+      switch (return_mode) {
+        case MODE_M: lpe_enabled = (mseccfg->mlpe != 0); break;
+        case MODE_S: lpe_enabled = (menvcfg->lpe != 0); break;
+        case MODE_U: lpe_enabled = (senvcfg->lpe != 0); break;
+      }
+      cpu.elp = lpe_enabled ? mstatus->spelp : 0;
+      mstatus->spelp = 0;  // Clear SPELP after restoration
+#endif  // CONFIG_RV_ZICFILP
       mstatus->spp = MODE_U;
       update_mmu_state();
       return sepc->val;
@@ -742,6 +758,18 @@ static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
           : 1);
       cpu.mode = mstatus->mpp;
       if (mstatus->mpp != MODE_M) { mstatus->mprv = 0; }
+#ifdef CONFIG_RV_ZICFILP
+      // Restore ELP state from MPELP if Zicfilp is enabled for return mode
+      return_mode = cpu.mode;  // cpu.mode already updated to return privilege
+      lpe_enabled = false;
+      switch (return_mode) {
+        case MODE_M: lpe_enabled = (mseccfg->mlpe != 0); break;
+        case MODE_S: lpe_enabled = (menvcfg->lpe != 0); break;
+        case MODE_U: lpe_enabled = (senvcfg->lpe != 0); break;
+      }
+      cpu.elp = lpe_enabled ? mstatus->mpelp : 0;
+      mstatus->mpelp = 0;  // Clear MPELP after restoration
+#endif  // CONFIG_RV_ZICFILP
       mstatus->mpp = MODE_U;
       update_mmu_state();
       Loge("Executing mret to 0x%lx", mepc->val);
