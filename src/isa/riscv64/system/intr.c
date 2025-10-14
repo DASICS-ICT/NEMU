@@ -82,6 +82,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
 #ifdef CONFIG_RV_DASICS
       case EX_DUCF: case EX_DSCF:
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_ZICFILP
+      case EX_SCE:  // Software check exception (preserve tval set by LPAD)
+#endif  // CONFIG_RV_ZICFILP
         break;
       default: utval->val = 0;
     }
@@ -100,6 +103,12 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     mstatus->spp = cpu.mode;
     mstatus->spie = mstatus->sie;
     mstatus->sie = 0;
+#ifdef CONFIG_RV_ZICFILP
+    // Save ELP state to SPELP before clearing
+    mstatus->spelp = cpu.elp;
+    cpu.elp = 0;  // Clear ELP on trap entry
+    cpu.lp_label = 0;
+#endif  // CONFIG_RV_ZICFILP
     switch (NO) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
@@ -107,6 +116,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
 #ifdef CONFIG_RV_DASICS
       case EX_DUCF: case EX_DSCF:
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_ZICFILP
+      case EX_SCE:  // Software check exception (preserve tval set by LPAD)
+#endif  // CONFIG_RV_ZICFILP
         break;
       default: stval->val = 0;
     }
@@ -121,6 +133,12 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     mstatus->mpp = cpu.mode;
     mstatus->mpie = mstatus->mie;
     mstatus->mie = 0;
+#ifdef CONFIG_RV_ZICFILP
+    // Save ELP state to MPELP before clearing
+    mstatus->mpelp = cpu.elp;
+    cpu.elp = 0;  // Clear ELP on trap entry
+    cpu.lp_label = 0;
+#endif  // CONFIG_RV_ZICFILP
     switch (NO) {
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
@@ -128,6 +146,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
 #ifdef CONFIG_RV_DASICS
       case EX_DUCF: case EX_DSCF:
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_ZICFILP
+      case EX_SCE:  // Software check exception (preserve tval set by LPAD)
+#endif  // CONFIG_RV_ZICFILP
         break;
       default: mtval->val = 0;
     }
