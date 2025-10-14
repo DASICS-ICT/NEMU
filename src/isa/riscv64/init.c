@@ -66,6 +66,16 @@ void init_isa() {
   spkctl->val = 0;
 #endif  // CONFIG_RV_DASICS
 
+#ifdef CONFIG_RV_ZICFILP
+  // Initialize Zicfilp CSRs to 0 (Landing Pad checking disabled by default)
+  menvcfg->val = 0;  // menvcfg.LPE = 0
+  senvcfg->val = 0;  // senvcfg.LPE = 0
+  mseccfg->val = 0;  // mseccfg.MLPE = 0
+  #ifdef CONFIG_RV_H_EXTENSION
+  henvcfg->val = 0;  // henvcfg.LPE = 0
+  #endif
+#endif  // CONFIG_RV_ZICFILP
+
 #ifdef CONFIG_RVN
   utimer->val = 0;
 #endif //CONFIG_RVN
