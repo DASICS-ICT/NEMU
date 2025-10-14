@@ -100,6 +100,15 @@ typedef struct {
   uint64_t upkru, spkrs, spkctl;
 #endif  // CONFIG_RV_DASICS
 
+#ifdef CONFIG_RV_ZICFILP
+  // Zicfilp CSRs - must sync with difftest
+  uint64_t menvcfg;    // Machine Environment Configuration
+  uint64_t senvcfg;    // Supervisor Environment Configuration
+#ifdef CONFIG_RV_H_EXTENSION
+  uint64_t henvcfg;    // Hypervisor Environment Configuration (optional)
+#endif
+#endif  // CONFIG_RV_ZICFILP
+
   // Above will be synced by regcpy when run difftest, DO NOT TOUCH
 #ifdef CONFIG_RVN
  uint64_t utimer;
@@ -138,6 +147,11 @@ typedef struct {
 #ifdef CONFIG_QUERY_REF
   struct MemEventQueryResult query_mem_event;
 #endif
+#ifdef CONFIG_RV_ZICFILP
+  // Zicfilp runtime state (NOT synced with difftest)
+  bool elp;              // Expected Landing Pad state bit
+  uint32_t lp_label;     // Expected landing pad label (20-bit)
+#endif  // CONFIG_RV_ZICFILP
 } riscv64_CPU_state;
 
 // decode

@@ -121,6 +121,14 @@ static void csr_prepare() {
   cpu.spkctl   = spkctl->val;
 #endif
 
+#ifdef CONFIG_RV_ZICFILP
+  cpu.menvcfg = menvcfg->val;
+  cpu.senvcfg = senvcfg->val;
+#ifdef CONFIG_RV_H_EXTENSION
+  cpu.henvcfg = henvcfg->val;
+#endif
+#endif  // CONFIG_RV_ZICFILP
+
 #ifdef CONFIG_RVV
   cpu.vstart  = vstart->val;
   cpu.vxsat   = vxsat->val;
@@ -229,6 +237,14 @@ static void csr_writeback() {
   spkrs->val    = cpu.spkrs;
   spkctl->val   = cpu.spkctl;
 #endif
+
+#ifdef CONFIG_RV_ZICFILP
+  menvcfg->val = cpu.menvcfg;
+  senvcfg->val = cpu.senvcfg;
+#ifdef CONFIG_RV_H_EXTENSION
+  henvcfg->val = cpu.henvcfg;
+#endif
+#endif  // CONFIG_RV_ZICFILP
 
 #ifdef CONFIG_RVV
   vstart->val  = cpu.vstart;
