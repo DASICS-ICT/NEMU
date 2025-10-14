@@ -20,36 +20,57 @@
 #define __RISCV64_ZICFILP_EXEC_H__
 
 // LPAD instruction execution
-// 
-// Behavior:
-//   1. If cpu.elp is not set: acts as NOP
-//   2. If cpu.elp is set:
-//      a. If label == 0: clear ELP (no label check)
-//      b. If label != 0: verify x7[19:0] == label, then clear ELP
-//         - If mismatch: trigger Software Check Exception (cause=18)
+//
+// Specification (RISC-V Zicfilp Extension):
+// When ELP is set to LP_EXPECTED:
+//   1. Check if instruction is 4-byte aligned
+//   2. Check if it's a valid LPAD instruction
+//   3. If label != 0: verify x7[31:12] == label
+//   4. If any check fails: raise Software Check Exception (cause=18, tval=2)
+//   5. If all checks pass: clear ELP to NO_LP_EXPECTED
+//
+// When ELP is NO_LP_EXPECTED: LPAD acts as NOP
 //
 // Operands:
 //   - id_src1: x7 register value (only valid when label != 0)
-//   - id_src2: 20-bit label immediate
+//   - id_src2: 20-bit label immediate (landing-pad-label, LPL)
 def_EHelper(lpad) {
-  uint32_t label = id_src2->imm;  // 20-bit label from instruction
-  
-  // Placeholder for Task 6 implementation
-  // For now, just print the instruction
-  // Actual logic will be:
-  //
-  // if (cpu.elp) {
-  //   if (label != 0) {
-  //     uint32_t x7_label = *id_src1->preg & 0xFFFFF;  // x7[19:0]
-  //     if (x7_label != label) {
-  //       // Trigger Software Check Exception
-  //       // Will be implemented in Task 8
-  //     }
-  //   }
-  //   cpu.elp = false;
-  // }
-  // // else: LPAD acts as NOP when ELP is not set
-  
+  uint32_t label = (uint32_t)id_src2->imm;  // 20-bit landing-pad-label (LPL)
+
+  // LPAD execution logic per Zicfilp specification
+  if (cpu.elp) {
+    // ELP is LP_EXPECTED: perform landing pad verification
+
+    // Check 1: Instruction must be 4-byte aligned
+    if ((s->pc & 0x3) != 0) {
+      // Not 4-byte aligned: trigger Software Check Exception
+      save_globals(s);
+      INTR_TVAL_REG(EX_SCE) = 2;  // Landing pad fault (code=2)
+      longjmp_exception(EX_SCE);
+      return;
+    }
+
+    // Check 2: Label verification (if label != 0)
+    if (label != 0) {
+      // Label check required: verify x7[31:12] == label
+      // Note: Label is stored in upper 20 bits of x7 (bits 31:12)
+      uint32_t x7_label = (uint32_t)((*id_src1->preg) >> 12) & 0xFFFFF;
+
+      if (x7_label != label) {
+        // Label mismatch: trigger Software Check Exception
+        save_globals(s);
+        INTR_TVAL_REG(EX_SCE) = 2;  // Landing pad fault (code=2)
+        longjmp_exception(EX_SCE);
+        return;
+      }
+      // Label matches: proceed to clear ELP
+    }
+
+    // All checks passed: clear ELP to NO_LP_EXPECTED
+    cpu.elp = false;
+  }
+  // else: ELP is NO_LP_EXPECTED, LPAD acts as NOP
+
   // Debug output
   if (label != 0) {
     print_asm("lpad x7, 0x%x", label);

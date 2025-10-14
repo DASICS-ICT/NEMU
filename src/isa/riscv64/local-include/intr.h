@@ -37,6 +37,9 @@ enum {
   EX_LPF, // load page fault
   EX_RS1, // reserved
   EX_SPF, // store/amo page fault
+#ifdef CONFIG_RV_ZICFILP
+  EX_SCE = 18, // software check exception (Zicfilp)
+#endif  // CONFIG_RV_ZICFILP
   EX_IGPF = 20,// instruction guest-page fault, H-extention
   EX_LGPF,// load guest-page fault, H-extention
   EX_VI,  // virtual instruction, H-extention
