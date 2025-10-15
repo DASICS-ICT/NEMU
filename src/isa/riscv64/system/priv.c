@@ -924,6 +924,7 @@ bool zicfilp_lp_enabled() {
 // Simply sets ELP = 1 (LP_EXPECTED)
 // Note: No label is set here - label checking is determined by the LPAD instruction itself
 void zicfilp_set_elp() {
+  //Log("zicfilp_set_elp: Setting ELP from %d to 1 at PC=0x%lx", cpu.elp, cpu.pc);
   cpu.elp = true;  // Set ELP to LP_EXPECTED (1)
 }
 

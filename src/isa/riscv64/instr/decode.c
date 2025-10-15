@@ -139,7 +139,10 @@ int isa_fetch_decode(Decode *s) {
       INTR_TVAL_REG(EX_SCE) = 2;  // landing pad fault (code=2)
       longjmp_exception(EX_SCE);
     }
-    // Label check will be performed by LPAD instruction itself
+
+    // Valid LPAD detected - DO NOT clear ELP here!
+    // The LPAD instruction execution (exec.h) will handle ELP clearing after label validation.
+    // Clearing ELP prematurely here breaks the label checking logic in exec stage.
   }
 #endif  // CONFIG_RV_ZICFILP
 

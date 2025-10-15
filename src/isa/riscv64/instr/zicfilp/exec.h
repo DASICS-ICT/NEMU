@@ -35,24 +35,13 @@
 //   - id_src1: x7 register value (only valid when label != 0)
 //   - id_src2: 20-bit label immediate (landing-pad-label, LPL)
 def_EHelper(lpad) {
-  // 20-bit landing-pad-label (LPL), already masked in decode stage
   uint32_t label = (uint32_t)id_src2->imm & 0xFFFFF;
 
   // LPAD execution logic per Zicfilp specification
-  // Per spec §3.2: When LPE=0, LPAD is a no-op
+  // Per spec §3.2: LPAD only performs checks when both LPE=1 AND ELP=1
+  // When ELP=0, LPAD acts as a NOP regardless of LPE
   if (zicfilp_lp_enabled() && cpu.elp) {
-    // Zicfilp is enabled AND ELP is LP_EXPECTED: perform landing pad verification
-
-    // Check 1: Instruction must be 4-byte aligned
-    if ((s->pc & 0x3) != 0) {
-      // Not 4-byte aligned: trigger Software Check Exception
-      save_globals(s);
-      INTR_TVAL_REG(EX_SCE) = 2;  // Landing pad fault (code=2)
-      longjmp_exception(EX_SCE);
-      return;
-    }
-
-    // Check 2: Label verification (if label != 0)
+    // Both Zicfilp is enabled (LPE=1) AND ELP is set - perform label check if needed and clear ELP
     if (label != 0) {
       // Label check required: verify x7[31:12] == label
       // Note: Label is stored in upper 20 bits of x7 (bits 31:12)
@@ -68,10 +57,10 @@ def_EHelper(lpad) {
       // Label matches: proceed to clear ELP
     }
 
-    // All checks passed: clear ELP to NO_LP_EXPECTED
+    // Clear ELP for both label=0 and label!=0 cases
     cpu.elp = false;
   }
-  // else: Zicfilp disabled or ELP is NO_LP_EXPECTED, LPAD acts as NOP
+  // else: ELP=0 or LPE=0: LPAD acts as NOP
 
   // Debug output
   if (label != 0) {
