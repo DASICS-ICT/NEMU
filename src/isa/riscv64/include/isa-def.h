@@ -104,9 +104,7 @@ typedef struct {
   // Zicfilp CSRs - must sync with difftest
   uint64_t menvcfg;    // Machine Environment Configuration
   uint64_t senvcfg;    // Supervisor Environment Configuration
-#ifdef CONFIG_RV_H_EXTENSION
-  uint64_t henvcfg;    // Hypervisor Environment Configuration (optional)
-#endif
+  uint64_t mseccfg;    // Machine Security Configuration (for MLPE bit)
 #endif  // CONFIG_RV_ZICFILP
 
   // Above will be synced by regcpy when run difftest, DO NOT TOUCH

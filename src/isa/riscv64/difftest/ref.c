@@ -124,9 +124,7 @@ static void csr_prepare() {
 #ifdef CONFIG_RV_ZICFILP
   cpu.menvcfg = menvcfg->val;
   cpu.senvcfg = senvcfg->val;
-#ifdef CONFIG_RV_H_EXTENSION
-  cpu.henvcfg = henvcfg->val;
-#endif
+  cpu.mseccfg = mseccfg->val;
 #endif  // CONFIG_RV_ZICFILP
 
 #ifdef CONFIG_RVV
@@ -241,9 +239,7 @@ static void csr_writeback() {
 #ifdef CONFIG_RV_ZICFILP
   menvcfg->val = cpu.menvcfg;
   senvcfg->val = cpu.senvcfg;
-#ifdef CONFIG_RV_H_EXTENSION
-  henvcfg->val = cpu.henvcfg;
-#endif
+  mseccfg->val = cpu.mseccfg;
 #endif  // CONFIG_RV_ZICFILP
 
 #ifdef CONFIG_RVV
