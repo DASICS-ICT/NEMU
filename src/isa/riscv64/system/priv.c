@@ -521,6 +521,9 @@ static inline void csr_write(word_t *dest, word_t src) {
 #if defined(CONFIG_RV_DASICS) || defined(CONFIG_RV_DASICS)
     mask |= 0x3000000;
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_ZICFILP
+    mask |= 0x40000;  // bit 18: Software Check Exception (Zicfilp Landing Pad Fault)
+#endif  // CONFIG_RV_ZICFILP
     *dest = src & mask;
   }
 #ifdef CONFIG_RVN
