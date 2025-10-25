@@ -58,6 +58,10 @@ def_EHelper(lpad) {
     }
 
     // Clear ELP for both label=0 and label!=0 cases
+// #ifdef CONFIG_SHARE
+//     printf("[NEMU-REF-ELP] LPAD-CLEAR: PC=0x%016lx, label=0x%x, ELP: 1->0\n",
+//            s->pc, label);
+// #endif
     cpu.elp = false;
   }
   // else: ELP=0 or LPE=0: LPAD acts as NOP

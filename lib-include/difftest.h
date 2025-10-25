@@ -34,8 +34,8 @@ enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 #ifdef RV64_FULL_DIFF
 // GPRs + FPRs + pc + [m|s][status|cause|epc] + other necessary CSRs + mode + CSRs related to specific extensions + (3: menvcfg (1) + senvcfg (1) + mseccfg (1))
 #define DIFFTEST_REG_SIZE (sizeof(uint64_t) * (32 + 32 + 1 + 6 + 11 + 1 \
-          IFDEF(CONFIG_RVV, + 64 + 7) IFDEF(CONFIG_RVN, + 8) IFDEF(CONFIG_RV_DASICS, + (5 + 1 + 32 + 4 + 1 + 8 + 3)) \
-          IFDEF(CONFIG_RV_ZICFILP, + 3)))
+          IFDEF(CONFIG_RVN, + 8) IFDEF(CONFIG_RV_DASICS, + (5 + 1 + 32 + 4 + 1 + 8 + 3)) \
+          IFDEF(CONFIG_RV_ZICFILP, + 3))) // IFDEF(CONFIG_RVV, + 64 + 7) 
 #else
 #define DIFFTEST_REG_SIZE (sizeof(uint64_t) * (32 + 1)) // GRPs + pc
 #endif

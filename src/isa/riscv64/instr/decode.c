@@ -136,6 +136,10 @@ int isa_fetch_decode(Decode *s) {
 
     if (opcode != 0x17 || rd != 0) {
       // Not a LPAD instruction -> software-check exception
+// #ifdef CONFIG_SHARE
+//       printf("[NEMU-REF-ELP] EXCEPTION: PC=0x%016lx, ELP=1, instr=0x%08x (NOT LPAD), triggering SCE\n",
+//              s->pc, s->isa.instr.val);
+// #endif
       INTR_TVAL_REG(EX_SCE) = 2;  // landing pad fault (code=2)
       longjmp_exception(EX_SCE);
     }

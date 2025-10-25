@@ -428,6 +428,11 @@ static inline word_t csr_read(word_t *src) {
   else if (is_read(spkrs)) { return (spkrs->val & PKR_MASK); }
   else if (is_read(spkctl)) { return (spkctl->val & PKCTL_MASK); }
 #endif
+#ifdef CONFIG_RV_ZICFILP
+  else if (is_read(menvcfg)) { return menvcfg->val & MENVCFG_LPE; }
+  else if (is_read(senvcfg)) { return senvcfg->val & SENVCFG_LPE; }
+  else if (is_read(mseccfg)) { return mseccfg->val & MSECCFG_MLPE; }
+#endif 
 #ifdef CONFIG_RVV
   else if (is_read(vcsr))   { return (vxrm->val & 0x3) << 1 | (vxsat->val & 0x1); }
 #endif
@@ -572,6 +577,17 @@ static inline void csr_write(word_t *dest, word_t src) {
     // *dest = src & FCSR_MASK;
 #endif // CONFIG_FPU_NONE
   }
+#ifdef CONFIG_RV_ZICFILP
+  else if (is_write(menvcfg)) { 
+    // printf("Writing menvcfg: " FMT_WORD "\n", src);
+    *dest = src & MENVCFG_LPE; }
+  else if (is_write(senvcfg)) { 
+    // printf("Writing senvcfg: " FMT_WORD "\n", src);
+    *dest = src & SENVCFG_LPE; }
+  else if (is_write(mseccfg)) { 
+    // printf("Writing mseccfg: " FMT_WORD "\n", src);
+    *dest = src & MSECCFG_MLPE; }
+#endif  // CONFIG_RV_ZICFILP
 #ifdef CONFIG_RV_DASICS
   else if (is_write(upkru)) {
     *dest = src & PKR_MASK;
@@ -928,11 +944,19 @@ bool zicfilp_lp_enabled() {
 // Note: No label is set here - label checking is determined by the LPAD instruction itself
 void zicfilp_set_elp() {
   //Log("zicfilp_set_elp: Setting ELP from %d to 1 at PC=0x%lx", cpu.elp, cpu.pc);
+// #ifdef CONFIG_SHARE
+//   printf("[NEMU-REF-ELP] SET: PC=0x%016lx, ELP: 0->1\n", cpu.pc);
+// #endif
   cpu.elp = true;  // Set ELP to LP_EXPECTED (1)
 }
 
 // Clear Expected Landing Pad (ELP) state
 void zicfilp_clear_elp() {
+// #ifdef CONFIG_SHARE
+//   if (cpu.elp) {  // Only print if ELP is actually 1
+//     printf("[NEMU-REF-ELP] CLEAR: PC=0x%016lx, ELP: 1->0\n", cpu.pc);
+//   }
+// #endif
   cpu.elp = false;
   cpu.lp_label = 0;
 }

@@ -92,6 +92,35 @@ void isa_reg_display() {
   printf("upkru: " FMT_WORD " spkrs: " FMT_WORD " spkctl: " FMT_WORD "\n",
       upkru->val, spkrs->val, spkctl->val);
 #endif  // CONFIG_RV_DASICS
+#ifdef CONFIG_RV_ZICFILP
+  // Zicfilp CSR values
+  printf("=== Zicfilp Status ===\n");
+  printf("menvcfg: " FMT_WORD " (LPE bit = %d)\n",
+         menvcfg->val, menvcfg->lpe);
+  printf("senvcfg: " FMT_WORD " (LPE bit = %d)\n",
+         senvcfg->val, senvcfg->lpe);
+  printf("mseccfg: " FMT_WORD " (MLPE bit = %d)\n",
+         mseccfg->val, mseccfg->mlpe);
+
+  // Check if Zicfilp is enabled for each privilege mode
+  printf("Zicfilp Enabled: ");
+  printf("M-mode=%s, ", (mseccfg->mlpe != 0) ? "YES" : "NO");
+  printf("S-mode=%s, ", (menvcfg->lpe != 0) ? "YES" : "NO");
+  printf("U-mode=%s\n", (senvcfg->lpe != 0) ? "YES" : "NO");
+
+  // Current mode's Zicfilp status
+  const char* mode_name[] = {"U", "S", "H", "M"};
+  bool current_lpe_enabled = false;
+  switch (cpu.mode) {
+    case MODE_M: current_lpe_enabled = (mseccfg->mlpe != 0); break;
+    case MODE_S: current_lpe_enabled = (menvcfg->lpe != 0); break;
+    case MODE_U: current_lpe_enabled = (senvcfg->lpe != 0); break;
+  }
+  printf("Current mode: %s-mode, Zicfilp %s\n",
+         mode_name[cpu.mode], current_lpe_enabled ? "ENABLED" : "DISABLED");
+  printf("======================\n");
+#endif  // CONFIG_RV_ZICFILP
+
 #ifdef CONFIG_RV_PMP_CSR
   printf("privilege mode:%ld  pmp: below\n", cpu.mode);
   for (int i = 0; i < CONFIG_RV_PMP_NUM; i++) {

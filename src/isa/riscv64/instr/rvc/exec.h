@@ -48,6 +48,8 @@ def_EHelper(c_jr) {
   if (zicfilp_lp_enabled()) {
     // Get rs1 register index from decoded operand (preg points to cpu.gpr[rs1])
     uint32_t rs1 = (id_src1->preg - &cpu.gpr[0]._64);
+    // printf("[NEMU-REF-ELP] C.JR at PC=0x%016lx: rs1=x%u, mode=%lu, will_set_elp=%d\n",
+    //        s->pc, rs1, cpu.mode, (rs1 != 1 && rs1 != 5 && rs1 != 7) ? 1 : 0);
     // Set ELP if rs1 is NOT x1 (ra), x5 (t0), or x7 (t2)
     if (rs1 != 1 && rs1 != 5 && rs1 != 7) {
       zicfilp_set_elp();
@@ -89,6 +91,8 @@ def_EHelper(c_jalr) {
   if (zicfilp_lp_enabled()) {
     // Get rs1 register index from decoded operand (preg points to cpu.gpr[rs1])
     uint32_t rs1 = (id_src1->preg - &cpu.gpr[0]._64);
+    printf("[NEMU-REF-ELP] C.JALR at PC=0x%016lx: rs1=x%u, mode=%lu, will_set_elp=%d\n",
+           s->pc, rs1, cpu.mode, (rs1 != 1 && rs1 != 5 && rs1 != 7) ? 1 : 0);
     // Set ELP if rs1 is NOT x1 (ra), x5 (t0), or x7 (t2)
     if (rs1 != 1 && rs1 != 5 && rs1 != 7) {
       zicfilp_set_elp();
