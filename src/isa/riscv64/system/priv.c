@@ -117,7 +117,8 @@ static inline word_t* csr_decode(uint32_t addr) {
 }
 
 // WPRI, SXL, UXL cannot be written
-#define MSTATUS_WMASK (0x7e79bbUL) | (1UL << 63)
+#define MSTATUS_WMASK (0x7e79bbUL) | (1UL << 63) \
+  IFDEF(CONFIG_RV_ZICFILP, | (1UL << 23) | (1ULL << 41))
 
 #define MIP_MASK (0xbbb)
 #define MIE_MASK (0xbbb)
