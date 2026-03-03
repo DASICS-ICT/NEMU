@@ -105,6 +105,19 @@ typedef struct {
  uint64_t utimer;
 #endif
 
+#ifdef CONFIG_RV_DASICS
+  struct {
+    uint8_t phase[12];
+    uint8_t saved_once[12];
+    uint64_t sp_off[12];
+    uint64_t shadow_cipher[12];
+    uint8_t crypto_algo;
+    uint8_t tag_bits;
+    uint64_t shadow_tag_lo[12];
+    uint64_t shadow_tag_hi[12];
+  } dasics_sreg;
+#endif
+
 #ifdef CONFIG_RVV
   //vector
   union {

@@ -64,6 +64,7 @@ void init_isa() {
   upkru->val = 0;
   spkrs->val = 0;
   spkctl->val = 0;
+  dasics_sreg_guard_reset();
 #endif  // CONFIG_RV_DASICS
 
 #ifdef CONFIG_RVN

@@ -554,6 +554,13 @@ CSR_STRUCT_END(mimpid)
 
 #ifdef CONFIG_RV_DASICS
 
+#define DASICS_SREG_COUNT 12
+#define SREG_PHASE_INIT_LOCKED 0
+#define SREG_PHASE_ACTIVE 1
+#define SREG_PHASE_RESTORED_LOCKED 2
+
+#define MCFG_CSSRG  0x800ul
+#define MCFG_CUSRG  0x400ul
 #define MCFG_CSFT   0x200ul
 #define MCFG_CSLT   0x100ul
 #define MCFG_CSST   0x80ul
@@ -565,8 +572,8 @@ CSR_STRUCT_END(mimpid)
 #define MCFG_UENA   0x2ul
 #define MCFG_SENA   0x1ul
 
-#define DUMCFG_MASK (MCFG_CUFT | MCFG_CULT | MCFG_CUST | MCFG_CUET | MCFG_UENA)
-#define DSMCFG_MASK (MCFG_CSFT | MCFG_CSLT | MCFG_CSST | MCFG_CSET | MCFG_CUFT | MCFG_CULT | MCFG_CUST | MCFG_CUET | MCFG_UENA | MCFG_SENA)
+#define DUMCFG_MASK (MCFG_CUSRG | MCFG_CUFT | MCFG_CULT | MCFG_CUST | MCFG_CUET | MCFG_UENA)
+#define DSMCFG_MASK (MCFG_CSSRG | MCFG_CUSRG | MCFG_CSFT | MCFG_CSLT | MCFG_CSST | MCFG_CSET | MCFG_CUFT | MCFG_CULT | MCFG_CUST | MCFG_CUET | MCFG_UENA | MCFG_SENA)
 
 CSR_STRUCT_START(dsmcfg)
   uint64_t mcfg_sena:1;
@@ -579,6 +586,8 @@ CSR_STRUCT_START(dsmcfg)
   uint64_t mcfg_csst:1;
   uint64_t mcfg_cslt:1;
   uint64_t mcfg_csft:1;
+  uint64_t mcfg_cusrg:1;
+  uint64_t mcfg_cssrg:1;
 CSR_STRUCT_END(dsmcfg)
 
 CSR_STRUCT_START(dsmbound0)
@@ -598,6 +607,8 @@ CSR_STRUCT_START(dumcfg)
   uint64_t pad2:1;
   uint64_t pad3:1;
   uint64_t pad4:1;
+  uint64_t mcfg_cusrg:1;
+  uint64_t pad5:1;
 CSR_STRUCT_END(dumcfg)
 
 CSR_STRUCT_START(dumbound0)
@@ -812,6 +823,12 @@ bool dasics_match_dlib(uint64_t addr, uint8_t cfg);
 void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type);
 void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type);
 void dasics_check_trusted(vaddr_t pc);
+void dasics_sreg_guard_reset();
+void dasics_sreg_access_check(vaddr_t pc, uint32_t regno);
+word_t dasics_sreg_store_gate(vaddr_t pc, uint32_t regno, uint32_t rs1,
+    vaddr_t addr, word_t plain);
+word_t dasics_sreg_load_gate(vaddr_t pc, uint32_t regno, uint32_t rs1,
+    vaddr_t addr, word_t cipher_in);
 #endif  // CONFIG_RV_DASICS
 
 #endif

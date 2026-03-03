@@ -26,6 +26,24 @@ static inline def_DopHelper(r) {
   bool load_val = flag;
   static word_t zero_null = 0;
   op->preg = (!load_val && val == 0) ? &zero_null : &reg_l(val);
+#ifdef CONFIG_RV_DASICS
+  if (val == 8 || val == 9 || (val >= 18 && val <= 27)) {
+    uint32_t opcode = (s->isa.instr.r.opcode6_2 << 2) | s->isa.instr.r.opcode1_0;
+    bool skip_sreg_check = false;
+
+    if (load_val && opcode == 0x23 && s->isa.instr.s.funct3 == 0x3 &&
+        s->isa.instr.s.rs2 == val) {
+      skip_sreg_check = true;
+    } else if (!load_val && opcode == 0x03 && s->isa.instr.i.funct3 == 0x3 &&
+        s->isa.instr.i.rd == val) {
+      skip_sreg_check = true;
+    }
+
+    if (!skip_sreg_check) {
+      dasics_sreg_access_check(s->pc, val);
+    }
+  }
+#endif
   print_Dop(op->str, OP_STR_SIZE, "%s", reg_name(val, 4));
 #ifdef CONFIG_RVV
   op->reg = val;

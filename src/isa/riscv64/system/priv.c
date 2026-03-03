@@ -223,6 +223,210 @@ bool dasics_match_djumpbound(uint64_t addr, uint8_t cfg) {
   return within_range;
 }
 
+static inline int dasics_sreg_slot(uint32_t regno)
+{
+  switch (regno) {
+    case 8: return 0;
+    case 9: return 1;
+    case 18: return 2;
+    case 19: return 3;
+    case 20: return 4;
+    case 21: return 5;
+    case 22: return 6;
+    case 23: return 7;
+    case 24: return 8;
+    case 25: return 9;
+    case 26: return 10;
+    case 27: return 11;
+    default: return -1;
+  }
+}
+
+static inline bool dasics_sreg_guard_enabled()
+{
+  if (cpu.mode == MODE_U) {
+    return dsmcfg->mcfg_uena && !dsmcfg->mcfg_cusrg;
+  }
+  if (cpu.mode == MODE_S) {
+    return dsmcfg->mcfg_sena && !dsmcfg->mcfg_cssrg;
+  }
+  return false;
+}
+
+static inline word_t dasics_sreg_rotl(word_t v, unsigned s)
+{
+  const unsigned w = (unsigned)(sizeof(word_t) * 8);
+  s %= w;
+  if (s == 0) {
+    return v;
+  }
+  return (v << s) | (v >> (w - s));
+}
+
+static inline word_t dasics_sreg_prf_mask_a(word_t addr, uint32_t regno,
+    word_t sp_off)
+{
+  word_t x = (word_t)0x9e3779b97f4a7c15ULL;
+
+  x ^= addr;
+  x ^= (word_t)regno << 8;
+  x ^= sp_off;
+
+  x = dasics_sreg_rotl(x, 17) ^ (x >> 7);
+  x *= (word_t)0xbf58476d1ce4e5b9ULL;
+  x ^= x >> 29;
+  x *= (word_t)0x94d049bb133111ebULL;
+  x ^= x >> 31;
+
+  return x;
+}
+
+static inline void dasics_sreg_mac_tag_a(word_t cipher, word_t addr,
+    uint32_t regno, word_t sp_off, word_t *tag_lo, word_t *tag_hi)
+{
+  word_t lo = (word_t)0x243f6a8885a308d3ULL;
+  word_t hi = (word_t)0x13198a2e03707344ULL;
+
+  lo ^= cipher;
+  lo ^= dasics_sreg_rotl(addr, 13);
+  lo ^= (word_t)regno << 16;
+  lo ^= sp_off;
+
+  hi ^= dasics_sreg_rotl(cipher, 11);
+  hi ^= addr;
+  hi ^= dasics_sreg_rotl(sp_off, 7);
+
+  lo = (lo ^ (lo >> 33)) * (word_t)0xff51afd7ed558ccdULL;
+  lo ^= lo >> 33;
+  hi = (hi ^ (hi >> 33)) * (word_t)0xc4ceb9fe1a85ec53ULL;
+  hi ^= hi >> 33;
+
+  *tag_lo = lo;
+  *tag_hi = hi;
+}
+
+static inline void dasics_sreg_raise_fault(vaddr_t bad, uint64_t reason)
+{
+  int ex = (cpu.mode == MODE_U) ? EX_DUCF : EX_DSCF;
+  INTR_TVAL_REG(ex) = bad;
+  dfreason->val = reason;
+  longjmp_exception(ex);
+}
+
+void dasics_sreg_guard_reset()
+{
+  cpu.dasics_sreg.crypto_algo = 0;
+  cpu.dasics_sreg.tag_bits = 64;
+
+  for (int i = 0; i < DASICS_SREG_COUNT; ++i) {
+    cpu.dasics_sreg.phase[i] = SREG_PHASE_INIT_LOCKED;
+    cpu.dasics_sreg.saved_once[i] = 0;
+    cpu.dasics_sreg.sp_off[i] = 0;
+    cpu.dasics_sreg.shadow_cipher[i] = 0;
+    cpu.dasics_sreg.shadow_tag_lo[i] = 0;
+    cpu.dasics_sreg.shadow_tag_hi[i] = 0;
+  }
+}
+
+void dasics_sreg_access_check(vaddr_t pc, uint32_t regno)
+{
+  int slot = dasics_sreg_slot(regno);
+
+  if (slot < 0 || !dasics_sreg_guard_enabled()) {
+    return;
+  }
+  if (dasics_in_trusted_zone(pc)) {
+    return;
+  }
+  if (cpu.dasics_sreg.phase[slot] != SREG_PHASE_ACTIVE) {
+    dasics_sreg_raise_fault(pc, DFR_S0_VIOL);
+  }
+}
+
+word_t dasics_sreg_store_gate(vaddr_t pc, uint32_t regno, uint32_t rs1,
+    vaddr_t addr, word_t plain)
+{
+  int slot = dasics_sreg_slot(regno);
+  int64_t off = (int64_t)addr - (int64_t)cpu.gpr[2]._64;
+  word_t cipher, tag_lo, tag_hi;
+  uint8_t tag_bits = cpu.dasics_sreg.tag_bits;
+
+  if (slot < 0 || !dasics_sreg_guard_enabled()) {
+    return plain;
+  }
+  if (dasics_in_trusted_zone(pc)) {
+    return plain;
+  }
+  if (cpu.dasics_sreg.phase[slot] != SREG_PHASE_INIT_LOCKED) {
+    dasics_sreg_raise_fault(addr, DFR_S0_PROTO);
+  }
+  if (rs1 != 2) {
+    dasics_sreg_raise_fault(addr, DFR_S0_PROTO);
+  }
+  if (off < 0 || (off & 0x7)) {
+    dasics_sreg_raise_fault(addr, DFR_S0_PROTO);
+  }
+  if (tag_bits != 64 && tag_bits != 128) {
+    dasics_sreg_raise_fault(addr, DFR_S0_PROTO);
+  }
+
+  cipher = plain ^ dasics_sreg_prf_mask_a(addr, regno, (word_t)off);
+  dasics_sreg_mac_tag_a(cipher, addr, regno, (word_t)off, &tag_lo, &tag_hi);
+  if (tag_bits != 128) {
+    tag_hi = 0;
+  }
+
+  cpu.dasics_sreg.sp_off[slot] = (word_t)off;
+  cpu.dasics_sreg.shadow_cipher[slot] = cipher;
+  cpu.dasics_sreg.shadow_tag_lo[slot] = tag_lo;
+  cpu.dasics_sreg.shadow_tag_hi[slot] = tag_hi;
+  cpu.dasics_sreg.saved_once[slot] = 1;
+  cpu.dasics_sreg.phase[slot] = SREG_PHASE_ACTIVE;
+  return cipher;
+}
+
+word_t dasics_sreg_load_gate(vaddr_t pc, uint32_t regno, uint32_t rs1,
+    vaddr_t addr, word_t cipher_in)
+{
+  int slot = dasics_sreg_slot(regno);
+  int64_t off = (int64_t)addr - (int64_t)cpu.gpr[2]._64;
+  word_t expect_lo, expect_hi;
+  word_t diff = 0;
+  word_t plain;
+  uint8_t tag_bits = cpu.dasics_sreg.tag_bits;
+
+  if (slot < 0 || !dasics_sreg_guard_enabled()) {
+    return cipher_in;
+  }
+  if (dasics_in_trusted_zone(pc)) {
+    return cipher_in;
+  }
+  if (cpu.dasics_sreg.phase[slot] != SREG_PHASE_ACTIVE || rs1 != 2) {
+    dasics_sreg_raise_fault(addr, DFR_S0_PROTO);
+  }
+  if ((word_t)off != cpu.dasics_sreg.sp_off[slot]) {
+    dasics_sreg_raise_fault(addr, DFR_S0_PROTO);
+  }
+  if (tag_bits != 64 && tag_bits != 128) {
+    dasics_sreg_raise_fault(addr, DFR_S0_PROTO);
+  }
+
+  dasics_sreg_mac_tag_a(cipher_in, addr, regno, (word_t)off,
+      &expect_lo, &expect_hi);
+  diff |= expect_lo ^ cpu.dasics_sreg.shadow_tag_lo[slot];
+  if (tag_bits == 128) {
+    diff |= expect_hi ^ cpu.dasics_sreg.shadow_tag_hi[slot];
+  }
+  if (diff != 0) {
+    dasics_sreg_raise_fault(addr, DFR_S0_AUTH);
+  }
+
+  plain = cipher_in ^ dasics_sreg_prf_mask_a(addr, regno, (word_t)off);
+  cpu.dasics_sreg.saved_once[slot] = 0;
+  cpu.dasics_sreg.phase[slot] = SREG_PHASE_RESTORED_LOCKED;
+  return plain;
+}
+
 void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
   // TODO: What about MEM_TYPE_IFETCH ???
   if (dasics_in_trusted_zone(pc)) {
@@ -284,6 +488,12 @@ void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
     dfreason->val = DFR_JF;
     Logm("Dasics fetch exception occur: pc%lx  (st:%d,df:%d)\n",pc,src_trusted,dst_freezone);
     longjmp_exception(ex);
+  }
+
+  if (src_trusted && !dst_trusted) {
+    dasics_sreg_guard_reset();
+  } else if (!src_trusted && dst_trusted) {
+    dasics_sreg_guard_reset();
   }
 }
 
