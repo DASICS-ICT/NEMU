@@ -381,6 +381,7 @@ word_t dasics_sreg_store_gate(vaddr_t pc, uint32_t regno, uint32_t rs1,
   cpu.dasics_sreg.shadow_tag_lo[slot] = tag_lo;
   cpu.dasics_sreg.shadow_tag_hi[slot] = tag_hi;
   cpu.dasics_sreg.saved_once[slot] = 1;
+  cpu.gpr[regno]._64 = cipher;
   cpu.dasics_sreg.phase[slot] = SREG_PHASE_ACTIVE;
   return cipher;
 }
