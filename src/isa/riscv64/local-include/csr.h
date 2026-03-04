@@ -822,6 +822,7 @@ word_t dasics_jumpbound_high_from_index(int i);
 bool dasics_match_dlib(uint64_t addr, uint8_t cfg);
 void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type);
 void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type);
+void dasics_sreg_transition_gate(vaddr_t src_pc, vaddr_t dst_pc);
 void dasics_check_trusted(vaddr_t pc);
 void dasics_sreg_guard_reset();
 void dasics_sreg_access_check(vaddr_t pc, uint32_t regno);

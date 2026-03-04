@@ -377,7 +377,9 @@ void cpu_exec(uint64_t n) {
       cause = 0;
       vaddr_t temp_epc = prev_s->pc;
 #ifdef CONFIG_RV_DASICS
-      if((g_ex_cause == EX_DUCF || g_ex_cause == EX_DSCF) && dfreason->val == DFR_JF){
+      if ((g_ex_cause == EX_DUCF || g_ex_cause == EX_DSCF) &&
+          prev_s->prev_is_cfi &&
+          (dfreason->val == DFR_JF || dfreason->val == DFR_S0_PROTO)) {
         temp_epc = prev_s->prev_pc;
         prev_s->prev_is_cfi = 0;
         prev_s->prev_type = CFI_NONE;

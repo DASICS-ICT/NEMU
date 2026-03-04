@@ -343,6 +343,37 @@ void dasics_sreg_access_check(vaddr_t pc, uint32_t regno)
   }
 }
 
+static inline void dasics_sreg_return_gate_check(vaddr_t ret_target)
+{
+  if (!dasics_sreg_guard_enabled()) {
+    return;
+  }
+
+  for (int i = 0; i < DASICS_SREG_COUNT; ++i) {
+    uint8_t phase = cpu.dasics_sreg.phase[i];
+    uint8_t saved_once = cpu.dasics_sreg.saved_once[i];
+    bool phase_ok = (phase == SREG_PHASE_INIT_LOCKED) ||
+      (phase == SREG_PHASE_RESTORED_LOCKED);
+
+    if (!phase_ok || saved_once != 0) {
+      dasics_sreg_raise_fault(ret_target, DFR_S0_PROTO);
+    }
+  }
+}
+
+void dasics_sreg_transition_gate(vaddr_t src_pc, vaddr_t dst_pc)
+{
+  bool src_trusted = dasics_in_trusted_zone(src_pc);
+  bool dst_trusted = dasics_in_trusted_zone(dst_pc);
+
+  if (src_trusted && !dst_trusted) {
+    dasics_sreg_guard_reset();
+  } else if (!src_trusted && dst_trusted) {
+    dasics_sreg_return_gate_check(dst_pc);
+    dasics_sreg_guard_reset();
+  }
+}
+
 word_t dasics_sreg_store_gate(vaddr_t pc, uint32_t regno, uint32_t rs1,
     vaddr_t addr, word_t plain)
 {
@@ -491,11 +522,7 @@ void dasics_fetch_helper(vaddr_t pc, vaddr_t prev_pc, uint8_t cfi_type) {
     longjmp_exception(ex);
   }
 
-  if (src_trusted && !dst_trusted) {
-    dasics_sreg_guard_reset();
-  } else if (!src_trusted && dst_trusted) {
-    dasics_sreg_guard_reset();
-  }
+  dasics_sreg_transition_gate(prev_pc, pc);
 }
 
 // void dasics_redirect_helper(vaddr_t pc, vaddr_t newpc, vaddr_t nextpc) {
