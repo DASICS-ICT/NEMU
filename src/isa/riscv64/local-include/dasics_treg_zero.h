@@ -38,6 +38,18 @@ void dasics_treg_zero_reset(void);
 // must observe init-bit masking.
 bool dasics_treg_zero_is_untrusted_now(vaddr_t pc);
 
+// Return true when source reads should observe init-bit masking. ADR 0004
+// extends the original untrusted-domain context with the trap cleanup window.
+bool dasics_treg_zero_rewrite_context(vaddr_t pc);
+
+// Maintain the ADR 0004 trap cleanup window state. trap_entry must be called
+// before raise_intr() changes cpu.mode; xret is called only on decoded xRET.
+void dasics_treg_zero_trap_entry(vaddr_t epc);
+void dasics_treg_zero_xret(bool legal, uint64_t return_mode, vaddr_t target_pc);
+
+// Expose the private state for focused checks and diagnostics.
+bool dasics_treg_zero_sreg_not_cleaned(void);
+
 // Query source init state for a logical GPR. x0 is always treated initialized.
 bool dasics_treg_zero_int_src_is_init(int rs);
 

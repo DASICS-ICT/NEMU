@@ -21,7 +21,7 @@ static int table_fmadd_d_dispatch(Decode *s);
 static inline def_DopHelper(fr){
 #ifdef CONFIG_RV_DASICS_TREG_ZERO
   bool acts_as_src = flag;
-  if (acts_as_src && dasics_treg_zero_is_untrusted_now(s->pc) && !dasics_treg_zero_fp_src_is_init(val)) {
+  if (acts_as_src && dasics_treg_zero_rewrite_context(s->pc) && !dasics_treg_zero_fp_src_is_init(val)) {
     op->preg = (rtlreg_t *)&dasics_treg_zero_fp_zero;
   } else {
     op->preg = &fpreg_l(val);

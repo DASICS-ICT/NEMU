@@ -31,7 +31,7 @@ static inline def_DopHelper(r) {
   static word_t zero_null = 0;
   rtlreg_t *preg_default = (!load_val && val == 0) ? &zero_null : &reg_l(val);
 #ifdef CONFIG_RV_DASICS_TREG_ZERO
-  if (load_val && dasics_treg_zero_is_untrusted_now(s->pc) && !dasics_treg_zero_int_src_is_init(val)) {
+  if (load_val && dasics_treg_zero_rewrite_context(s->pc) && !dasics_treg_zero_int_src_is_init(val)) {
     op->preg = (rtlreg_t *)&dasics_treg_zero_int_zero;
   } else {
     op->preg = preg_default;

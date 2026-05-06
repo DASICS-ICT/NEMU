@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "../local-include/csr.h"
+#include "../local-include/dasics_treg_zero.h"
 #include "../local-include/rtl.h"
 #include "../local-include/intr.h"
 #include <cpu/cpu.h>
@@ -713,6 +714,7 @@ static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
 #ifndef CONFIG_MODE_USER
 #ifdef CONFIG_RVN
     case 0x002: // uret
+      IFDEF(CONFIG_RV_DASICS_TREG_ZERO, dasics_treg_zero_xret(true, MODE_U, uepc->val));
       mstatus->uie = mstatus->upie;
       mstatus->upie = (ISDEF(CONFIG_DIFFTEST_REF_QEMU) ? 0 // this is bug of QEMU
           : 1);
@@ -728,6 +730,7 @@ static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
       mstatus->sie = mstatus->spie;
       mstatus->spie = (ISDEF(CONFIG_DIFFTEST_REF_QEMU) ? 0 // this is bug of QEMU
           : 1);
+      IFDEF(CONFIG_RV_DASICS_TREG_ZERO, dasics_treg_zero_xret(true, mstatus->spp, sepc->val));
       cpu.mode = mstatus->spp;
       if (mstatus->spp != MODE_M) { mstatus->mprv = 0; }
       mstatus->spp = MODE_U;
@@ -740,6 +743,7 @@ static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
       mstatus->mie = mstatus->mpie;
       mstatus->mpie = (ISDEF(CONFIG_DIFFTEST_REF_QEMU) ? 0 // this is bug of QEMU
           : 1);
+      IFDEF(CONFIG_RV_DASICS_TREG_ZERO, dasics_treg_zero_xret(true, mstatus->mpp, mepc->val));
       cpu.mode = mstatus->mpp;
       if (mstatus->mpp != MODE_M) { mstatus->mprv = 0; }
       mstatus->mpp = MODE_U;

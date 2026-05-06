@@ -16,6 +16,7 @@
 
 #include <cpu/difftest.h>
 #include "../local-include/csr.h"
+#include "../local-include/dasics_treg_zero.h"
 #include "../local-include/intr.h"
 
 void update_mmu_state();
@@ -55,6 +56,8 @@ static word_t get_trap_pc(word_t xtvec, word_t xcause) {
 }
 
 word_t raise_intr(word_t NO, vaddr_t epc) {
+  IFDEF(CONFIG_RV_DASICS_TREG_ZERO, dasics_treg_zero_trap_entry(epc));
+
   switch (NO) {
     case EX_II:
     case EX_IPF:

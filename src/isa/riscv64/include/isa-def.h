@@ -105,6 +105,7 @@ typedef struct {
   uint32_t dasics_treg_zero_int_init_bits;
   uint32_t dasics_treg_zero_fp_init_bits;
   bool dasics_treg_zero_pending_clear;
+  bool dasics_treg_zero_sreg_not_cleaned;
 #endif
 
 #ifdef CONFIG_RVN
