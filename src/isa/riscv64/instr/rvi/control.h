@@ -45,6 +45,7 @@ def_EHelper(jalr) {
 def_EHelper(dasicscall_j) {
   rtl_set_dretpc(s, id_src2->imm);
   rtl_li(s, ddest, id_src2->imm);
+  IFDEF(CONFIG_RV_DASICS_TREG_ZERO, dasics_treg_zero_mark_pending_clear());
   rtl_j(s, id_src1->imm);
 }
 
@@ -68,6 +69,7 @@ def_EHelper(dasicscall_jr) {
   rtl_li(s, ddest, s->snpc);
 #endif
   IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 3));
+  IFDEF(CONFIG_RV_DASICS_TREG_ZERO, dasics_treg_zero_mark_pending_clear());
   rtl_jr(s, s0);
 }
 #endif  // CONFIG_RV_DASICS

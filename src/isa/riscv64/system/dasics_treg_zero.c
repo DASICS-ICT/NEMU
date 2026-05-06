@@ -47,10 +47,25 @@ bool dasics_treg_zero_fp_src_is_init(int rs) {
 }
 
 void dasics_treg_zero_mark_pending_clear(void) {
+  cpu.dasics_treg_zero_pending_clear = true;
 }
 
 void dasics_treg_zero_commit_hook(const struct Decode *s) {
-  (void)s;
+  if (cpu.dasics_treg_zero_pending_clear) {
+    cpu.dasics_treg_zero_int_init_bits &= ~DASICS_TREG_ZERO_INT_CLEAR_MASK;
+    cpu.dasics_treg_zero_fp_init_bits &= ~DASICS_TREG_ZERO_FP_CLEAR_MASK;
+    cpu.dasics_treg_zero_pending_clear = false;
+  }
+
+  if (!dasics_treg_zero_is_untrusted_now(s->pc)) return;
+
+  if (s->dest.reg_idx >= 1 && s->dest.reg_idx < 32) {
+    if (s->dest.reg_is_fp) {
+      cpu.dasics_treg_zero_fp_init_bits |= (1u << s->dest.reg_idx);
+    } else {
+      cpu.dasics_treg_zero_int_init_bits |= (1u << s->dest.reg_idx);
+    }
+  }
 }
 
 rtlreg_t *dasics_treg_zero_fp_src_addr(const struct Decode *s, int idx) {

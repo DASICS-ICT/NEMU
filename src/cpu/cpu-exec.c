@@ -300,6 +300,7 @@ static int execute(int n) {
     }
 #endif
     s.EHelper(&s);
+    IFDEF(CONFIG_RV_DASICS_TREG_ZERO, dasics_treg_zero_commit_hook(&s));
     g_nr_guest_instr ++;
 #ifdef CONFIG_RVN
 // utimer logic
