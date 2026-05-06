@@ -47,27 +47,27 @@ def_EHelper(fsqrtd) {
 }
 
 def_EHelper(fmaddd) {
-  rtl_mv(s, s0, &fpreg_l(s->isa.instr.fp.funct5)); // rs3
+  rtl_mv(s, s0, DASICS_TREG_ZERO_FP_SRC_ADDR(s, s->isa.instr.fp.funct5)); // rs3
   rtl_hostcall(s, HOSTCALL_FP, s0, dsrc1, dsrc2, FPCALL_CMD(FPCALL_MADD, FPCALL_W64));
   rtl_fsr(s, ddest, s0, FPCALL_W64);
 }
 
 def_EHelper(fmsubd) {
-  rtl_mv(s, s0, &fpreg_l(s->isa.instr.fp.funct5)); // rs3
+  rtl_mv(s, s0, DASICS_TREG_ZERO_FP_SRC_ADDR(s, s->isa.instr.fp.funct5)); // rs3
   rtl_xori(s, s0, s0, F64_SIGN);
   rtl_hostcall(s, HOSTCALL_FP, s0, dsrc1, dsrc2, FPCALL_CMD(FPCALL_MADD, FPCALL_W64));
   rtl_fsr(s, ddest, s0, FPCALL_W64);
 }
 
 def_EHelper(fnmsubd) {
-  rtl_mv(s, s0, &fpreg_l(s->isa.instr.fp.funct5)); // rs3
+  rtl_mv(s, s0, DASICS_TREG_ZERO_FP_SRC_ADDR(s, s->isa.instr.fp.funct5)); // rs3
   rtl_xori(s, s1, dsrc1, F64_SIGN);
   rtl_hostcall(s, HOSTCALL_FP, s0, s1, dsrc2, FPCALL_CMD(FPCALL_MADD, FPCALL_W64));
   rtl_fsr(s, ddest, s0, FPCALL_W64);
 }
 
 def_EHelper(fnmaddd) {
-  rtl_mv(s, s0, &fpreg_l(s->isa.instr.fp.funct5)); // rs3
+  rtl_mv(s, s0, DASICS_TREG_ZERO_FP_SRC_ADDR(s, s->isa.instr.fp.funct5)); // rs3
   rtl_xori(s, s1, dsrc1, F64_SIGN);
   rtl_xori(s, s0, s0, F64_SIGN);
   rtl_hostcall(s, HOSTCALL_FP, s0, s1, dsrc2, FPCALL_CMD(FPCALL_MADD, FPCALL_W64));

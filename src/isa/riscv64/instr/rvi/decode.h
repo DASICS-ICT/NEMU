@@ -29,7 +29,16 @@ static inline def_DopHelper(i) {
 static inline def_DopHelper(r) {
   bool load_val = flag;
   static word_t zero_null = 0;
-  op->preg = (!load_val && val == 0) ? &zero_null : &reg_l(val);
+  rtlreg_t *preg_default = (!load_val && val == 0) ? &zero_null : &reg_l(val);
+#ifdef CONFIG_RV_DASICS_TREG_ZERO
+  if (load_val && dasics_treg_zero_is_untrusted_now(s->pc) && !dasics_treg_zero_int_src_is_init(val)) {
+    op->preg = (rtlreg_t *)&dasics_treg_zero_int_zero;
+  } else {
+    op->preg = preg_default;
+  }
+#else
+  op->preg = preg_default;
+#endif
 #ifdef CONFIG_RV_DASICS_TREG_ZERO
   op->reg_idx = (!load_val && val != 0) ? val : -1;
   op->reg_is_fp = 0;

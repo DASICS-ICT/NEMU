@@ -15,7 +15,9 @@
 ***************************************************************************************/
 
 #include <isa.h>
+#include <cpu/decode.h>
 #include "../local-include/dasics_treg_zero.h"
+#include "../local-include/csr.h"
 
 #ifdef CONFIG_RV_DASICS_TREG_ZERO
 
@@ -31,18 +33,17 @@ void dasics_treg_zero_reset(void) {
 }
 
 bool dasics_treg_zero_is_untrusted_now(vaddr_t pc) {
-  (void)pc;
-  return false;
+  return !dasics_in_trusted_zone(pc);
 }
 
 bool dasics_treg_zero_int_src_is_init(int rs) {
-  (void)rs;
-  return true;
+  int idx = check_reg_index(rs);
+  return idx == 0 || (cpu.dasics_treg_zero_int_init_bits & (1u << idx));
 }
 
 bool dasics_treg_zero_fp_src_is_init(int rs) {
-  (void)rs;
-  return true;
+  int idx = check_reg_index(rs);
+  return cpu.dasics_treg_zero_fp_init_bits & (1u << idx);
 }
 
 void dasics_treg_zero_mark_pending_clear(void) {
@@ -53,7 +54,9 @@ void dasics_treg_zero_commit_hook(const struct Decode *s) {
 }
 
 rtlreg_t *dasics_treg_zero_fp_src_addr(const struct Decode *s, int idx) {
-  (void)s;
+  if (dasics_treg_zero_is_untrusted_now(s->pc) && !dasics_treg_zero_fp_src_is_init(idx)) {
+    return (rtlreg_t *)&dasics_treg_zero_fp_zero;
+  }
   return &fpreg_l(idx);
 }
 

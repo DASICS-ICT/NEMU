@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "../local-include/rtl.h"
+#include "../local-include/dasics_treg_zero.h"
 #include <cpu/ifetch.h>
 #include <cpu/decode.h>
 #include <isa-all-instr.h>

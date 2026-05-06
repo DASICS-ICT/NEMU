@@ -14,6 +14,7 @@
 * See the Mulan PSL v2 for more details.
 ***************************************************************************************/
 
+#include "../local-include/dasics_treg_zero.h"
 #include "../instr/pseudo.h"
 #include "../instr/rvi/exec.h"
 #include "../instr/rvc/exec.h"

@@ -19,9 +19,18 @@ static int table_op_fp_d(Decode *s);
 static int table_fmadd_d_dispatch(Decode *s);
 
 static inline def_DopHelper(fr){
-  op->preg = &fpreg_l(val);
 #ifdef CONFIG_RV_DASICS_TREG_ZERO
-  op->reg_idx = flag ? -1 : val;
+  bool acts_as_src = flag;
+  if (acts_as_src && dasics_treg_zero_is_untrusted_now(s->pc) && !dasics_treg_zero_fp_src_is_init(val)) {
+    op->preg = (rtlreg_t *)&dasics_treg_zero_fp_zero;
+  } else {
+    op->preg = &fpreg_l(val);
+  }
+#else
+  op->preg = &fpreg_l(val);
+#endif
+#ifdef CONFIG_RV_DASICS_TREG_ZERO
+  op->reg_idx = acts_as_src ? -1 : val;
   op->reg_is_fp = 1;
 #endif
   print_Dop(op->str, OP_STR_SIZE, "%s", fpreg_name(val, 4));
