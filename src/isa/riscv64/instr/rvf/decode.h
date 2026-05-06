@@ -20,6 +20,10 @@ static int table_fmadd_d_dispatch(Decode *s);
 
 static inline def_DopHelper(fr){
   op->preg = &fpreg_l(val);
+#ifdef CONFIG_RV_DASICS_TREG_ZERO
+  op->reg_idx = flag ? -1 : val;
+  op->reg_is_fp = 1;
+#endif
   print_Dop(op->str, OP_STR_SIZE, "%s", fpreg_name(val, 4));
 #ifdef CONFIG_RVV
   op->reg = val;
@@ -27,14 +31,14 @@ static inline def_DopHelper(fr){
 }
 
 static inline def_DHelper(fr) {
-  decode_op_fr(s, id_src1, s->isa.instr.fp.rs1, false);
-  decode_op_fr(s, id_src2, s->isa.instr.fp.rs2, false);
+  decode_op_fr(s, id_src1, s->isa.instr.fp.rs1, true);
+  decode_op_fr(s, id_src2, s->isa.instr.fp.rs2, true);
   decode_op_fr(s, id_dest, s->isa.instr.fp.rd,  false);
 }
 
 static inline def_DHelper(R4) {
-  decode_op_fr(s, id_src1, s->isa.instr.fp.rs1, false);
-  decode_op_fr(s, id_src2, s->isa.instr.fp.rs2, false);
+  decode_op_fr(s, id_src1, s->isa.instr.fp.rs1, true);
+  decode_op_fr(s, id_src2, s->isa.instr.fp.rs2, true);
   decode_op_fr(s, id_dest, s->isa.instr.fp.rd,  false);
   // rs3 is decoded at exec.h
 }
@@ -49,7 +53,7 @@ static inline def_DHelper(fstore) {
   decode_op_r(s, id_src1, s->isa.instr.s.rs1, true);
   sword_t simm = (s->isa.instr.s.simm11_5 << 5) | s->isa.instr.s.imm4_0;
   decode_op_i(s, id_src2, simm, false);
-  decode_op_fr(s, id_dest, s->isa.instr.s.rs2, false);
+  decode_op_fr(s, id_dest, s->isa.instr.s.rs2, true);
 }
 
 static inline def_DHelper(fr2r){
@@ -78,7 +82,7 @@ def_THelper(vload) {
 
 def_THelper(vstore) {
   decode_op_i(s, id_src2, (sword_t)s->isa.instr.i.simm11_0, false);
-  decode_op_fr(s, id_dest, s->isa.instr.i.rd, false);
+  decode_op_fr(s, id_dest, s->isa.instr.i.rd, true);
   def_INSTR_TAB("??? 000 ? ????? ????? ??? ????? ????? ??", vstu);
   def_INSTR_TAB("??? 010 ? ????? ????? ??? ????? ????? ??", vsts);
   def_INSTR_TAB("??? 011 ? ????? ????? ??? ????? ????? ??", vstx);

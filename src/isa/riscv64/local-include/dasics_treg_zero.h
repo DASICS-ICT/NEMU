@@ -18,6 +18,7 @@
 #define __RISCV64_DASICS_TREG_ZERO_H__
 
 #include <common.h>
+#include "reg.h"
 
 struct Decode;
 

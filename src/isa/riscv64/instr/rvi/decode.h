@@ -19,6 +19,10 @@ static int table_c_addiw_dispatch(Decode *s);
 
 static inline def_DopHelper(i) {
   op->imm = val;
+#ifdef CONFIG_RV_DASICS_TREG_ZERO
+  op->reg_idx = -1;
+  op->reg_is_fp = 0;
+#endif
   print_Dop(op->str, OP_STR_SIZE, (flag ? "0x%lx" : "%ld"), op->imm);
 }
 
@@ -26,6 +30,10 @@ static inline def_DopHelper(r) {
   bool load_val = flag;
   static word_t zero_null = 0;
   op->preg = (!load_val && val == 0) ? &zero_null : &reg_l(val);
+#ifdef CONFIG_RV_DASICS_TREG_ZERO
+  op->reg_idx = (!load_val && val != 0) ? val : -1;
+  op->reg_is_fp = 0;
+#endif
   print_Dop(op->str, OP_STR_SIZE, "%s", reg_name(val, 4));
 #ifdef CONFIG_RVV
   op->reg = val;
