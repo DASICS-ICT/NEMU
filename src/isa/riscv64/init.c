@@ -17,6 +17,7 @@
 #include <isa.h>
 #include <memory/paddr.h>
 #include "local-include/csr.h"
+#include "local-include/dasics_treg_zero.h"
 
 #ifndef CONFIG_SHARE
 static const uint32_t img [] = {
@@ -65,6 +66,8 @@ void init_isa() {
   spkrs->val = 0;
   spkctl->val = 0;
 #endif  // CONFIG_RV_DASICS
+
+  IFDEF(CONFIG_RV_DASICS_TREG_ZERO, dasics_treg_zero_reset());
 
 #ifdef CONFIG_RVN
   utimer->val = 0;

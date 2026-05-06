@@ -15,4 +15,6 @@ include/config
 include/generated
 build
 .vscode
-
+AGENTS.md
+CLAUDE.md
+doc-nemu/

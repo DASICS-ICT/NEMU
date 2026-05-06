@@ -101,6 +101,12 @@ typedef struct {
 #endif  // CONFIG_RV_DASICS
 
   // Above will be synced by regcpy when run difftest, DO NOT TOUCH
+#ifdef CONFIG_RV_DASICS_TREG_ZERO
+  uint32_t dasics_treg_zero_int_init_bits;
+  uint32_t dasics_treg_zero_fp_init_bits;
+  bool dasics_treg_zero_pending_clear;
+#endif
+
 #ifdef CONFIG_RVN
  uint64_t utimer;
 #endif

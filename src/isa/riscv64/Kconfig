@@ -32,6 +32,16 @@ config RV_DASICS
   bool "Enable DASICS Protection Mechanism for RV64"
   default y
 
+config RV_DASICS_TREG_ZERO
+  depends on RV_DASICS && !PERF_OPT
+  bool "Enable DASICS treg-zero init-bit reference model"
+  default n
+  help
+    Model the architectural-visible behavior of DASICS treg-zero. dasicscall.j/jr
+    commit clears init_bit of caller-saved int (x5-x7,x28-x31) and fp
+    (f0-f7,f28-f31) regs. Untrusted source reads of uninitialized regs are
+    masked to zero.
+
 config RV_PMP_CSR
   bool "Enable PMP CSR Read & Write"
   default y
