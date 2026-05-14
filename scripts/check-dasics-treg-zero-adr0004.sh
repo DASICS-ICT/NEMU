@@ -47,7 +47,7 @@ typedef struct {
   uint32_t dasics_treg_zero_int_init_bits;
   uint32_t dasics_treg_zero_fp_init_bits;
   bool dasics_treg_zero_pending_clear;
-  bool dasics_treg_zero_sreg_not_cleaned;
+  bool dasics_treg_zero_treg_not_cleaned;
 } CPU_state;
 
 extern CPU_state cpu;
@@ -128,51 +128,51 @@ int main(void) {
   set_u_trusted_range(0x2000, 0x3000);
   cpu.mode = MODE_U;
   dasics_treg_zero_trap_entry(0x1000);
-  require_true(dasics_treg_zero_sreg_not_cleaned(), "U untrusted trap sets state");
+  require_true(dasics_treg_zero_treg_not_cleaned(), "U untrusted trap sets state");
 
   reset_case();
   set_u_trusted_range(0x2000, 0x3000);
   cpu.mode = MODE_S;
   dasics_treg_zero_trap_entry(0x1000);
-  require_true(!dasics_treg_zero_sreg_not_cleaned(), "S trap does not set state");
+  require_true(!dasics_treg_zero_treg_not_cleaned(), "S trap does not set state");
 
   reset_case();
   set_u_trusted_range(0x2000, 0x3000);
   cpu.mode = MODE_M;
   dasics_treg_zero_trap_entry(0x1000);
-  require_true(!dasics_treg_zero_sreg_not_cleaned(), "M trap does not set state");
+  require_true(!dasics_treg_zero_treg_not_cleaned(), "M trap does not set state");
 
   reset_case();
   dsmcfg->mcfg_uena = 0;
   cpu.mode = MODE_U;
   dasics_treg_zero_trap_entry(0x1000);
-  require_true(!dasics_treg_zero_sreg_not_cleaned(), "DASICS U disable prevents set");
+  require_true(!dasics_treg_zero_treg_not_cleaned(), "DASICS U disable prevents set");
 
   reset_case();
   set_u_trusted_range(0x2000, 0x3000);
   cpu.mode = MODE_U;
   dasics_treg_zero_trap_entry(0x1000);
   dasics_treg_zero_xret(true, MODE_S, 0x2100);
-  require_true(dasics_treg_zero_sreg_not_cleaned(), "MRET/SRET to S keeps state");
+  require_true(dasics_treg_zero_treg_not_cleaned(), "MRET/SRET to S keeps state");
   cpu.mode = MODE_S;
   dasics_treg_zero_trap_entry(0x2000);
-  require_true(dasics_treg_zero_sreg_not_cleaned(), "nested S trap keeps state");
+  require_true(dasics_treg_zero_treg_not_cleaned(), "nested S trap keeps state");
   dasics_treg_zero_xret(false, MODE_U, 0x1000);
-  require_true(dasics_treg_zero_sreg_not_cleaned(), "illegal xRET does not clear");
+  require_true(dasics_treg_zero_treg_not_cleaned(), "illegal xRET does not clear");
   dasics_treg_zero_xret(true, MODE_U, 0x2100);
-  require_true(dasics_treg_zero_sreg_not_cleaned(), "legal xRET to U trusted stub keeps state");
+  require_true(dasics_treg_zero_treg_not_cleaned(), "legal xRET to U trusted stub keeps state");
   dasics_treg_zero_xret(true, MODE_U, 0x1000);
-  require_true(!dasics_treg_zero_sreg_not_cleaned(), "legal xRET to U untrusted clears state");
+  require_true(!dasics_treg_zero_treg_not_cleaned(), "legal xRET to U untrusted clears state");
 
   reset_case();
   set_u_trusted_range(0x2000, 0x3000);
-  cpu.dasics_treg_zero_sreg_not_cleaned = true;
+  cpu.dasics_treg_zero_treg_not_cleaned = true;
   cpu.dasics_treg_zero_int_init_bits &= ~(1u << 5);
   cpu.mode = MODE_U;
-  require_true(dasics_treg_zero_rewrite_context(0x2100), "sreg window is rewrite context in trusted handler");
+  require_true(dasics_treg_zero_rewrite_context(0x2100), "treg window is rewrite context in trusted handler");
   require_true(!dasics_treg_zero_int_src_is_init(5), "t0 init bit is clear");
   dasics_treg_zero_commit_hook(&s);
-  require_true(dasics_treg_zero_int_src_is_init(5), "handler write sets init bit in sreg window");
+  require_true(dasics_treg_zero_int_src_is_init(5), "handler write sets init bit in treg window");
   cpu.dasics_treg_zero_int_init_bits &= ~(1u << 8);
   cpu.dasics_treg_zero_fp_init_bits &= ~(1u << 8);
   require_true(dasics_treg_zero_int_src_is_init(8), "non-protected integer source is never rewritten");
@@ -180,7 +180,7 @@ int main(void) {
 
   reset_case();
   dsmcfg->mcfg_uena = 0;
-  cpu.dasics_treg_zero_sreg_not_cleaned = true;
+  cpu.dasics_treg_zero_treg_not_cleaned = true;
   cpu.mode = MODE_U;
   require_true(!dasics_treg_zero_rewrite_context(0x4000), "DASICS U disable gates rewrite context");
 

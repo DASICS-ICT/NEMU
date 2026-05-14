@@ -38,7 +38,7 @@ void dasics_treg_zero_reset(void) {
   cpu.dasics_treg_zero_int_init_bits = DASICS_TREG_ZERO_INIT_ALL;
   cpu.dasics_treg_zero_fp_init_bits = DASICS_TREG_ZERO_INIT_ALL;
   cpu.dasics_treg_zero_pending_clear = false;
-  cpu.dasics_treg_zero_sreg_not_cleaned = false;
+  cpu.dasics_treg_zero_treg_not_cleaned = false;
 }
 
 bool dasics_treg_zero_is_untrusted_now(vaddr_t pc) {
@@ -48,14 +48,14 @@ bool dasics_treg_zero_is_untrusted_now(vaddr_t pc) {
 bool dasics_treg_zero_rewrite_context(vaddr_t pc) {
   return dsmcfg->mcfg_uena &&
     (dasics_treg_zero_is_untrusted_now(pc) ||
-     cpu.dasics_treg_zero_sreg_not_cleaned);
+     cpu.dasics_treg_zero_treg_not_cleaned);
 }
 
 void dasics_treg_zero_trap_entry(vaddr_t epc) {
   if (cpu.mode == MODE_U &&
       dsmcfg->mcfg_uena &&
       dasics_treg_zero_is_untrusted_now(epc)) {
-    cpu.dasics_treg_zero_sreg_not_cleaned = true;
+    cpu.dasics_treg_zero_treg_not_cleaned = true;
   }
 }
 
@@ -72,12 +72,12 @@ void dasics_treg_zero_xret(bool legal, uint64_t return_mode, vaddr_t target_pc) 
       return_mode == MODE_U &&
       dsmcfg->mcfg_uena &&
       dasics_treg_zero_xret_target_is_untrusted(return_mode, target_pc)) {
-    cpu.dasics_treg_zero_sreg_not_cleaned = false;
+    cpu.dasics_treg_zero_treg_not_cleaned = false;
   }
 }
 
-bool dasics_treg_zero_sreg_not_cleaned(void) {
-  return cpu.dasics_treg_zero_sreg_not_cleaned;
+bool dasics_treg_zero_treg_not_cleaned(void) {
+  return cpu.dasics_treg_zero_treg_not_cleaned;
 }
 
 bool dasics_treg_zero_int_src_is_init(int rs) {

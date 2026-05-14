@@ -48,7 +48,7 @@ void dasics_treg_zero_trap_entry(vaddr_t epc);
 void dasics_treg_zero_xret(bool legal, uint64_t return_mode, vaddr_t target_pc);
 
 // Expose the private state for focused checks and diagnostics.
-bool dasics_treg_zero_sreg_not_cleaned(void);
+bool dasics_treg_zero_treg_not_cleaned(void);
 
 // Query source init state for a logical GPR. x0 is always treated initialized.
 bool dasics_treg_zero_int_src_is_init(int rs);
