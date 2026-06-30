@@ -47,6 +47,8 @@
 #define CUSTOM_CSR_MFLUSHPWR_WMASK  0x1
 #define CUSTOM_CSR_SFETCHCTL_WMASK  0x1
 
+#include "../local-include/dasics-config.h"
+
 /**
  * Mapping between CSR name and addr
  *
@@ -505,15 +507,23 @@
 #endif // CONFIG_RV_SDEXT
 
 /** Bitmap registers **/
-#ifdef CONFIG_RV_MBMC
+#if defined(CONFIG_RV_MBMC) && !defined(CONFIG_RV_DASICS)
   #define CSRS_M_MBMC(f) \
     f(mbmc       , 0xBC2)
 #else // CONFIG_RV_MBMC
   #define CSRS_M_MBMC(f)
 #endif // CONFIG_RV_MBMC
 
+#ifdef CONFIG_RV_DASICS
+  #define CSRS_M_COREPWR(f)
+#else
+  #define CSRS_M_COREPWR(f) \
+    f(mcorepwr   , 0xBC0)
+#endif
+
 #define CSRS_M_CUSTOM(f) \
-  f(mcorepwr   , 0xBC0) f(mflushpwr  , 0xBC1) \
+  CSRS_M_COREPWR(f) \
+  f(mflushpwr  , 0xBC1) \
   CSRS_M_MBMC(f)
 
 /** Machine AIA Registers **/
@@ -571,12 +581,79 @@
   CSRS_M_CUSTOM(f)
 
 
+/* DASICS/FDI custom CSRs */
+#ifdef CONFIG_RV_DASICS
+  #define CSRS_DASICS_LIB_BOUND(f) \
+    f(dasics_lib_bound_lo0  , DASICS_CSR_LIB_BOUND_LO(0)) \
+    f(dasics_lib_bound_hi0  , DASICS_CSR_LIB_BOUND_HI(0)) \
+    f(dasics_lib_bound_lo1  , DASICS_CSR_LIB_BOUND_LO(1)) \
+    f(dasics_lib_bound_hi1  , DASICS_CSR_LIB_BOUND_HI(1)) \
+    f(dasics_lib_bound_lo2  , DASICS_CSR_LIB_BOUND_LO(2)) \
+    f(dasics_lib_bound_hi2  , DASICS_CSR_LIB_BOUND_HI(2)) \
+    f(dasics_lib_bound_lo3  , DASICS_CSR_LIB_BOUND_LO(3)) \
+    f(dasics_lib_bound_hi3  , DASICS_CSR_LIB_BOUND_HI(3)) \
+    f(dasics_lib_bound_lo4  , DASICS_CSR_LIB_BOUND_LO(4)) \
+    f(dasics_lib_bound_hi4  , DASICS_CSR_LIB_BOUND_HI(4)) \
+    f(dasics_lib_bound_lo5  , DASICS_CSR_LIB_BOUND_LO(5)) \
+    f(dasics_lib_bound_hi5  , DASICS_CSR_LIB_BOUND_HI(5)) \
+    f(dasics_lib_bound_lo6  , DASICS_CSR_LIB_BOUND_LO(6)) \
+    f(dasics_lib_bound_hi6  , DASICS_CSR_LIB_BOUND_HI(6)) \
+    f(dasics_lib_bound_lo7  , DASICS_CSR_LIB_BOUND_LO(7)) \
+    f(dasics_lib_bound_hi7  , DASICS_CSR_LIB_BOUND_HI(7)) \
+    f(dasics_lib_bound_lo8  , DASICS_CSR_LIB_BOUND_LO(8)) \
+    f(dasics_lib_bound_hi8  , DASICS_CSR_LIB_BOUND_HI(8)) \
+    f(dasics_lib_bound_lo9  , DASICS_CSR_LIB_BOUND_LO(9)) \
+    f(dasics_lib_bound_hi9  , DASICS_CSR_LIB_BOUND_HI(9)) \
+    f(dasics_lib_bound_lo10 , DASICS_CSR_LIB_BOUND_LO(10)) \
+    f(dasics_lib_bound_hi10 , DASICS_CSR_LIB_BOUND_HI(10)) \
+    f(dasics_lib_bound_lo11 , DASICS_CSR_LIB_BOUND_LO(11)) \
+    f(dasics_lib_bound_hi11 , DASICS_CSR_LIB_BOUND_HI(11)) \
+    f(dasics_lib_bound_lo12 , DASICS_CSR_LIB_BOUND_LO(12)) \
+    f(dasics_lib_bound_hi12 , DASICS_CSR_LIB_BOUND_HI(12)) \
+    f(dasics_lib_bound_lo13 , DASICS_CSR_LIB_BOUND_LO(13)) \
+    f(dasics_lib_bound_hi13 , DASICS_CSR_LIB_BOUND_HI(13)) \
+    f(dasics_lib_bound_lo14 , DASICS_CSR_LIB_BOUND_LO(14)) \
+    f(dasics_lib_bound_hi14 , DASICS_CSR_LIB_BOUND_HI(14)) \
+    f(dasics_lib_bound_lo15 , DASICS_CSR_LIB_BOUND_LO(15)) \
+    f(dasics_lib_bound_hi15 , DASICS_CSR_LIB_BOUND_HI(15))
+
+  #define CSRS_DASICS_JUMP_BOUND(f) \
+    f(dasics_jump_bound_lo0 , DASICS_CSR_JUMP_BOUND_LO(0)) \
+    f(dasics_jump_bound_hi0 , DASICS_CSR_JUMP_BOUND_HI(0)) \
+    f(dasics_jump_bound_lo1 , DASICS_CSR_JUMP_BOUND_LO(1)) \
+    f(dasics_jump_bound_hi1 , DASICS_CSR_JUMP_BOUND_HI(1)) \
+    f(dasics_jump_bound_lo2 , DASICS_CSR_JUMP_BOUND_LO(2)) \
+    f(dasics_jump_bound_hi2 , DASICS_CSR_JUMP_BOUND_HI(2)) \
+    f(dasics_jump_bound_lo3 , DASICS_CSR_JUMP_BOUND_LO(3)) \
+    f(dasics_jump_bound_hi3 , DASICS_CSR_JUMP_BOUND_HI(3))
+
+  #define CSRS_DASICS(f) \
+    f(dasics_lib_cfg               , DASICS_CSR_LIB_CFG) \
+    CSRS_DASICS_LIB_BOUND(f) \
+    f(dasics_main_call             , DASICS_CSR_MAIN_CALL) \
+    f(dasics_return_pc             , DASICS_CSR_RETURN_PC) \
+    f(dasics_active_zone_return_pc , DASICS_CSR_ACTIVE_ZONE_RETURN_PC) \
+    f(dasics_freason               , DASICS_CSR_FREASON) \
+    CSRS_DASICS_JUMP_BOUND(f) \
+    f(dasics_jump_cfg              , DASICS_CSR_JUMP_CFG) \
+    f(dasics_umain_cfg             , DASICS_CSR_UMAIN_CFG) \
+    f(dasics_umain_bound_lo        , DASICS_CSR_UMAIN_BOUND_LO) \
+    f(dasics_umain_bound_hi        , DASICS_CSR_UMAIN_BOUND_HI) \
+    f(dasics_smain_cfg             , DASICS_CSR_SMAIN_CFG) \
+    f(dasics_smain_bound_lo        , DASICS_CSR_SMAIN_BOUND_LO) \
+    f(dasics_smain_bound_hi        , DASICS_CSR_SMAIN_BOUND_HI)
+#else
+  #define CSRS_DASICS(f)
+#endif
+
+
 /* ALL CSRs */
 #define CSRS(f) \
   CSRS_UNPRIV(f) \
   CSRS_S(f) \
   CSRS_H_VS(f) \
-  CSRS_M(f)
+  CSRS_M(f) \
+  CSRS_DASICS(f)
 
 
 /**
@@ -990,6 +1067,8 @@ CSR_STRUCT_START(mcontext)  // 0x7a8
 CSR_STRUCT_END(mcontext)
 
 #endif // CONFIG_RV_SDTRIG
+
+CSR_STRUCT_DUMMY_LIST(CSRS_DASICS)
 
 CSR_STRUCT_START(mcorepwr)
   uint64_t powerdown  : 1; // [0] core want to power down when core is in WFI state

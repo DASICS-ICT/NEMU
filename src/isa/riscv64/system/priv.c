@@ -180,7 +180,9 @@ void init_custom_csr() {
   srnctl->wfi_enable = 1;
 #endif // CONFIG_RV_SVINVAL
 
+#ifndef CONFIG_RV_DASICS
   mcorepwr->powerdown = 0;
+#endif
 
   mflushpwr->flushl2 = 0;
   mflushpwr->l2flushed = 0;
@@ -768,6 +770,16 @@ void init_smstateen() {
 #define is_write(csr) (dest == (void *)(csr))
 #define is_access(csr) (dest_access == (void *)(csr))
 #define mask_bitset(old, mask, new) (((old) & ~(mask)) | ((new) & (mask)))
+
+#ifdef CONFIG_RV_DASICS
+static inline word_t dasics_read_main_cfg(word_t mask) {
+  return csr_array[DASICS_CSR_SMAIN_CFG] & mask;
+}
+
+static inline void dasics_write_main_cfg(word_t mask, word_t src) {
+  csr_array[DASICS_CSR_SMAIN_CFG] = mask_bitset(csr_array[DASICS_CSR_SMAIN_CFG], mask, src);
+}
+#endif
 
 #define is_pmpcfg(p) (p >= &(csr_array[CSR_PMPCFG_BASE]) && p < &(csr_array[CSR_PMPCFG_BASE + CSR_PMPCFG_MAX_NUM]))
 #define is_pmpaddr(p) (p >= &(csr_array[CSR_PMPADDR_BASE]) && p < &(csr_array[CSR_PMPADDR_BASE + CSR_PMPADDR_MAX_NUM]))
@@ -1929,6 +1941,16 @@ static word_t csr_read(uint32_t csrid) {
       // But instruction counter of NEMU is not accurate when enabling Performance optimization.
       difftest_skip_ref();
       return get_minstret();
+
+#ifdef CONFIG_RV_DASICS
+    case DASICS_CSR_FREASON:
+      return *src & DASICS_FREASON_MASK;
+    case DASICS_CSR_UMAIN_CFG:
+      return dasics_read_main_cfg(DASICS_MAIN_CFG_UMAIN_MASK);
+    case DASICS_CSR_SMAIN_CFG:
+      return dasics_read_main_cfg(DASICS_MAIN_CFG_SMAIN_MASK);
+#endif
+
     /************************* All Others Normal CSRs *************************/
     default: return *src;
   }
@@ -2619,8 +2641,22 @@ static void csr_write(uint32_t csrid, word_t src) {
 
     case CSR_MHPMCOUNTER_BASE ... CSR_MHPMCOUNTER_BASE+CSR_MHPMCOUNTER_NUM-1: break;
 
+#ifndef CONFIG_RV_DASICS
     case CUSTOM_CSR_MCOREPWR: *dest = mask_bitset(*dest, CUSTOM_CSR_MCOREPWR_WMASK, src); break;
+#endif
     case CUSTOM_CSR_MFLUSHPWR: *dest = mask_bitset(*dest, CUSTOM_CSR_MFLUSHPWR_WMASK, src); break;
+
+#ifdef CONFIG_RV_DASICS
+    case DASICS_CSR_FREASON:
+      *dest = src & DASICS_FREASON_MASK;
+      break;
+    case DASICS_CSR_UMAIN_CFG:
+      dasics_write_main_cfg(DASICS_MAIN_CFG_UMAIN_MASK, src);
+      break;
+    case DASICS_CSR_SMAIN_CFG:
+      dasics_write_main_cfg(DASICS_MAIN_CFG_SMAIN_MASK, src);
+      break;
+#endif
 
 #ifdef CONFIG_RV_MBMC
     case CUSTOM_CSR_MBMC:

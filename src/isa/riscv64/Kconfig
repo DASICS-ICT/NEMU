@@ -57,6 +57,14 @@ config RV_MBMC
     This option enables the MBMC register, which is used to verify the memory
     isolation of the Confidential Virtual Machine(CVM) using a bitmap.
 
+config RV_DASICS
+  bool "RISC-V DASICS/FDI extension"
+  depends on !RV_MBMC
+  default n
+  help
+    This option enables the DASICS/FDI architectural CSR control plane.
+    DASICS uses CSR addresses that conflict with MBMC in the NanhuV5 profile.
+
 config RVB
   bool "RISC-V Bitmanip Extension v1.0"
   default y
