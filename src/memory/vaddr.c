@@ -32,6 +32,25 @@
 
 void isa_mmio_misalign_data_addr_check(paddr_t paddr, vaddr_t vaddr, int len, int type, int is_cross_page);
 
+#ifdef CONFIG_RV_DASICS
+void riscv64_dasics_load_permit_check(vaddr_t pc, vaddr_t vaddr, int len);
+void riscv64_dasics_store_permit_check(vaddr_t pc, vaddr_t vaddr, int len);
+
+static inline bool dasics_should_check_data_access(struct Decode *s) {
+  if (s == NULL) {
+    return false;
+  }
+
+#ifdef CONFIG_RVV
+  if (cpu.isVldst) {
+    return false;
+  }
+#endif
+
+  return true;
+}
+#endif
+
 static paddr_t vaddr_trans_and_check_exception(vaddr_t vaddr, int len, int type, bool* exp) {
   paddr_t mmu_ret = isa_mmu_translate(vaddr, len, type);
   *exp = (mmu_ret & PAGE_MASK) != MEM_RET_OK;
@@ -206,6 +225,12 @@ static inline word_t vaddr_read_internal(void *s, vaddr_t addr, int len, int typ
     is_cross_page = ((addr & PAGE_MASK) + len) > PAGE_SIZE && len != 1;
   }
 
+#ifdef CONFIG_RV_DASICS
+  if (type == MEM_TYPE_READ && dasics_should_check_data_access((struct Decode *)s)) {
+    riscv64_dasics_load_permit_check(((struct Decode *)s)->pc, addr, len);
+  }
+#endif
+
   if (unlikely(mmu_mode == MMU_DYNAMIC || mmu_mode == MMU_TRANSLATE)) {
     Logm("Checking mmu when MMU_DYN");
     mmu_mode = isa_mmu_check(addr, len, type);
@@ -292,6 +317,12 @@ void vaddr_write(struct Decode *s, vaddr_t addr, int len, word_t data, int mmu_m
 
   void isa_misalign_data_addr_check(vaddr_t vaddr, int len, int type);
   isa_misalign_data_addr_check(addr, len, MEM_TYPE_WRITE);
+
+#ifdef CONFIG_RV_DASICS
+  if (dasics_should_check_data_access(s)) {
+    riscv64_dasics_store_permit_check(s->pc, addr, len);
+  }
+#endif
 
   __attribute__((unused)) bool is_cross_page = ((addr & PAGE_MASK) + len) > PAGE_SIZE && len != 1;
 

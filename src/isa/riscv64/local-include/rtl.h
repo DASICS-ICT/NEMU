@@ -129,6 +129,8 @@ void riscv64_priv_csrrs(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1, va
 void riscv64_priv_csrrc(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1, vaddr_t pc);
 
 #ifdef CONFIG_RV_DASICS
+void riscv64_dasics_load_permit_check(vaddr_t pc, vaddr_t vaddr, int len);
+void riscv64_dasics_store_permit_check(vaddr_t pc, vaddr_t vaddr, int len);
 void riscv64_dasics_jump_target_permit_check(vaddr_t pc, vaddr_t target);
 void riscv64_dasics_branch_target_permit_check(vaddr_t pc, vaddr_t target);
 

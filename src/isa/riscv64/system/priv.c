@@ -840,8 +840,45 @@ static inline bool dasics_exec_jump_fault_is_closed(void) {
   return true;
 }
 
+static inline bool dasics_exec_mem_fault_is_closed(bool is_store) {
+  word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
+
+  if (cpu.mode == MODE_S) {
+    return (main_cfg & (is_store ? DASICS_MAIN_CFG_CSST : DASICS_MAIN_CFG_CSLT)) != 0;
+  }
+
+  if (cpu.mode == MODE_U) {
+    return (main_cfg & (is_store ? DASICS_MAIN_CFG_CUST : DASICS_MAIN_CFG_CULT)) != 0;
+  }
+
+  return true;
+}
+
 static inline bool dasics_csr_target_match(uint32_t addr, vaddr_t target) {
   return csr_array[addr] == target;
+}
+
+static inline bool dasics_lib_bound_entry_permits(int index, vaddr_t addr, word_t required_cfg) {
+  word_t cfg = (csr_array[DASICS_CSR_LIB_CFG] >> (index * DASICS_LIB_CFG_SLOT_BITS)) & DASICS_LIB_CFG_MASK;
+  if ((cfg & required_cfg) != required_cfg) {
+    return false;
+  }
+
+  word_t lo = csr_array[DASICS_CSR_LIB_BOUND_LO(index)];
+  word_t hi = csr_array[DASICS_CSR_LIB_BOUND_HI(index)];
+  return lo < hi && dasics_pc_in_half_open_range(addr, lo, hi);
+}
+
+static inline bool dasics_mem_addr_allowed(vaddr_t addr, bool is_store) {
+  word_t required_cfg = DASICS_LIB_CFG_VALID | (is_store ? DASICS_LIB_CFG_WRITE : DASICS_LIB_CFG_READ);
+
+  for (int i = 0; i < DASICS_LIB_ENTRY_NUM; i++) {
+    if (dasics_lib_bound_entry_permits(i, addr, required_cfg)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 static inline bool dasics_jump_bound_entry_valid(int index) {
@@ -878,6 +915,27 @@ static inline void dasics_raise_jump_fault(vaddr_t target) {
   longjmp_exception(cpu.mode == MODE_S ? EX_DSCF : EX_DUCF);
 }
 
+static inline void dasics_raise_mem_fault(vaddr_t vaddr, bool is_store) {
+  csr_array[DASICS_CSR_FREASON] = is_store ? DASICS_FREASON_STORE : DASICS_FREASON_LOAD;
+  cpu.trapInfo.tval = vaddr;
+  longjmp_exception(cpu.mode == MODE_S ? EX_DSCF : EX_DUCF);
+}
+
+static inline void dasics_mem_permit_check(vaddr_t pc, vaddr_t vaddr, int len, bool is_store) {
+  if (!dasics_exec_is_main_enabled() ||
+      dasics_exec_mem_fault_is_closed(is_store) ||
+      !dasics_exec_pc_is_untrusted(pc)) {
+    return;
+  }
+
+  for (int i = 0; i < len; i++) {
+    vaddr_t byte_addr = vaddr + i;
+    if (!dasics_mem_addr_allowed(byte_addr, is_store)) {
+      dasics_raise_mem_fault(byte_addr, is_store);
+    }
+  }
+}
+
 static inline void dasics_csr_access_permit_check(uint32_t addr, vaddr_t pc) {
   if (dasics_is_protected_csr(addr) && dasics_exec_pc_is_untrusted(pc)) {
     longjmp_exception(EX_II);
@@ -892,6 +950,14 @@ void riscv64_dasics_call_permit_check(vaddr_t pc) {
 
 void riscv64_dasics_write_return_pc(word_t value) {
   csr_array[DASICS_CSR_RETURN_PC] = value;
+}
+
+void riscv64_dasics_load_permit_check(vaddr_t pc, vaddr_t vaddr, int len) {
+  dasics_mem_permit_check(pc, vaddr, len, false);
+}
+
+void riscv64_dasics_store_permit_check(vaddr_t pc, vaddr_t vaddr, int len) {
+  dasics_mem_permit_check(pc, vaddr, len, true);
 }
 
 void riscv64_dasics_jump_target_permit_check(vaddr_t pc, vaddr_t target) {
