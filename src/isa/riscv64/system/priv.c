@@ -840,6 +840,20 @@ static inline bool dasics_exec_jump_fault_is_closed(void) {
   return true;
 }
 
+static inline bool dasics_exec_ecall_fault_is_closed(void) {
+  word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
+
+  if (cpu.mode == MODE_S) {
+    return (main_cfg & DASICS_MAIN_CFG_CSET) != 0;
+  }
+
+  if (cpu.mode == MODE_U) {
+    return (main_cfg & DASICS_MAIN_CFG_CUET) != 0;
+  }
+
+  return true;
+}
+
 static inline bool dasics_exec_mem_fault_is_closed(bool is_store) {
   word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
 
@@ -919,6 +933,40 @@ static inline void dasics_raise_mem_fault(vaddr_t vaddr, bool is_store) {
   csr_array[DASICS_CSR_FREASON] = is_store ? DASICS_FREASON_STORE : DASICS_FREASON_LOAD;
   cpu.trapInfo.tval = vaddr;
   longjmp_exception(cpu.mode == MODE_S ? EX_DSCF : EX_DUCF);
+}
+
+static inline bool dasics_ecall_fault_should_fire(word_t cause, vaddr_t pc) {
+  if (cause != EX_ECU && cause != EX_ECS) {
+    return false;
+  }
+
+#ifdef CONFIG_RVH
+  if (cpu.v) {
+    return false;
+  }
+#endif
+
+  if (cause == EX_ECU && cpu.mode != MODE_U) {
+    return false;
+  }
+
+  if (cause == EX_ECS && cpu.mode != MODE_S) {
+    return false;
+  }
+
+  return dasics_exec_is_main_enabled() &&
+         !dasics_exec_ecall_fault_is_closed() &&
+         dasics_exec_pc_is_untrusted(pc);
+}
+
+static inline word_t dasics_trap_or_ecall_fault(word_t cause, vaddr_t pc) {
+  if (!dasics_ecall_fault_should_fire(cause, pc)) {
+    return raise_intr(cause, pc);
+  }
+
+  csr_array[DASICS_CSR_FREASON] = DASICS_FREASON_ECALL;
+  cpu.trapInfo.tval = 0;
+  return raise_intr(cpu.mode == MODE_S ? EX_DSCF : EX_DUCF, pc);
 }
 
 static inline void dasics_mem_permit_check(vaddr_t pc, vaddr_t vaddr, int len, bool is_store) {
@@ -3689,7 +3737,13 @@ void isa_hostcall(uint32_t id, rtlreg_t *dest, const rtlreg_t *src1,
       ret = *src1 + 4;
       break;
 #else
-    case HOSTCALL_TRAP: ret = raise_intr(imm, *src1); break;
+    case HOSTCALL_TRAP:
+#ifdef CONFIG_RV_DASICS
+      ret = dasics_trap_or_ecall_fault(imm, *src1);
+#else
+      ret = raise_intr(imm, *src1);
+#endif
+      break;
 #endif
     default: panic("Unsupported hostcall ID = %d", id);
   }
