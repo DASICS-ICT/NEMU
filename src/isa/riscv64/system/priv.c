@@ -586,6 +586,12 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define LCI MUXDEF(CONFIG_RV_AIA, LCI_MASK, 0)
 #define LCI_NO_LCOFI MUXDEF(CONFIG_RV_AIA, LCI_EXCLUDE_LCOFI_MASK, 0)
 
+#ifdef CONFIG_RV_DASICS
+#define MEDELEG_DASICS ((1ULL << EX_DUCF) | (1ULL << EX_DSCF))
+#else
+#define MEDELEG_DASICS 0
+#endif
+
 #ifdef CONFIG_RVH
 #define HVIP_MASK     (VSI_MASK | LCI_NO_LCOFI)
 #define HIP_RMASK     (MIP_VSTIP | MIP_VSEIP | MIP_SGEIP)
@@ -630,7 +636,8 @@ static inline word_t* csr_decode(uint32_t addr) {
                      (1 << EX_IGPF) | \
                      (1 << EX_LGPF) | \
                      (1 << EX_VI  ) | \
-                     (1 << EX_SGPF))
+                     (1 << EX_SGPF) | \
+                     MEDELEG_DASICS)
 
 #define MEDELEG_NONRVH ((1 << EX_IAM) | \
                         (1 << EX_IAF) | \
@@ -644,7 +651,8 @@ static inline word_t* csr_decode(uint32_t addr) {
                         (1 << EX_ECS) | \
                         (1 << EX_IPF) | \
                         (1 << EX_LPF) | \
-                        (1 << EX_SPF))
+                        (1 << EX_SPF) | \
+                        MEDELEG_DASICS)
                         // (1 << EX_SWC) |
                         // (1 << EX_HWE))
 
@@ -818,6 +826,58 @@ static inline bool dasics_exec_pc_is_untrusted(vaddr_t pc) {
   return !dasics_exec_pc_is_trusted(pc);
 }
 
+static inline bool dasics_exec_jump_fault_is_closed(void) {
+  word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
+
+  if (cpu.mode == MODE_S) {
+    return (main_cfg & DASICS_MAIN_CFG_CSFT) != 0;
+  }
+
+  if (cpu.mode == MODE_U) {
+    return (main_cfg & DASICS_MAIN_CFG_CUFT) != 0;
+  }
+
+  return true;
+}
+
+static inline bool dasics_csr_target_match(uint32_t addr, vaddr_t target) {
+  return csr_array[addr] == target;
+}
+
+static inline bool dasics_jump_bound_entry_valid(int index) {
+  word_t cfg = (csr_array[DASICS_CSR_JUMP_CFG] >> (index * DASICS_JUMP_CFG_SLOT_BITS)) & DASICS_JUMP_CFG_MASK;
+  return (cfg & DASICS_JUMP_CFG_VALID) != 0;
+}
+
+static inline bool dasics_target_in_jump_bound(vaddr_t target) {
+  for (int i = 0; i < DASICS_JUMP_ENTRY_NUM; i++) {
+    if (!dasics_jump_bound_entry_valid(i)) {
+      continue;
+    }
+
+    word_t lo = csr_array[DASICS_CSR_JUMP_BOUND_LO(i)];
+    word_t hi = csr_array[DASICS_CSR_JUMP_BOUND_HI(i)];
+    if (lo < hi && dasics_pc_in_half_open_range(target, lo, hi)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static inline bool dasics_jump_target_allowed(vaddr_t target) {
+  return dasics_target_in_jump_bound(target) ||
+         dasics_csr_target_match(DASICS_CSR_RETURN_PC, target) ||
+         dasics_csr_target_match(DASICS_CSR_MAIN_CALL, target) ||
+         dasics_csr_target_match(DASICS_CSR_ACTIVE_ZONE_RETURN_PC, target);
+}
+
+static inline void dasics_raise_jump_fault(vaddr_t target) {
+  csr_array[DASICS_CSR_FREASON] = DASICS_FREASON_JUMP;
+  cpu.trapInfo.tval = target;
+  longjmp_exception(cpu.mode == MODE_S ? EX_DSCF : EX_DUCF);
+}
+
 static inline void dasics_csr_access_permit_check(uint32_t addr, vaddr_t pc) {
   if (dasics_is_protected_csr(addr) && dasics_exec_pc_is_untrusted(pc)) {
     longjmp_exception(EX_II);
@@ -832,6 +892,30 @@ void riscv64_dasics_call_permit_check(vaddr_t pc) {
 
 void riscv64_dasics_write_return_pc(word_t value) {
   csr_array[DASICS_CSR_RETURN_PC] = value;
+}
+
+void riscv64_dasics_jump_target_permit_check(vaddr_t pc, vaddr_t target) {
+  if (!dasics_exec_is_main_enabled() ||
+      dasics_exec_jump_fault_is_closed() ||
+      !dasics_exec_pc_is_untrusted(pc)) {
+    return;
+  }
+
+  if (!dasics_jump_target_allowed(target)) {
+    dasics_raise_jump_fault(target);
+  }
+}
+
+void riscv64_dasics_branch_target_permit_check(vaddr_t pc, vaddr_t target) {
+  if (!dasics_exec_is_main_enabled() ||
+      dasics_exec_jump_fault_is_closed() ||
+      !dasics_exec_pc_is_untrusted(pc)) {
+    return;
+  }
+
+  if (!dasics_target_in_jump_bound(target)) {
+    dasics_raise_jump_fault(target);
+  }
 }
 #endif
 

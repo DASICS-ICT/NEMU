@@ -43,22 +43,23 @@ def_EHelper(p_sext_w) {
 }
 
 def_EHelper(p_blez) {
-  rtl_jrelop(s, RELOP_GE, rz, dsrc2, id_dest->imm);
+  riscv64_dasics_jrelop(s, RELOP_GE, rz, dsrc2, id_dest->imm);
 }
 
 def_EHelper(p_bgtz) {
-  rtl_jrelop(s, RELOP_LT, rz, dsrc2, id_dest->imm);
+  riscv64_dasics_jrelop(s, RELOP_LT, rz, dsrc2, id_dest->imm);
 }
 
 def_EHelper(p_bltz) {
-  rtl_jrelop(s, RELOP_LT, dsrc1, rz, id_dest->imm);
+  riscv64_dasics_jrelop(s, RELOP_LT, dsrc1, rz, id_dest->imm);
 }
 
 def_EHelper(p_bgez) {
-  rtl_jrelop(s, RELOP_GE, dsrc1, rz, id_dest->imm);
+  riscv64_dasics_jrelop(s, RELOP_GE, dsrc1, rz, id_dest->imm);
 }
 
 def_EHelper(p_jal) {
+  IFDEF(CONFIG_RV_DASICS, riscv64_dasics_jump_target_permit_check(s->pc, id_src1->imm));
   rtl_li(s, &cpu.gpr[1]._64, id_src2->imm);
   IFDEF(CONFIG_BR_LOG, br_log_commit(s->pc, id_src1->imm, 1, BR_JUMP));
   rtl_j(s, id_src1->imm);
@@ -68,9 +69,11 @@ def_EHelper(p_ret) {
 #ifdef CONFIG_SHARE
   // See rvi/control.h:26. JALR should set the LSB to 0.
   rtl_andi(s, s0, &cpu.gpr[1]._64, ~1UL);
+  IFDEF(CONFIG_RV_DASICS, riscv64_dasics_jump_target_permit_check(s->pc, *s0));
   rtl_jr(s, s0);
 #else
 //  IFDEF(CONFIG_ENGINE_INTERPRETER, rtl_andi(s, s0, s0, ~0x1u));
+  IFDEF(CONFIG_RV_DASICS, riscv64_dasics_jump_target_permit_check(s->pc, cpu.gpr[1]._64));
   IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
   rtl_jr(s, &cpu.gpr[1]._64);
 #endif // CONFIG_SHARE
