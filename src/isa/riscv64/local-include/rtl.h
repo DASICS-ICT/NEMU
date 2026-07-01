@@ -128,4 +128,9 @@ void riscv64_priv_csrrw(rtlreg_t *dest, word_t val, word_t csrid, word_t rd, vad
 void riscv64_priv_csrrs(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1, vaddr_t pc);
 void riscv64_priv_csrrc(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1, vaddr_t pc);
 
+#ifdef CONFIG_RV_DASICS
+void riscv64_dasics_call_permit_check(vaddr_t pc);
+void riscv64_dasics_write_return_pc(word_t value);
+#endif // CONFIG_RV_DASICS
+
 #endif // __RISCV64_RTL_H__

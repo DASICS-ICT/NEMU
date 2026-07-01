@@ -823,6 +823,16 @@ static inline void dasics_csr_access_permit_check(uint32_t addr, vaddr_t pc) {
     longjmp_exception(EX_II);
   }
 }
+
+void riscv64_dasics_call_permit_check(vaddr_t pc) {
+  if (!dasics_exec_is_main_enabled() || dasics_exec_pc_is_untrusted(pc)) {
+    longjmp_exception(EX_II);
+  }
+}
+
+void riscv64_dasics_write_return_pc(word_t value) {
+  csr_array[DASICS_CSR_RETURN_PC] = value;
+}
 #endif
 
 #define is_pmpcfg(p) (p >= &(csr_array[CSR_PMPCFG_BASE]) && p < &(csr_array[CSR_PMPCFG_BASE + CSR_PMPCFG_MAX_NUM]))

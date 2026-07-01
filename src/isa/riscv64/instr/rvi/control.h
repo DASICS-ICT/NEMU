@@ -41,6 +41,26 @@ def_EHelper(jalr) {
   rtl_jr(s, s0);
 }
 
+#ifdef CONFIG_RV_DASICS
+def_EHelper(dasicscall_j) {
+  riscv64_dasics_call_permit_check(s->pc);
+  riscv64_dasics_write_return_pc(id_src2->imm);
+  rtl_li(s, ddest, id_src2->imm);
+  IFDEF(CONFIG_BR_LOG, br_log_commit(s->pc, id_src1->imm, 1, BR_JUMP));
+  rtl_j(s, id_src1->imm);
+}
+
+def_EHelper(dasicscall_jr) {
+  riscv64_dasics_call_permit_check(s->pc);
+  rtl_addi(s, s0, dsrc1, id_src2->imm);
+  rtl_andi(s, s0, s0, ~1UL);
+  rtl_li(s, ddest, s->snpc);
+  riscv64_dasics_write_return_pc(s->snpc);
+  IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 3));
+  rtl_jr(s, s0);
+}
+#endif // CONFIG_RV_DASICS
+
 def_EHelper(beq) {
   rtl_jrelop(s, RELOP_EQ, dsrc1, dsrc2, id_dest->imm);
 }
