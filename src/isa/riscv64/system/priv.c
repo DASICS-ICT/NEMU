@@ -784,32 +784,42 @@ static inline bool dasics_pc_in_half_open_range(vaddr_t pc, word_t lo, word_t hi
   return lo <= pc && pc < hi;
 }
 
-static inline bool dasics_csr_pc_is_trusted(vaddr_t pc) {
+static inline bool dasics_exec_is_main_enabled(void) {
   word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
 
-  if (cpu.mode == MODE_M) {
+  if (cpu.mode == MODE_S) {
+    return (main_cfg & DASICS_MAIN_CFG_SENA) != 0;
+  }
+
+  if (cpu.mode == MODE_U) {
+    return (main_cfg & DASICS_MAIN_CFG_UENA) != 0;
+  }
+
+  return false;
+}
+
+static inline bool dasics_exec_pc_is_trusted(vaddr_t pc) {
+  if (cpu.mode == MODE_M || !dasics_exec_is_main_enabled()) {
     return true;
   }
 
   if (cpu.mode == MODE_S) {
-    if ((main_cfg & DASICS_MAIN_CFG_SENA) == 0) {
-      return true;
-    }
     return dasics_pc_in_half_open_range(pc, csr_array[DASICS_CSR_SMAIN_BOUND_LO], csr_array[DASICS_CSR_SMAIN_BOUND_HI]);
   }
 
   if (cpu.mode == MODE_U) {
-    if ((main_cfg & DASICS_MAIN_CFG_UENA) == 0) {
-      return true;
-    }
     return dasics_pc_in_half_open_range(pc, csr_array[DASICS_CSR_UMAIN_BOUND_LO], csr_array[DASICS_CSR_UMAIN_BOUND_HI]);
   }
 
   return true;
 }
 
+static inline bool dasics_exec_pc_is_untrusted(vaddr_t pc) {
+  return !dasics_exec_pc_is_trusted(pc);
+}
+
 static inline void dasics_csr_access_permit_check(uint32_t addr, vaddr_t pc) {
-  if (dasics_is_protected_csr(addr) && !dasics_csr_pc_is_trusted(pc)) {
+  if (dasics_is_protected_csr(addr) && dasics_exec_pc_is_untrusted(pc)) {
     longjmp_exception(EX_II);
   }
 }
