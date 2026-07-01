@@ -923,16 +923,20 @@ static inline bool dasics_jump_target_allowed(vaddr_t target) {
          dasics_csr_target_match(DASICS_CSR_ACTIVE_ZONE_RETURN_PC, target);
 }
 
-static inline void dasics_raise_jump_fault(vaddr_t target) {
-  csr_array[DASICS_CSR_FREASON] = DASICS_FREASON_JUMP;
-  cpu.trapInfo.tval = target;
-  longjmp_exception(cpu.mode == MODE_S ? EX_DSCF : EX_DUCF);
+static inline word_t dasics_check_fault_cause(void) {
+  return cpu.mode == MODE_S ? EX_DSCF : EX_DUCF;
 }
 
-static inline void dasics_raise_mem_fault(vaddr_t vaddr, bool is_store) {
-  csr_array[DASICS_CSR_FREASON] = is_store ? DASICS_FREASON_STORE : DASICS_FREASON_LOAD;
-  cpu.trapInfo.tval = vaddr;
-  longjmp_exception(cpu.mode == MODE_S ? EX_DSCF : EX_DUCF);
+static inline void dasics_prepare_check_fault(word_t reason, word_t tval) {
+  csr_array[DASICS_CSR_FREASON] = reason;
+  cpu.trapInfo.tval = tval;
+  cpu.trapInfo.tval2 = 0;
+  cpu.trapInfo.tinst = 0;
+}
+
+static inline void dasics_raise_check_fault(word_t reason, word_t tval) {
+  dasics_prepare_check_fault(reason, tval);
+  longjmp_exception(dasics_check_fault_cause());
 }
 
 static inline bool dasics_ecall_fault_should_fire(word_t cause, vaddr_t pc) {
@@ -964,9 +968,8 @@ static inline word_t dasics_trap_or_ecall_fault(word_t cause, vaddr_t pc) {
     return raise_intr(cause, pc);
   }
 
-  csr_array[DASICS_CSR_FREASON] = DASICS_FREASON_ECALL;
-  cpu.trapInfo.tval = 0;
-  return raise_intr(cpu.mode == MODE_S ? EX_DSCF : EX_DUCF, pc);
+  dasics_prepare_check_fault(DASICS_FREASON_ECALL, 0);
+  return raise_intr(dasics_check_fault_cause(), pc);
 }
 
 static inline void dasics_mem_permit_check(vaddr_t pc, vaddr_t vaddr, int len, bool is_store) {
@@ -979,7 +982,7 @@ static inline void dasics_mem_permit_check(vaddr_t pc, vaddr_t vaddr, int len, b
   for (int i = 0; i < len; i++) {
     vaddr_t byte_addr = vaddr + i;
     if (!dasics_mem_addr_allowed(byte_addr, is_store)) {
-      dasics_raise_mem_fault(byte_addr, is_store);
+      dasics_raise_check_fault(is_store ? DASICS_FREASON_STORE : DASICS_FREASON_LOAD, byte_addr);
     }
   }
 }
@@ -1016,7 +1019,7 @@ void riscv64_dasics_jump_target_permit_check(vaddr_t pc, vaddr_t target) {
   }
 
   if (!dasics_jump_target_allowed(target)) {
-    dasics_raise_jump_fault(target);
+    dasics_raise_check_fault(DASICS_FREASON_JUMP, target);
   }
 }
 
@@ -1028,7 +1031,7 @@ void riscv64_dasics_branch_target_permit_check(vaddr_t pc, vaddr_t target) {
   }
 
   if (!dasics_target_in_jump_bound(target)) {
-    dasics_raise_jump_fault(target);
+    dasics_raise_check_fault(DASICS_FREASON_JUMP, target);
   }
 }
 #endif
