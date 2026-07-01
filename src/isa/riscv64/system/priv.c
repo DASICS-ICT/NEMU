@@ -779,6 +779,40 @@ static inline word_t dasics_read_main_cfg(word_t mask) {
 static inline void dasics_write_main_cfg(word_t mask, word_t src) {
   csr_array[DASICS_CSR_SMAIN_CFG] = mask_bitset(csr_array[DASICS_CSR_SMAIN_CFG], mask, src);
 }
+
+static inline bool dasics_pc_in_half_open_range(vaddr_t pc, word_t lo, word_t hi) {
+  return lo <= pc && pc < hi;
+}
+
+static inline bool dasics_csr_pc_is_trusted(vaddr_t pc) {
+  word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
+
+  if (cpu.mode == MODE_M) {
+    return true;
+  }
+
+  if (cpu.mode == MODE_S) {
+    if ((main_cfg & DASICS_MAIN_CFG_SENA) == 0) {
+      return true;
+    }
+    return dasics_pc_in_half_open_range(pc, csr_array[DASICS_CSR_SMAIN_BOUND_LO], csr_array[DASICS_CSR_SMAIN_BOUND_HI]);
+  }
+
+  if (cpu.mode == MODE_U) {
+    if ((main_cfg & DASICS_MAIN_CFG_UENA) == 0) {
+      return true;
+    }
+    return dasics_pc_in_half_open_range(pc, csr_array[DASICS_CSR_UMAIN_BOUND_LO], csr_array[DASICS_CSR_UMAIN_BOUND_HI]);
+  }
+
+  return true;
+}
+
+static inline void dasics_csr_access_permit_check(uint32_t addr, vaddr_t pc) {
+  if (dasics_is_protected_csr(addr) && !dasics_csr_pc_is_trusted(pc)) {
+    longjmp_exception(EX_II);
+  }
+}
 #endif
 
 #define is_pmpcfg(p) (p >= &(csr_array[CSR_PMPCFG_BASE]) && p < &(csr_array[CSR_PMPCFG_BASE + CSR_PMPCFG_MAX_NUM]))
@@ -3065,7 +3099,7 @@ static inline bool csrind_permit_check(const uint32_t addr) {
 }
 #endif // CONFIG_RV_SMCSRIND || CONFIG_RV_AIA
 
-static inline void csr_permit_check(uint32_t addr, bool is_write) {
+static inline void csr_permit_check(uint32_t addr, bool is_write, vaddr_t pc) {
   bool has_vi = false; // virtual instruction
   word_t *dest_access = csr_decode(addr);
   // check csr_exit, priv
@@ -3100,6 +3134,8 @@ static inline void csr_permit_check(uint32_t addr, bool is_write) {
   has_vi |= csrind_permit_check(addr);
 #endif
   if (has_vi) longjmp_exception(EX_VI);
+
+  IFDEF(CONFIG_RV_DASICS, dasics_csr_access_permit_check(addr, pc));
 }
 
 #ifdef CONFIG_RV_IMSIC
@@ -3116,8 +3152,8 @@ static void sync_old_xtopi() {
 }
 #endif // CONFIG_RV_IMSIC
 
-void riscv64_priv_csrrw(rtlreg_t *dest, word_t val, word_t csrid, word_t rd) {
-  csr_permit_check(csrid, true);
+void riscv64_priv_csrrw(rtlreg_t *dest, word_t val, word_t csrid, word_t rd, vaddr_t pc) {
+  csr_permit_check(csrid, true, pc);
   if (rd) {
     *dest = csr_read(csrid);
   }
@@ -3128,8 +3164,8 @@ void riscv64_priv_csrrw(rtlreg_t *dest, word_t val, word_t csrid, word_t rd) {
 #endif // CONFIG_RV_IMSIC
 }
 
-void riscv64_priv_csrrs(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1) {
-  csr_permit_check(csrid, rs1 != 0);
+void riscv64_priv_csrrs(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1, vaddr_t pc) {
+  csr_permit_check(csrid, rs1 != 0, pc);
   *dest = csr_read(csrid);
   if (rs1) {
     csr_write(csrid, val | *dest);
@@ -3140,8 +3176,8 @@ void riscv64_priv_csrrs(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1) {
 #endif // CONFIG_RV_IMSIC
 }
 
-void riscv64_priv_csrrc(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1) {
-  csr_permit_check(csrid, rs1 != 0);
+void riscv64_priv_csrrc(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1, vaddr_t pc) {
+  csr_permit_check(csrid, rs1 != 0, pc);
   *dest = csr_read(csrid);
   if (rs1) {
     csr_write(csrid, (~val) & *dest);

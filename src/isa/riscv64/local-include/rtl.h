@@ -124,8 +124,8 @@ void riscv64_priv_hfence_vvma(vaddr_t vaddr, word_t asid);
 void riscv64_priv_hfence_gvma(vaddr_t vaddr, word_t vmid);
 #endif // CONFIG_RVH
 
-void riscv64_priv_csrrw(rtlreg_t *dest, word_t val, word_t csrid, word_t rd);
-void riscv64_priv_csrrs(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1);
-void riscv64_priv_csrrc(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1);
+void riscv64_priv_csrrw(rtlreg_t *dest, word_t val, word_t csrid, word_t rd, vaddr_t pc);
+void riscv64_priv_csrrs(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1, vaddr_t pc);
+void riscv64_priv_csrrc(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1, vaddr_t pc);
 
 #endif // __RISCV64_RTL_H__

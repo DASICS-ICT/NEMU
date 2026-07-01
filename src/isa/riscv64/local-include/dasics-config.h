@@ -17,6 +17,9 @@
 #ifndef __DASICS_CONFIG_H__
 #define __DASICS_CONFIG_H__
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #define DASICS_LIB_ENTRY_NUM 16
 #define DASICS_JUMP_ENTRY_NUM 4
 
@@ -51,6 +54,8 @@
 #define DASICS_CSR_FULL_MASK 0xffffffffffffffffULL
 #define DASICS_MAIN_CFG_SMAIN_MASK 0x3ff
 #define DASICS_MAIN_CFG_UMAIN_MASK 0x3e
+#define DASICS_MAIN_CFG_SENA (1ULL << 0)
+#define DASICS_MAIN_CFG_UENA (1ULL << 1)
 #define DASICS_FREASON_MASK 0x7
 
 #define DASICS_FREASON_NONE 0
@@ -69,5 +74,17 @@
 #if defined(CONFIG_RV_DASICS) && defined(CONFIG_RV_MBMC)
 #error "CONFIG_RV_DASICS conflicts with CONFIG_RV_MBMC at CSR 0xbc2"
 #endif
+
+static inline bool dasics_is_protected_csr(uint32_t addr) {
+  return addr == DASICS_CSR_LIB_CFG ||
+         (addr >= DASICS_CSR_LIB_BOUND_LO(0) && addr <= DASICS_CSR_LIB_BOUND_HI(DASICS_LIB_ENTRY_NUM - 1)) ||
+         (addr >= DASICS_CSR_MAIN_CALL && addr <= DASICS_CSR_FREASON) ||
+         (addr >= DASICS_CSR_JUMP_BOUND_LO(0) && addr <= DASICS_CSR_JUMP_BOUND_HI(DASICS_JUMP_ENTRY_NUM - 1)) ||
+         addr == DASICS_CSR_JUMP_CFG ||
+         (addr >= DASICS_CSR_UMAIN_CFG && addr <= DASICS_CSR_UMAIN_BOUND_HI) ||
+         addr == DASICS_CSR_SMAIN_CFG ||
+         addr == DASICS_CSR_SMAIN_BOUND_LO ||
+         addr == DASICS_CSR_SMAIN_BOUND_HI;
+}
 
 #endif

@@ -164,36 +164,36 @@ def_hst_template(hsv_d, 8)
 
 def_EHelper(csrrw) {
   save_globals(s);
-  riscv64_priv_csrrw(ddest, *dsrc1, id_src2->imm, s->isa.instr.i.rd);
+  riscv64_priv_csrrw(ddest, *dsrc1, id_src2->imm, s->isa.instr.i.rd, s->pc);
   rtl_priv_next(s);
 }
 
 def_EHelper(csrrs) {
   save_globals(s);
-  riscv64_priv_csrrs(ddest, *dsrc1, id_src2->imm, s->isa.instr.i.rs1);
+  riscv64_priv_csrrs(ddest, *dsrc1, id_src2->imm, s->isa.instr.i.rs1, s->pc);
   rtl_priv_next(s);
 }
 
 def_EHelper(csrrc) {
   save_globals(s);
-  riscv64_priv_csrrc(ddest, *dsrc1, id_src2->imm, s->isa.instr.i.rs1);
+  riscv64_priv_csrrc(ddest, *dsrc1, id_src2->imm, s->isa.instr.i.rs1, s->pc);
   rtl_priv_next(s);
 }
 
 def_EHelper(csrrwi) {
   save_globals(s);
-  riscv64_priv_csrrw(ddest, id_src1->imm, id_src2->imm, s->isa.instr.i.rd);
+  riscv64_priv_csrrw(ddest, id_src1->imm, id_src2->imm, s->isa.instr.i.rd, s->pc);
   rtl_priv_next(s);
 }
 
 def_EHelper(csrrsi) {
   save_globals(s);
-  riscv64_priv_csrrs(ddest, id_src1->imm, id_src2->imm, s->isa.instr.i.rs1);
+  riscv64_priv_csrrs(ddest, id_src1->imm, id_src2->imm, s->isa.instr.i.rs1, s->pc);
   rtl_priv_next(s);
 }
 
 def_EHelper(csrrci) {
   save_globals(s);
-  riscv64_priv_csrrc(ddest, id_src1->imm, id_src2->imm, s->isa.instr.i.rs1);
+  riscv64_priv_csrrc(ddest, id_src1->imm, id_src2->imm, s->isa.instr.i.rs1, s->pc);
   rtl_priv_next(s);
 }
