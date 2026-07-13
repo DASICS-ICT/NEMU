@@ -21,11 +21,24 @@ The default semantic gate covers only cases with a unique architectural oracle:
 
 - taken branch and jump admission for `MainCallEntry`, `ReturnPC`, and
   `ActiveZoneReturnPC`;
+- taken branch, JAL, and JALR admission through valid JumpBound slot 0 and
+  slot 3 entries, including 16-bit `JumpCfg` slot selection;
+- JumpBound `[lo, hi)` high-end rejection, invalid config rejection, and empty
+  or reversed bound rejection;
+- JALR admission through `MainCallEntry` and rejection outside the complete
+  target allow set;
 - no DASICS target check for a not-taken branch;
 - rejection of taken branches and jumps outside the allow set when `JumpCfg`
   and all three special targets are zero;
 - successful 8-byte load and store witnesses whose complete ranges fit one
   permitted LibBound, including loaded and stored value checks;
+- independent allow and deny witnesses for every RV64 integer scalar load and
+  store width, including signed extension, unchanged denied-load destinations,
+  and complete denied-store data preservation;
+- U-mode trusted, disabled, and per-operation closed bypass behavior for load,
+  store, and jump checks, including the resulting data or target side effect;
+- LibBound read/write permission separation, required valid bits, slot 15
+  selection, and empty or reversed bound rejection;
 - rejection of aligned 8-byte load and store witnesses outside the configured
   LibBound, including original `vaddr` in `mtval` and no store update;
 - ordinary load/store address-misaligned traps for 8-byte accesses that remain
@@ -35,7 +48,12 @@ The default semantic gate covers only cases with a unique architectural oracle:
   CSR; and
 - U-mode and S-mode ecall behavior for disabled, trusted, untrusted-open, and
   untrusted-closed configurations, including precise cause, EPC, TVAL, and
-  `FReason`.
+  `FReason`; and
+- raw `DASICSCALL.J/JR` behavior for trusted, disabled, and untrusted U-mode
+  execution, including link and `ReturnPC` updates on success and absence of
+  those side effects on an ordinary illegal-instruction trap; and
+- S-mode load, store, and jump behavior for untrusted open and closed fault
+  controls, including precise S check-fault state and bypass side effects.
 
 Four cross-bound observations are specification-blocked. An 8-byte scalar that
 crosses the 8-byte bound-address grain is necessarily misaligned, while the
