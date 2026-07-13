@@ -872,7 +872,8 @@ static inline bool dasics_csr_target_match(uint32_t addr, vaddr_t target) {
   return csr_array[addr] == target;
 }
 
-static inline bool dasics_lib_bound_entry_permits(int index, vaddr_t addr, word_t required_cfg) {
+static inline bool dasics_lib_bound_entry_permits_range(
+    int index, vaddr_t first, vaddr_t last, word_t required_cfg) {
   word_t cfg = (csr_array[DASICS_CSR_LIB_CFG] >> (index * DASICS_LIB_CFG_SLOT_BITS)) & DASICS_LIB_CFG_MASK;
   if ((cfg & required_cfg) != required_cfg) {
     return false;
@@ -880,14 +881,38 @@ static inline bool dasics_lib_bound_entry_permits(int index, vaddr_t addr, word_
 
   word_t lo = csr_array[DASICS_CSR_LIB_BOUND_LO(index)];
   word_t hi = csr_array[DASICS_CSR_LIB_BOUND_HI(index)];
-  return lo < hi && dasics_pc_in_half_open_range(addr, lo, hi);
+  return lo < hi && lo <= first && last < hi;
 }
 
-static inline bool dasics_mem_addr_allowed(vaddr_t addr, bool is_store) {
+static inline bool dasics_mem_addr_allowed(vaddr_t addr, word_t required_cfg) {
+  for (int i = 0; i < DASICS_LIB_ENTRY_NUM; i++) {
+    if (dasics_lib_bound_entry_permits_range(i, addr, addr, required_cfg)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static inline bool dasics_mem_access_allowed(vaddr_t addr, int len, bool is_store) {
   word_t required_cfg = DASICS_LIB_CFG_VALID | (is_store ? DASICS_LIB_CFG_WRITE : DASICS_LIB_CFG_READ);
+  if (len <= 0) {
+    return true;
+  }
+
+  vaddr_t last = addr + (len - 1);
+  if (last < addr) {
+    // Address-wrap behavior remains outside the frozen scalar-range contract.
+    for (int i = 0; i < len; i++) {
+      if (!dasics_mem_addr_allowed(addr + i, required_cfg)) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   for (int i = 0; i < DASICS_LIB_ENTRY_NUM; i++) {
-    if (dasics_lib_bound_entry_permits(i, addr, required_cfg)) {
+    if (dasics_lib_bound_entry_permits_range(i, addr, last, required_cfg)) {
       return true;
     }
   }
@@ -979,11 +1004,8 @@ static inline void dasics_mem_permit_check(vaddr_t pc, vaddr_t vaddr, int len, b
     return;
   }
 
-  for (int i = 0; i < len; i++) {
-    vaddr_t byte_addr = vaddr + i;
-    if (!dasics_mem_addr_allowed(byte_addr, is_store)) {
-      dasics_raise_check_fault(is_store ? DASICS_FREASON_STORE : DASICS_FREASON_LOAD, byte_addr);
-    }
+  if (!dasics_mem_access_allowed(vaddr, len, is_store)) {
+    dasics_raise_check_fault(is_store ? DASICS_FREASON_STORE : DASICS_FREASON_LOAD, vaddr);
   }
 }
 
@@ -1030,7 +1052,7 @@ void riscv64_dasics_branch_target_permit_check(vaddr_t pc, vaddr_t target) {
     return;
   }
 
-  if (!dasics_target_in_jump_bound(target)) {
+  if (!dasics_jump_target_allowed(target)) {
     dasics_raise_check_fault(DASICS_FREASON_JUMP, target);
   }
 }
@@ -2910,6 +2932,14 @@ static void csr_write(uint32_t csrid, word_t src) {
       break;
     case DASICS_CSR_SMAIN_CFG:
       dasics_write_main_cfg(DASICS_MAIN_CFG_SMAIN_MASK, src);
+      break;
+    case DASICS_CSR_LIB_BOUND_LO(0) ... DASICS_CSR_LIB_BOUND_HI(DASICS_LIB_ENTRY_NUM - 1):
+    case DASICS_CSR_JUMP_BOUND_LO(0) ... DASICS_CSR_JUMP_BOUND_HI(DASICS_JUMP_ENTRY_NUM - 1):
+    case DASICS_CSR_UMAIN_BOUND_LO:
+    case DASICS_CSR_UMAIN_BOUND_HI:
+    case DASICS_CSR_SMAIN_BOUND_LO:
+    case DASICS_CSR_SMAIN_BOUND_HI:
+      *dest = src & DASICS_BOUND_MASK;
       break;
 #endif
 
