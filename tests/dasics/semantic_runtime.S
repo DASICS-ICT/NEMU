@@ -13,6 +13,10 @@
   .equ CSR_FREASON, 0x8b3
   .equ CSR_JUMP_BOUND0_LO, 0x8c0
   .equ CSR_JUMP_BOUND0_HI, 0x8c1
+  .equ CSR_JUMP_BOUND1_LO, 0x8c2
+  .equ CSR_JUMP_BOUND1_HI, 0x8c3
+  .equ CSR_JUMP_BOUND2_LO, 0x8c4
+  .equ CSR_JUMP_BOUND2_HI, 0x8c5
   .equ CSR_JUMP_BOUND3_LO, 0x8c6
   .equ CSR_JUMP_BOUND3_HI, 0x8c7
   .equ CSR_JUMP_CFG, 0x8c8
@@ -123,13 +127,58 @@
   .equ CASE_LIB_SLOT15_LOAD, 75
   .equ CASE_LIB_EMPTY_LOAD, 76
   .equ CASE_LIB_REVERSED_STORE, 77
+  .equ CASE_S_CSR_TRUSTED_READ, 78
+  .equ CASE_S_CSR_UNTRUSTED_READ, 79
+  .equ CASE_S_CSR_UNTRUSTED_WRITE, 80
+  .equ CASE_S_CALL_J_TRUSTED, 81
+  .equ CASE_S_CALL_JR_TRUSTED, 82
+  .equ CASE_S_CALL_J_DISABLED, 83
+  .equ CASE_S_CALL_JR_DISABLED, 84
+  .equ CASE_S_CALL_J_UNTRUSTED, 85
+  .equ CASE_S_CALL_JR_UNTRUSTED, 86
+  .equ CASE_U_MAIN_HI, 87
+  .equ CASE_U_MAIN_EMPTY, 88
+  .equ CASE_U_MAIN_REVERSED, 89
+  .equ CASE_U_MAIN_BELOW_LO, 90
+  .equ CASE_S_MAIN_HI, 91
+  .equ CASE_S_MAIN_EMPTY, 92
+  .equ CASE_S_MAIN_REVERSED, 93
+  .equ CASE_S_MAIN_BELOW_LO, 94
+  .equ CASE_CALL_JR_NON_RA_TRUSTED, 95
+  .equ CASE_CALL_JR_NON_RA_ILLEGAL, 96
+  .equ CASE_CALL_J_POSITIVE, 97
+  .equ CASE_CALL_J_NEGATIVE, 98
+  .equ CASE_BNE_ILLEGAL, 99
+  .equ CASE_BLT_ILLEGAL, 100
+  .equ CASE_BGE_ILLEGAL, 101
+  .equ CASE_BLTU_ILLEGAL, 102
+  .equ CASE_BGEU_ILLEGAL, 103
+  .equ CASE_JUMP_BOUND1, 104
+  .equ CASE_JUMP_BOUND2, 105
+  .equ CASE_C_J_ILLEGAL, 106
+  .equ CASE_C_JR_ILLEGAL, 107
+  .equ CASE_C_JALR_ILLEGAL, 108
+  .equ CASE_C_BEQZ_ILLEGAL, 109
+  .equ CASE_C_BNEZ_ILLEGAL, 110
+  .equ CASE_C_BRANCH_NOT_TAKEN, 111
+  .equ CASE_C_J_MAIN_CALL, 112
+  .equ CASE_S_LOAD_TRUSTED, 113
+  .equ CASE_S_LOAD_DISABLED, 114
+  .equ CASE_S_STORE_TRUSTED, 115
+  .equ CASE_S_STORE_DISABLED, 116
+  .equ CASE_S_JUMP_TRUSTED, 117
+  .equ CASE_S_JUMP_DISABLED, 118
+  .equ CASE_S_LOAD_BOUND_ALLOW, 119
+  .equ CASE_S_STORE_BOUND_ALLOW, 120
+  .equ CASE_S_JUMP_BOUND_ALLOW, 121
+  .equ CASE_S_JUMP_SPECIAL_ALLOW, 122
   .equ CASE_SCALAR_LOAD_FIRST, CASE_LB_ALLOW
   .equ CASE_SCALAR_STORE_FIRST, CASE_SB_ALLOW
   .equ CASE_SCALAR_LAST, CASE_SW_DENY
-  .equ CASE_DIAG_LOAD_ADJACENT, 78
-  .equ CASE_DIAG_LOAD_OVERLAP, 79
-  .equ CASE_DIAG_STORE_ADJACENT, 80
-  .equ CASE_DIAG_LOAD_TVAL, 81
+  .equ CASE_DIAG_LOAD_ADJACENT, 123
+  .equ CASE_DIAG_LOAD_OVERLAP, 124
+  .equ CASE_DIAG_STORE_ADJACENT, 125
+  .equ CASE_DIAG_LOAD_TVAL, 126
   .equ CASE_DIAG_FIRST, CASE_DIAG_LOAD_ADJACENT
 
   .macro CLEAR_CASE_STATE
@@ -398,6 +447,96 @@ _start:
   beq s0, t0, case_lib_empty_load
   li t0, CASE_LIB_REVERSED_STORE
   beq s0, t0, case_lib_reversed_store
+  li t0, CASE_S_CSR_TRUSTED_READ
+  beq s0, t0, case_s_csr_trusted_read
+  li t0, CASE_S_CSR_UNTRUSTED_READ
+  beq s0, t0, case_s_csr_untrusted_read
+  li t0, CASE_S_CSR_UNTRUSTED_WRITE
+  beq s0, t0, case_s_csr_untrusted_write
+  li t0, CASE_S_CALL_J_TRUSTED
+  beq s0, t0, case_s_call_j_trusted
+  li t0, CASE_S_CALL_JR_TRUSTED
+  beq s0, t0, case_s_call_jr_trusted
+  li t0, CASE_S_CALL_J_DISABLED
+  beq s0, t0, case_s_call_j_disabled
+  li t0, CASE_S_CALL_JR_DISABLED
+  beq s0, t0, case_s_call_jr_disabled
+  li t0, CASE_S_CALL_J_UNTRUSTED
+  beq s0, t0, case_s_call_j_untrusted
+  li t0, CASE_S_CALL_JR_UNTRUSTED
+  beq s0, t0, case_s_call_jr_untrusted
+  li t0, CASE_U_MAIN_HI
+  beq s0, t0, case_u_main_hi
+  li t0, CASE_U_MAIN_EMPTY
+  beq s0, t0, case_u_main_empty
+  li t0, CASE_U_MAIN_REVERSED
+  beq s0, t0, case_u_main_reversed
+  li t0, CASE_U_MAIN_BELOW_LO
+  beq s0, t0, case_u_main_below_lo
+  li t0, CASE_S_MAIN_HI
+  beq s0, t0, case_s_main_hi
+  li t0, CASE_S_MAIN_EMPTY
+  beq s0, t0, case_s_main_empty
+  li t0, CASE_S_MAIN_REVERSED
+  beq s0, t0, case_s_main_reversed
+  li t0, CASE_S_MAIN_BELOW_LO
+  beq s0, t0, case_s_main_below_lo
+  li t0, CASE_CALL_JR_NON_RA_TRUSTED
+  beq s0, t0, case_call_jr_non_ra_trusted
+  li t0, CASE_CALL_JR_NON_RA_ILLEGAL
+  beq s0, t0, case_call_jr_non_ra_illegal
+  li t0, CASE_CALL_J_POSITIVE
+  beq s0, t0, case_call_j_positive
+  li t0, CASE_CALL_J_NEGATIVE
+  beq s0, t0, case_call_j_negative
+  li t0, CASE_BNE_ILLEGAL
+  beq s0, t0, case_bne_illegal
+  li t0, CASE_BLT_ILLEGAL
+  beq s0, t0, case_blt_illegal
+  li t0, CASE_BGE_ILLEGAL
+  beq s0, t0, case_bge_illegal
+  li t0, CASE_BLTU_ILLEGAL
+  beq s0, t0, case_bltu_illegal
+  li t0, CASE_BGEU_ILLEGAL
+  beq s0, t0, case_bgeu_illegal
+  li t0, CASE_JUMP_BOUND1
+  beq s0, t0, case_jump_bound1
+  li t0, CASE_JUMP_BOUND2
+  beq s0, t0, case_jump_bound2
+  li t0, CASE_C_J_ILLEGAL
+  beq s0, t0, case_c_j_illegal
+  li t0, CASE_C_JR_ILLEGAL
+  beq s0, t0, case_c_jr_illegal
+  li t0, CASE_C_JALR_ILLEGAL
+  beq s0, t0, case_c_jalr_illegal
+  li t0, CASE_C_BEQZ_ILLEGAL
+  beq s0, t0, case_c_beqz_illegal
+  li t0, CASE_C_BNEZ_ILLEGAL
+  beq s0, t0, case_c_bnez_illegal
+  li t0, CASE_C_BRANCH_NOT_TAKEN
+  beq s0, t0, case_c_branch_not_taken
+  li t0, CASE_C_J_MAIN_CALL
+  beq s0, t0, case_c_j_main_call
+  li t0, CASE_S_LOAD_TRUSTED
+  beq s0, t0, case_s_load_trusted
+  li t0, CASE_S_LOAD_DISABLED
+  beq s0, t0, case_s_load_disabled
+  li t0, CASE_S_STORE_TRUSTED
+  beq s0, t0, case_s_store_trusted
+  li t0, CASE_S_STORE_DISABLED
+  beq s0, t0, case_s_store_disabled
+  li t0, CASE_S_JUMP_TRUSTED
+  beq s0, t0, case_s_jump_trusted
+  li t0, CASE_S_JUMP_DISABLED
+  beq s0, t0, case_s_jump_disabled
+  li t0, CASE_S_LOAD_BOUND_ALLOW
+  beq s0, t0, case_s_load_bound_allow
+  li t0, CASE_S_STORE_BOUND_ALLOW
+  beq s0, t0, case_s_store_bound_allow
+  li t0, CASE_S_JUMP_BOUND_ALLOW
+  beq s0, t0, case_s_jump_bound_allow
+  li t0, CASE_S_JUMP_SPECIAL_ALLOW
+  beq s0, t0, case_s_jump_special_allow
   li t0, CASE_DIAG_LOAD_ADJACENT
   beq s0, t0, case_load_adjacent_bounds
   li t0, CASE_DIAG_LOAD_OVERLAP
@@ -1155,6 +1294,285 @@ case_lib_reversed_store:
   la t0, lib_reversed_store_entry
   j enter_umode
 
+case_s_csr_trusted_read:
+  CLEAR_CASE_STATE
+  li t0, SCFG_ALL_CLOSED
+  csrw CSR_SMAIN_CFG, t0
+  li t0, 5
+  csrw CSR_FREASON, t0
+  la t0, s_csr_trusted_read_site
+  csrw CSR_SMAIN_BOUND_LO, t0
+  addi t1, t0, 8
+  csrw CSR_SMAIN_BOUND_HI, t1
+  SET_EXPECTED CAUSE_ECALL_S, s_csr_trusted_read_ecall, 5
+  SET_EXPECTED_AUX 5, 0
+  la t0, s_csr_trusted_read_site
+  j enter_smode
+
+case_s_csr_untrusted_read:
+  CLEAR_CASE_STATE
+  li t0, SCFG_ALL_CLOSED
+  csrw CSR_SMAIN_CFG, t0
+  li t0, 5
+  csrw CSR_FREASON, t0
+  SET_EXPECTED CAUSE_ILLEGAL_INSTRUCTION, s_csr_untrusted_read_site, 5
+  SET_EXPECTED_AUX 0x5a5a5a5a5a5a5a5a, 0
+  la t0, s_csr_untrusted_read_entry
+  j enter_smode
+
+case_s_csr_untrusted_write:
+  CLEAR_CASE_STATE
+  li t0, SCFG_ALL_CLOSED
+  csrw CSR_SMAIN_CFG, t0
+  li t0, 5
+  csrw CSR_FREASON, t0
+  li t0, 0xa
+  csrw CSR_LIB_CFG, t0
+  SET_EXPECTED CAUSE_ILLEGAL_INSTRUCTION, s_csr_untrusted_write_site, 5
+  SET_EXPECTED_AUX 0xa, 0
+  la t0, s_csr_untrusted_write_entry
+  j enter_smode
+
+  .macro S_CALL_TRUSTED_CASE case_name, site_name, entry_name, marker
+\case_name:
+  CLEAR_CASE_STATE
+  li t0, SCFG_JUMP_OPEN
+  csrw CSR_SMAIN_CFG, t0
+  la t0, \site_name\()_site
+  csrw CSR_SMAIN_BOUND_LO, t0
+  addi t1, t0, 8
+  csrw CSR_SMAIN_BOUND_HI, t1
+  SET_EXPECTED CAUSE_ECALL_S, \site_name\()_target_ecall, 0
+  SET_EXPECTED_AUX \marker, 0
+  la t0, \entry_name
+  j enter_smode
+  .endm
+
+  .macro S_CALL_ILLEGAL_CASE case_name, entry_name, site_name, cfg
+\case_name:
+  CLEAR_CASE_STATE
+  li t0, \cfg
+  csrw CSR_SMAIN_CFG, t0
+  li t0, 5
+  csrw CSR_FREASON, t0
+  li t0, 0x5555555555555555
+  csrw CSR_RETURN_PC, t0
+  SET_EXPECTED CAUSE_ILLEGAL_INSTRUCTION, \site_name, 5
+  la t0, \entry_name
+  j enter_smode
+  .endm
+
+  S_CALL_TRUSTED_CASE case_s_call_j_trusted, s_call_j_trusted, s_call_j_trusted_site, 0x7a
+  S_CALL_TRUSTED_CASE case_s_call_jr_trusted, s_call_jr_trusted, s_call_jr_trusted_entry, 0x7b
+  S_CALL_ILLEGAL_CASE case_s_call_j_disabled, s_call_j_disabled_entry, s_call_j_disabled_site, 0
+  S_CALL_ILLEGAL_CASE case_s_call_jr_disabled, s_call_jr_disabled_entry, s_call_jr_disabled_site, 0
+  S_CALL_ILLEGAL_CASE case_s_call_j_untrusted, s_call_j_untrusted_entry, s_call_j_untrusted_site, SCFG_JUMP_OPEN
+  S_CALL_ILLEGAL_CASE case_s_call_jr_untrusted, s_call_jr_untrusted_entry, s_call_jr_untrusted_site, SCFG_JUMP_OPEN
+
+  .macro MAIN_BOUNDARY_CASE case_name, site_name, cfg, cause, lo_delta, hi_delta, csr_lo, csr_hi, enter_mode
+\case_name:
+  CLEAR_CASE_STATE
+  li t0, \cfg
+  csrw CSR_SMAIN_CFG, t0
+  la t0, \site_name
+  addi t1, t0, \lo_delta
+  csrw \csr_lo, t1
+  addi t1, t0, \hi_delta
+  csrw \csr_hi, t1
+  SET_EXPECTED \cause, \site_name, FREASON_ECALL
+  la t0, \site_name
+  j \enter_mode
+  .endm
+
+  MAIN_BOUNDARY_CASE case_u_main_hi, u_main_hi_site, UCFG_ECALL_OPEN, CAUSE_CHECK_U, -8, 0, CSR_UMAIN_BOUND_LO, CSR_UMAIN_BOUND_HI, enter_umode
+  MAIN_BOUNDARY_CASE case_u_main_empty, u_main_empty_site, UCFG_ECALL_OPEN, CAUSE_CHECK_U, 0, 0, CSR_UMAIN_BOUND_LO, CSR_UMAIN_BOUND_HI, enter_umode
+  MAIN_BOUNDARY_CASE case_u_main_reversed, u_main_reversed_site, UCFG_ECALL_OPEN, CAUSE_CHECK_U, 8, 0, CSR_UMAIN_BOUND_LO, CSR_UMAIN_BOUND_HI, enter_umode
+  MAIN_BOUNDARY_CASE case_u_main_below_lo, u_main_below_lo_site, UCFG_ECALL_OPEN, CAUSE_CHECK_U, 8, 16, CSR_UMAIN_BOUND_LO, CSR_UMAIN_BOUND_HI, enter_umode
+  MAIN_BOUNDARY_CASE case_s_main_hi, s_main_hi_site, SCFG_ECALL_OPEN, CAUSE_CHECK_S, -8, 0, CSR_SMAIN_BOUND_LO, CSR_SMAIN_BOUND_HI, enter_smode
+  MAIN_BOUNDARY_CASE case_s_main_empty, s_main_empty_site, SCFG_ECALL_OPEN, CAUSE_CHECK_S, 0, 0, CSR_SMAIN_BOUND_LO, CSR_SMAIN_BOUND_HI, enter_smode
+  MAIN_BOUNDARY_CASE case_s_main_reversed, s_main_reversed_site, SCFG_ECALL_OPEN, CAUSE_CHECK_S, 8, 0, CSR_SMAIN_BOUND_LO, CSR_SMAIN_BOUND_HI, enter_smode
+  MAIN_BOUNDARY_CASE case_s_main_below_lo, s_main_below_lo_site, SCFG_ECALL_OPEN, CAUSE_CHECK_S, 8, 16, CSR_SMAIN_BOUND_LO, CSR_SMAIN_BOUND_HI, enter_smode
+
+case_call_jr_non_ra_trusted:
+  CLEAR_CASE_STATE
+  li t0, UCFG_JUMP_ONLY
+  csrw CSR_UMAIN_CFG, t0
+  la t0, call_jr_non_ra_trusted_site
+  csrw CSR_UMAIN_BOUND_LO, t0
+  addi t1, t0, 8
+  csrw CSR_UMAIN_BOUND_HI, t1
+  SET_EXPECTED CAUSE_ECALL_U, call_jr_non_ra_trusted_target_ecall, 0
+  la t0, call_jr_non_ra_trusted_entry
+  j enter_umode
+
+case_call_jr_non_ra_illegal:
+  CLEAR_CASE_STATE
+  li t0, UCFG_JUMP_ONLY
+  csrw CSR_UMAIN_CFG, t0
+  li t0, 5
+  csrw CSR_FREASON, t0
+  li t0, 0x5555555555555555
+  csrw CSR_RETURN_PC, t0
+  SET_EXPECTED CAUSE_ILLEGAL_INSTRUCTION, call_jr_non_ra_illegal_site, 5
+  la t0, call_jr_non_ra_illegal_entry
+  j enter_umode
+
+  .macro CALL_J_OFFSET_CASE case_name, site_name, target_ecall
+\case_name:
+  CLEAR_CASE_STATE
+  li t0, UCFG_JUMP_ONLY
+  csrw CSR_UMAIN_CFG, t0
+  la t0, \site_name
+  csrw CSR_UMAIN_BOUND_LO, t0
+  addi t1, t0, 8
+  csrw CSR_UMAIN_BOUND_HI, t1
+  SET_EXPECTED CAUSE_ECALL_U, \target_ecall, 0
+  la t0, \site_name
+  j enter_umode
+  .endm
+
+  CALL_J_OFFSET_CASE case_call_j_positive, call_j_positive_site, call_j_positive_target_ecall
+  CALL_J_OFFSET_CASE case_call_j_negative, call_j_negative_site, call_j_negative_target_ecall
+
+  .macro ILLEGAL_BRANCH_CASE case_name, entry_name, site_name, target_name
+\case_name:
+  call prepare_jump_case
+  SET_EXPECTED_TARGET \site_name, \target_name
+  la t0, \entry_name
+  j enter_umode
+  .endm
+
+  ILLEGAL_BRANCH_CASE case_bne_illegal, bne_illegal_entry, bne_illegal_site, bne_illegal_target
+  ILLEGAL_BRANCH_CASE case_blt_illegal, blt_illegal_entry, blt_illegal_site, blt_illegal_target
+  ILLEGAL_BRANCH_CASE case_bge_illegal, bge_illegal_entry, bge_illegal_site, bge_illegal_target
+  ILLEGAL_BRANCH_CASE case_bltu_illegal, bltu_illegal_entry, bltu_illegal_site, bltu_illegal_target
+  ILLEGAL_BRANCH_CASE case_bgeu_illegal, bgeu_illegal_entry, bgeu_illegal_site, bgeu_illegal_target
+
+  .macro JUMP_BOUND_CASE case_name, source_name, target_name, cfg, csr_lo, csr_hi
+\case_name:
+  call prepare_jump_case
+  li t0, \cfg
+  csrw CSR_JUMP_CFG, t0
+  la t0, \target_name
+  csrw \csr_lo, t0
+  addi t1, t0, 8
+  csrw \csr_hi, t1
+  SET_EXPECTED CAUSE_ECALL_U, \target_name, 0
+  la t0, \source_name
+  j enter_umode
+  .endm
+
+  JUMP_BOUND_CASE case_jump_bound1, jump_bound1_source, jump_bound1_target, (1 << 16), CSR_JUMP_BOUND1_LO, CSR_JUMP_BOUND1_HI
+  JUMP_BOUND_CASE case_jump_bound2, jump_bound2_source, jump_bound2_target, (1 << 32), CSR_JUMP_BOUND2_LO, CSR_JUMP_BOUND2_HI
+
+  .macro COMPRESSED_ILLEGAL_CASE case_name, entry_name, site_name, target_name
+\case_name:
+  call prepare_jump_case
+  SET_EXPECTED_TARGET \site_name, \target_name
+  la t0, \entry_name
+  j enter_umode
+  .endm
+
+  COMPRESSED_ILLEGAL_CASE case_c_j_illegal, c_j_illegal_site, c_j_illegal_site, c_j_illegal_target
+  COMPRESSED_ILLEGAL_CASE case_c_jr_illegal, c_jr_illegal_entry, c_jr_illegal_site, c_jr_illegal_target
+  COMPRESSED_ILLEGAL_CASE case_c_jalr_illegal, c_jalr_illegal_entry, c_jalr_illegal_site, c_jalr_illegal_target
+  COMPRESSED_ILLEGAL_CASE case_c_beqz_illegal, c_beqz_illegal_entry, c_beqz_illegal_site, c_beqz_illegal_target
+  COMPRESSED_ILLEGAL_CASE case_c_bnez_illegal, c_bnez_illegal_entry, c_bnez_illegal_site, c_bnez_illegal_target
+
+case_c_branch_not_taken:
+  call prepare_jump_case
+  SET_EXPECTED CAUSE_ECALL_U, c_branch_not_taken_ecall, 0
+  la t0, c_branch_not_taken_entry
+  j enter_umode
+
+case_c_j_main_call:
+  call prepare_jump_case
+  la t0, c_j_main_call_target
+  csrw CSR_MAIN_CALL_ENTRY, t0
+  SET_EXPECTED CAUSE_ECALL_U, c_j_main_call_target, 0
+  la t0, c_j_main_call_site
+  j enter_umode
+
+  .macro S_BYPASS_CASE case_name, site_name, cfg, trusted, expected
+\case_name:
+  CLEAR_CASE_STATE
+  li t0, \cfg
+  csrw CSR_SMAIN_CFG, t0
+  .if \trusted
+  la t0, \site_name\()_site
+  csrw CSR_SMAIN_BOUND_LO, t0
+  addi t1, t0, 8
+  csrw CSR_SMAIN_BOUND_HI, t1
+  .endif
+  SET_EXPECTED CAUSE_ECALL_S, \site_name\()_ecall, 0
+  SET_EXPECTED_AUX \expected, 0x99aabbccddeeff00
+  la t0, \site_name\()_entry
+  j enter_smode
+  .endm
+
+  S_BYPASS_CASE case_s_load_trusted, s_load_trusted, SCFG_LOAD_OPEN, 1, 0x99aabbccddeeff00
+  S_BYPASS_CASE case_s_load_disabled, s_load_disabled, 0, 0, 0x99aabbccddeeff00
+  S_BYPASS_CASE case_s_store_trusted, s_store_trusted, SCFG_STORE_OPEN, 1, 0x123456789abcdef0
+  S_BYPASS_CASE case_s_store_disabled, s_store_disabled, 0, 0, 0x123456789abcdef0
+  S_BYPASS_CASE case_s_jump_trusted, s_jump_trusted, SCFG_JUMP_OPEN, 1, 0x8a
+  S_BYPASS_CASE case_s_jump_disabled, s_jump_disabled, 0, 0, 0x8a
+
+case_s_load_bound_allow:
+  CLEAR_CASE_STATE
+  li t0, SCFG_LOAD_OPEN
+  csrw CSR_SMAIN_CFG, t0
+  li t0, LIB_CFG_ONE_READ
+  csrw CSR_LIB_CFG, t0
+  la t0, scalar_data
+  csrw CSR_LIB_BOUND0_LO, t0
+  addi t1, t0, 8
+  csrw CSR_LIB_BOUND0_HI, t1
+  SET_EXPECTED CAUSE_ECALL_S, s_load_bound_allow_ecall, 0
+  SET_EXPECTED_AUX 0x88776655f4e3d2c1, 0
+  la t0, s_load_bound_allow_entry
+  j enter_smode
+
+case_s_store_bound_allow:
+  CLEAR_CASE_STATE
+  li t0, SCFG_STORE_OPEN
+  csrw CSR_SMAIN_CFG, t0
+  li t0, LIB_CFG_ONE_WRITE
+  csrw CSR_LIB_CFG, t0
+  la t0, scalar_data
+  csrw CSR_LIB_BOUND0_LO, t0
+  addi t1, t0, 8
+  csrw CSR_LIB_BOUND0_HI, t1
+  SET_EXPECTED CAUSE_ECALL_S, s_store_bound_allow_ecall, 0
+  SET_EXPECTED_AUX 0x123456789abcdef0, 0x99aabbccddeeff00
+  la t0, s_store_bound_allow_entry
+  j enter_smode
+
+case_s_jump_bound_allow:
+  CLEAR_CASE_STATE
+  li t0, SCFG_JUMP_OPEN
+  csrw CSR_SMAIN_CFG, t0
+  li t0, 1
+  csrw CSR_JUMP_CFG, t0
+  la t0, s_jump_bound_allow_target
+  csrw CSR_JUMP_BOUND0_LO, t0
+  addi t1, t0, 8
+  csrw CSR_JUMP_BOUND0_HI, t1
+  SET_EXPECTED CAUSE_ECALL_S, s_jump_bound_allow_ecall, 0
+  SET_EXPECTED_AUX 0x8b, 0
+  la t0, s_jump_bound_allow_site
+  j enter_smode
+
+case_s_jump_special_allow:
+  CLEAR_CASE_STATE
+  li t0, SCFG_JUMP_OPEN
+  csrw CSR_SMAIN_CFG, t0
+  la t0, s_jump_special_allow_target
+  csrw CSR_MAIN_CALL_ENTRY, t0
+  SET_EXPECTED CAUSE_ECALL_S, s_jump_special_allow_ecall, 0
+  SET_EXPECTED_AUX 0x8c, 0
+  la t0, s_jump_special_allow_site
+  j enter_smode
+
 case_bound_warl:
   CHECK_BOUND CSR_UMAIN_BOUND_LO
   CHECK_BOUND CSR_UMAIN_BOUND_HI
@@ -1686,6 +2104,336 @@ jalr_illegal_target:
   LIB_LOAD_SITE lib_empty_load
   LIB_STORE_SITE lib_reversed_store
 
+  .balign 8
+s_csr_trusted_read_site:
+  csrr a2, CSR_FREASON
+s_csr_trusted_read_ecall:
+  ecall
+
+  .balign 8
+s_csr_untrusted_read_entry:
+  li a2, 0x5a5a5a5a5a5a5a5a
+s_csr_untrusted_read_site:
+  csrr a2, CSR_FREASON
+  ecall
+
+  .balign 8
+s_csr_untrusted_write_entry:
+  li a2, -1
+s_csr_untrusted_write_site:
+  csrw CSR_LIB_CFG, a2
+  ecall
+
+  .macro S_CALL_J_SITE name, marker
+  .balign 8
+\name\()_site:
+  .word 0x0080000b
+\name\()_return_site:
+  ecall
+\name\()_target:
+  li a2, \marker
+\name\()_target_ecall:
+  ecall
+  .endm
+
+  .macro S_CALL_JR_SITE name, marker
+  .balign 8
+\name\()_entry:
+  la a0, \name\()_target
+  addi a0, a0, -3
+\name\()_site:
+  .word 0x0045108b
+\name\()_return_site:
+  ecall
+  .balign 8
+\name\()_target:
+  li a2, \marker
+\name\()_target_ecall:
+  ecall
+  .endm
+
+  S_CALL_J_SITE s_call_j_trusted, 0x7a
+  S_CALL_JR_SITE s_call_jr_trusted, 0x7b
+
+  .macro S_CALL_J_ILLEGAL_SITE name
+  .balign 8
+\name\()_entry:
+  li ra, 0x6666666666666666
+  li a2, 0
+\name\()_site:
+  .word 0x0080000b
+  ecall
+\name\()_target:
+  li a2, 0x7c
+  ecall
+  .endm
+
+  .macro S_CALL_JR_ILLEGAL_SITE name
+  .balign 8
+\name\()_entry:
+  la a0, \name\()_target
+  addi a0, a0, -3
+  li ra, 0x6666666666666666
+  li a2, 0
+\name\()_site:
+  .word 0x0045108b
+  ecall
+  .balign 8
+\name\()_target:
+  li a2, 0x7d
+  ecall
+  .endm
+
+  S_CALL_J_ILLEGAL_SITE s_call_j_disabled
+  S_CALL_JR_ILLEGAL_SITE s_call_jr_disabled
+  S_CALL_J_ILLEGAL_SITE s_call_j_untrusted
+  S_CALL_JR_ILLEGAL_SITE s_call_jr_untrusted
+
+  .macro MAIN_BOUNDARY_SITE name
+  .balign 8
+\name\()_site:
+  ecall
+  .endm
+
+  MAIN_BOUNDARY_SITE u_main_hi
+  MAIN_BOUNDARY_SITE u_main_empty
+  MAIN_BOUNDARY_SITE u_main_reversed
+  MAIN_BOUNDARY_SITE u_main_below_lo
+  MAIN_BOUNDARY_SITE s_main_hi
+  MAIN_BOUNDARY_SITE s_main_empty
+  MAIN_BOUNDARY_SITE s_main_reversed
+  MAIN_BOUNDARY_SITE s_main_below_lo
+
+  .balign 8
+call_jr_non_ra_trusted_entry:
+  la a0, call_jr_non_ra_trusted_target
+  addi a0, a0, -3
+  li ra, 0x6666666666666666
+  li a2, 0x5a5a5a5a5a5a5a5a
+  li a3, 0
+call_jr_non_ra_trusted_site:
+  .word 0x0045160b
+call_jr_non_ra_trusted_return_site:
+  ecall
+  .balign 8
+call_jr_non_ra_trusted_target:
+  li a3, 0x7e
+call_jr_non_ra_trusted_target_ecall:
+  ecall
+
+  .balign 8
+call_jr_non_ra_illegal_entry:
+  la a0, call_jr_non_ra_illegal_target
+  addi a0, a0, -3
+  li ra, 0x6666666666666666
+  li a2, 0x5a5a5a5a5a5a5a5a
+  li a3, 0
+call_jr_non_ra_illegal_site:
+  .word 0x0045160b
+  ecall
+  .balign 8
+call_jr_non_ra_illegal_target:
+  li a3, 0x7f
+  ecall
+
+  .balign 8
+call_j_positive_site:
+  .word 0x4000000b
+call_j_positive_return_site:
+  .space 1020, 0
+call_j_positive_target:
+  li a2, 0x80
+call_j_positive_target_ecall:
+  ecall
+
+  .balign 8
+call_j_negative_target:
+  li a2, 0x81
+call_j_negative_target_ecall:
+  ecall
+  .space 248, 0
+call_j_negative_site:
+  .word 0xf01f8f8b
+call_j_negative_return_site:
+  ecall
+
+  .macro BRANCH_SITE name, setup0, setup1, op
+  .balign 8
+\name\()_entry:
+  li t0, \setup0
+  li t1, \setup1
+\name\()_site:
+  \op t0, t1, \name\()_target
+  ecall
+\name\()_target:
+  ecall
+  .endm
+
+  BRANCH_SITE bne_illegal, 1, 0, bne
+  BRANCH_SITE blt_illegal, -1, 0, blt
+  BRANCH_SITE bge_illegal, 0, -1, bge
+  BRANCH_SITE bltu_illegal, 0, 1, bltu
+  BRANCH_SITE bgeu_illegal, 1, 0, bgeu
+
+  .balign 8
+jump_bound1_source:
+  jal zero, jump_bound1_target
+  ecall
+  .balign 8
+jump_bound1_target:
+  ecall
+
+  .balign 8
+jump_bound2_source:
+  jal zero, jump_bound2_target
+  ecall
+  .balign 8
+jump_bound2_target:
+  ecall
+
+  .option push
+  .option rvc
+  .balign 8
+c_j_illegal_site:
+  c.j c_j_illegal_target
+  c.nop
+c_j_illegal_target:
+  ecall
+
+  .balign 8
+c_jr_illegal_entry:
+  la t0, c_jr_illegal_target
+  addi t0, t0, 1
+c_jr_illegal_site:
+  c.jr t0
+  c.nop
+c_jr_illegal_target:
+  ecall
+
+  .balign 8
+c_jalr_illegal_entry:
+  la t0, c_jalr_illegal_target
+  addi t0, t0, 1
+  li ra, 0x6666666666666666
+c_jalr_illegal_site:
+  c.jalr t0
+  c.nop
+c_jalr_illegal_target:
+  ecall
+
+  .balign 8
+c_beqz_illegal_entry:
+  li s1, 0
+c_beqz_illegal_site:
+  c.beqz s1, c_beqz_illegal_target
+  c.nop
+c_beqz_illegal_target:
+  ecall
+
+  .balign 8
+c_bnez_illegal_entry:
+  li s1, 1
+c_bnez_illegal_site:
+  c.bnez s1, c_bnez_illegal_target
+  c.nop
+c_bnez_illegal_target:
+  ecall
+
+  .balign 8
+c_branch_not_taken_entry:
+  li s1, 1
+  c.beqz s1, c_branch_not_taken_target
+c_branch_not_taken_ecall:
+  ecall
+c_branch_not_taken_target:
+  ecall
+
+  .balign 8
+c_j_main_call_site:
+  c.j c_j_main_call_target
+  c.nop
+c_j_main_call_target:
+  ecall
+  .option pop
+
+  .macro S_LOAD_BYPASS_SITE name
+\name\()_entry:
+  la t0, scalar_data
+  addi t0, t0, 8
+  li a2, 0x5a5a5a5a5a5a5a5a
+  .balign 8
+\name\()_site:
+  ld a2, 0(t0)
+\name\()_ecall:
+  ecall
+  .endm
+
+  .macro S_STORE_BYPASS_SITE name
+\name\()_entry:
+  la t0, scalar_data
+  li t1, 0x123456789abcdef0
+  .balign 8
+\name\()_site:
+  sd t1, 0(t0)
+\name\()_ecall:
+  ecall
+  .endm
+
+  .macro S_JUMP_BYPASS_SITE name
+  .balign 8
+\name\()_entry:
+  li a2, 0
+\name\()_site:
+  jal zero, \name\()_target
+  ecall
+\name\()_target:
+  li a2, 0x8a
+\name\()_ecall:
+  ecall
+  .endm
+
+  S_LOAD_BYPASS_SITE s_load_trusted
+  S_LOAD_BYPASS_SITE s_load_disabled
+  S_STORE_BYPASS_SITE s_store_trusted
+  S_STORE_BYPASS_SITE s_store_disabled
+  S_JUMP_BYPASS_SITE s_jump_trusted
+  S_JUMP_BYPASS_SITE s_jump_disabled
+
+s_load_bound_allow_entry:
+  la t0, scalar_data
+s_load_bound_allow_site:
+  ld a2, 0(t0)
+s_load_bound_allow_ecall:
+  ecall
+
+s_store_bound_allow_entry:
+  la t0, scalar_data
+  li t1, 0x123456789abcdef0
+s_store_bound_allow_site:
+  sd t1, 0(t0)
+s_store_bound_allow_ecall:
+  ecall
+
+  .balign 8
+s_jump_bound_allow_site:
+  jal zero, s_jump_bound_allow_target
+  ecall
+  .balign 8
+s_jump_bound_allow_target:
+  li a2, 0x8b
+s_jump_bound_allow_ecall:
+  ecall
+
+  .balign 8
+s_jump_special_allow_site:
+  jal zero, s_jump_special_allow_target
+  ecall
+  .balign 8
+s_jump_special_allow_target:
+  li a2, 0x8c
+s_jump_special_allow_ecall:
+  ecall
+
   .align 2
 trap_handler:
   csrr a1, CSR_FREASON
@@ -1764,7 +2512,50 @@ trap_handler:
   beq s0, t0, check_scalar_load_effect
   li t0, CASE_LIB_REVERSED_STORE
   beq s0, t0, check_scalar_store_effect
-  j check_scalar_load_effect
+  li t0, CASE_S_CSR_TRUSTED_READ
+  bltu s0, t0, check_scalar_load_effect
+  beq s0, t0, check_expected_a2
+  li t0, CASE_S_CSR_UNTRUSTED_READ
+  beq s0, t0, check_expected_a2
+  li t0, CASE_S_CSR_UNTRUSTED_WRITE
+  beq s0, t0, check_s_csr_write_effect
+  li t0, CASE_S_CALL_J_TRUSTED
+  beq s0, t0, check_s_call_j_trusted_effect
+  li t0, CASE_S_CALL_JR_TRUSTED
+  beq s0, t0, check_s_call_jr_trusted_effect
+  li t0, CASE_U_MAIN_HI
+  bltu s0, t0, check_call_illegal_effect
+  li t0, CASE_CALL_JR_NON_RA_TRUSTED
+  beq s0, t0, check_call_jr_non_ra_trusted_effect
+  li t0, CASE_CALL_JR_NON_RA_ILLEGAL
+  beq s0, t0, check_call_jr_non_ra_illegal_effect
+  li t0, CASE_CALL_J_POSITIVE
+  beq s0, t0, check_call_j_positive_effect
+  li t0, CASE_CALL_J_NEGATIVE
+  beq s0, t0, check_call_j_negative_effect
+  li t0, CASE_C_JALR_ILLEGAL
+  beq s0, t0, check_c_jalr_illegal_effect
+  li t0, CASE_S_LOAD_TRUSTED
+  beq s0, t0, check_scalar_load_effect
+  li t0, CASE_S_LOAD_DISABLED
+  beq s0, t0, check_scalar_load_effect
+  li t0, CASE_S_STORE_TRUSTED
+  beq s0, t0, check_scalar_store_effect
+  li t0, CASE_S_STORE_DISABLED
+  beq s0, t0, check_scalar_store_effect
+  li t0, CASE_S_JUMP_TRUSTED
+  beq s0, t0, check_expected_a2
+  li t0, CASE_S_JUMP_DISABLED
+  beq s0, t0, check_expected_a2
+  li t0, CASE_S_LOAD_BOUND_ALLOW
+  beq s0, t0, check_scalar_load_effect
+  li t0, CASE_S_STORE_BOUND_ALLOW
+  beq s0, t0, check_scalar_store_effect
+  li t0, CASE_S_JUMP_BOUND_ALLOW
+  beq s0, t0, check_expected_a2
+  li t0, CASE_S_JUMP_SPECIAL_ALLOW
+  beq s0, t0, check_expected_a2
+  j trap_pass
 trap_pass:
   li a0, 0
   j test_done
@@ -1912,6 +2703,76 @@ check_expected_a2:
   la t0, expected_aux0
   ld t0, 0(t0)
   bne a2, t0, side_effect_fail
+  j trap_pass
+
+check_s_csr_write_effect:
+  csrr t1, CSR_LIB_CFG
+  la t0, expected_aux0
+  ld t0, 0(t0)
+  bne t1, t0, side_effect_fail
+  j trap_pass
+
+check_s_call_j_trusted_effect:
+  li t0, 0x7a
+  bne a2, t0, side_effect_fail
+  la t0, s_call_j_trusted_return_site
+  bne ra, t0, side_effect_fail
+  csrr t1, CSR_RETURN_PC
+  bne t1, t0, side_effect_fail
+  j trap_pass
+
+check_s_call_jr_trusted_effect:
+  li t0, 0x7b
+  bne a2, t0, side_effect_fail
+  la t0, s_call_jr_trusted_return_site
+  bne ra, t0, side_effect_fail
+  csrr t1, CSR_RETURN_PC
+  bne t1, t0, side_effect_fail
+  j trap_pass
+
+check_call_jr_non_ra_trusted_effect:
+  la t0, call_jr_non_ra_trusted_return_site
+  bne a2, t0, side_effect_fail
+  li t1, 0x6666666666666666
+  bne ra, t1, side_effect_fail
+  csrr t1, CSR_RETURN_PC
+  bne t1, t0, side_effect_fail
+  li t0, 0x7e
+  bne a3, t0, side_effect_fail
+  j trap_pass
+
+check_call_jr_non_ra_illegal_effect:
+  li t0, 0x5a5a5a5a5a5a5a5a
+  bne a2, t0, side_effect_fail
+  li t0, 0x6666666666666666
+  bne ra, t0, side_effect_fail
+  bnez a3, side_effect_fail
+  csrr t1, CSR_RETURN_PC
+  li t0, 0x5555555555555555
+  bne t1, t0, side_effect_fail
+  j trap_pass
+
+check_call_j_positive_effect:
+  li t0, 0x80
+  bne a2, t0, side_effect_fail
+  la t0, call_j_positive_return_site
+  bne ra, t0, side_effect_fail
+  csrr t1, CSR_RETURN_PC
+  bne t1, t0, side_effect_fail
+  j trap_pass
+
+check_call_j_negative_effect:
+  li t0, 0x81
+  bne a2, t0, side_effect_fail
+  la t0, call_j_negative_return_site
+  bne ra, t0, side_effect_fail
+  csrr t1, CSR_RETURN_PC
+  bne t1, t0, side_effect_fail
+  j trap_pass
+
+check_c_jalr_illegal_effect:
+  li t0, 0x6666666666666666
+  bne ra, t0, side_effect_fail
   j trap_pass
 
 check_scalar_load_effect:

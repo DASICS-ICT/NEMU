@@ -21,12 +21,16 @@ The default semantic gate covers only cases with a unique architectural oracle:
 
 - taken branch and jump admission for `MainCallEntry`, `ReturnPC`, and
   `ActiveZoneReturnPC`;
+- taken BEQ, BNE, BLT, BGE, BLTU, and BGEU rejection outside the target allow
+  set;
 - taken branch, JAL, and JALR admission through valid JumpBound slot 0 and
-  slot 3 entries, including 16-bit `JumpCfg` slot selection;
+  all four JumpBound slots, including 16-bit `JumpCfg` slot selection;
 - JumpBound `[lo, hi)` high-end rejection, invalid config rejection, and empty
   or reversed bound rejection;
 - JALR admission through `MainCallEntry` and rejection outside the complete
   target allow set;
+- compressed jump, JR, JALR, BEQZ, and BNEZ target checks, including rejected
+  JALR link preservation and a not-taken branch witness;
 - no DASICS target check for a not-taken branch;
 - rejection of taken branches and jumps outside the allow set when `JumpCfg`
   and all three special targets are zero;
@@ -52,8 +56,18 @@ The default semantic gate covers only cases with a unique architectural oracle:
 - raw `DASICSCALL.J/JR` behavior for trusted, disabled, and untrusted U-mode
   execution, including link and `ReturnPC` updates on success and absence of
   those side effects on an ordinary illegal-instruction trap; and
+- `DASICSCALL.JR` decoded non-`x1` destinations and `DASICSCALL.J` nontrivial
+  positive and negative distributed immediates;
 - S-mode load, store, and jump behavior for untrusted open and closed fault
-  controls, including precise S check-fault state and bypass side effects.
+  controls, plus trusted and disabled bypass behavior, including precise S
+  check-fault state and bypass side effects.
+- S-mode untrusted success through valid read/write LibBounds, a valid
+  JumpBound, and a special control-flow target;
+- S-mode protected-CSR trusted access and untrusted read/write rejection,
+  including destination, CSR, and `FReason` preservation;
+- S-mode raw `DASICSCALL.J/JR` trusted, disabled, and untrusted behavior; and
+- U-mode and S-mode MainBound high-end, empty, reversed, and below-low
+  classification using precise ecall-fault witnesses.
 
 Four cross-bound observations are specification-blocked. An 8-byte scalar that
 crosses the 8-byte bound-address grain is necessarily misaligned, while the
