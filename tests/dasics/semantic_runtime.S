@@ -751,6 +751,7 @@ case_aligned_illegal_load:
   addi t1, t0, 8
   csrw CSR_LIB_BOUND0_HI, t1
   SET_EXPECTED_TRAP CAUSE_CHECK_U, aligned_illegal_load_site, 8, FREASON_LOAD
+  SET_EXPECTED_AUX 0x5a5a5a5a5a5a5a5a, 0
   la t0, aligned_illegal_load_entry
   j enter_umode
 
@@ -1737,8 +1738,9 @@ single_store_ecall:
 
 aligned_illegal_load_entry:
   la t0, test_data
+  li a2, 0x5a5a5a5a5a5a5a5a
 aligned_illegal_load_site:
-  ld t1, 8(t0)
+  ld a2, 8(t0)
   ecall
 
 aligned_illegal_store_entry:
@@ -2465,6 +2467,8 @@ trap_handler:
   beq s0, t0, check_single_load_value
   li t0, CASE_SINGLE_STORE
   beq s0, t0, check_single_store_value
+  li t0, CASE_ALIGNED_ILLEGAL_LOAD
+  beq s0, t0, check_expected_a2
   li t0, CASE_ALIGNED_ILLEGAL_STORE
   beq s0, t0, check_no_store_effect
   li t0, CASE_MISALIGNED_STORE
