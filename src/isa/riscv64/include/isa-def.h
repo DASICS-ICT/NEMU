@@ -113,6 +113,13 @@ typedef struct {
   uint64_t mip, mie;
   uint64_t mscratch, sscratch;
   uint64_t mideleg, medeleg;
+
+#ifdef CONFIG_RV_N
+  uint64_t ustatus, uie, utvec, uscratch;
+  uint64_t uepc, ucause, utval, uip;
+#endif
+
+  // Keep pc after optional user CSRs to match Nanhu-V5 DiffTest CSRState + pc layout.
   uint64_t pc;
   // Above will be synced by regcpy when run difftest, DO NOT TOUCH
 
@@ -122,6 +129,23 @@ typedef struct {
   uint64_t hcounteren, htval, htinst, hgatp, vsstatus;
   uint64_t vstvec, vsepc, vscause, vstval, vsatp, vsscratch;
 #endif
+
+#ifdef CONFIG_RV_DASICS
+  uint64_t dumcfg, dumbound0, dumbound1;
+  uint64_t dlcfg0;
+  uint64_t dlbound0, dlbound1, dlbound2, dlbound3;
+  uint64_t dlbound4, dlbound5, dlbound6, dlbound7;
+  uint64_t dlbound8, dlbound9, dlbound10, dlbound11;
+  uint64_t dlbound12, dlbound13, dlbound14, dlbound15;
+  uint64_t dlbound16, dlbound17, dlbound18, dlbound19;
+  uint64_t dlbound20, dlbound21, dlbound22, dlbound23;
+  uint64_t dlbound24, dlbound25, dlbound26, dlbound27;
+  uint64_t dlbound28, dlbound29, dlbound30, dlbound31;
+  uint64_t dmaincall, dretpc;
+  uint64_t djcfg;
+  uint64_t djbound0lo, djbound0hi, djbound1lo, djbound1hi;
+  uint64_t djbound2lo, djbound2hi, djbound3lo, djbound3hi;
+#endif  // CONFIG_RV_DASICS
 
 #ifdef CONFIG_RVV
   //vector

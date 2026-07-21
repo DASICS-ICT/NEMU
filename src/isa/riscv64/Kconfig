@@ -113,6 +113,14 @@ config RV_DEBUG
   bool "RISC-V Debug Extension"
   default y
 
+config RV_DASICS
+  bool "Enable DASICS Protection Mechanism for RV64"
+  default n
+
+config RV_N
+  bool "RISC-V N Extension (User-Level Interrupts)"
+  default n
+
 config RVH
   bool "RISC-V Hypervisor Extension v1.0"
   default y

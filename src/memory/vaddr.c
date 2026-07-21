@@ -206,6 +206,12 @@ static inline word_t vaddr_read_internal(void *s, vaddr_t addr, int len, int typ
     is_cross_page = ((addr & PAGE_MASK) + len) > PAGE_SIZE && len != 1;
   }
 
+#ifdef CONFIG_RV_DASICS
+  if (type == MEM_TYPE_READ && s != NULL) {
+    dasics_ldst_helper(((struct Decode *)s)->pc, addr, len, type);
+  }
+#endif  // CONFIG_RV_DASICS
+
   if (unlikely(mmu_mode == MMU_DYNAMIC || mmu_mode == MMU_TRANSLATE)) {
     Logm("Checking mmu when MMU_DYN");
     mmu_mode = isa_mmu_check(addr, len, type);
@@ -292,6 +298,12 @@ void vaddr_write(struct Decode *s, vaddr_t addr, int len, word_t data, int mmu_m
 
   void isa_misalign_data_addr_check(vaddr_t vaddr, int len, int type);
   isa_misalign_data_addr_check(addr, len, MEM_TYPE_WRITE);
+
+#ifdef CONFIG_RV_DASICS
+  if (s != NULL) {
+    dasics_ldst_helper(s->pc, addr, len, MEM_TYPE_WRITE);
+  }
+#endif  // CONFIG_RV_DASICS
 
   __attribute__((unused)) bool is_cross_page = ((addr & PAGE_MASK) + len) > PAGE_SIZE && len != 1;
 

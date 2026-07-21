@@ -22,7 +22,6 @@
 
 void update_mmu_state();
 
-
 #ifdef CONFIG_RVH
 word_t gen_gva(word_t NO, bool is_hls, bool is_mem_access_virtual) {
   return ((NO == EX_IAM || NO == EX_IAF || NO == EX_BP || NO == EX_IPF) && cpu.v) ||
@@ -48,10 +47,27 @@ bool intr_deleg_VS(word_t exceptionNO){
 bool intr_deleg_S(word_t exceptionNO) {
   bool isNMI = MUXDEF(CONFIG_RV_SMRNMI, cpu.hasNMI && (exceptionNO & INTR_BIT), false);
   word_t deleg = (exceptionNO & INTR_BIT ? mideleg->val : medeleg->val);
-  bool delegS = ((deleg & (1 << (exceptionNO & 0xf))) != 0) && (cpu.mode < MODE_M) && !isNMI;
+#ifdef CONFIG_RV_DASICS
+  word_t mask = 0xff;
+#else
+  word_t mask = 0xf;
+#endif  // CONFIG_RV_DASICS
+  bool delegS = ((deleg & (1 << (exceptionNO & mask))) != 0) && (cpu.mode < MODE_M) && !isNMI;
   return delegS;
 }
 #endif
+
+#ifdef CONFIG_RV_N
+static bool intr_deleg_U(word_t exceptionNO) {
+  if (cpu.mode != MODE_U || (exceptionNO & INTR_BIT)) {
+    return false;
+  }
+  IFDEF(CONFIG_RVH, if (cpu.v) return false);
+  word_t cause = exceptionNO & 0xff;
+  word_t bit = 1UL << cause;
+  return (medeleg->val & bit) && (sedeleg->val & bit);
+}
+#endif // CONFIG_RV_N
 
 void clear_trapinfo(){
   memset(&cpu.trapInfo, 0, sizeof(trap_info_t));
@@ -63,11 +79,53 @@ static word_t get_trap_pc(word_t xtvec, word_t xcause) {
   bool is_intr = (xcause >> (sizeof(word_t)*8 - 1)) == 1;
 #ifdef CONFIG_RVH
   word_t cause_no = xcause & 0xff;
+#elif defined(CONFIG_RV_DASICS)
+  word_t cause_no = xcause & 0xff;
 #else
   word_t cause_no = xcause & 0xf;
 #endif
   return (is_intr && mode==1) ? (base + (cause_no << 2)) : base;
 }
+
+#ifdef CONFIG_RV_N
+static word_t take_user_trap(word_t NO, vaddr_t epc) {
+  ucause->val = NO;
+  uepc->val = epc;
+  ustatus->upie = ustatus->uie;
+  ustatus->uie = 0;
+  utval->val = cpu.trapInfo.tval;
+  switch (NO) {
+    case EX_IPF: case EX_LPF: case EX_SPF:
+    case EX_LAM: case EX_SAM:
+    case EX_IAF: case EX_LAF: case EX_SAF:
+#ifdef CONFIG_RV_DASICS
+    case EX_DUIAF: case EX_DULAF: case EX_DUSAF:
+#endif  // CONFIG_RV_DASICS
+      break;
+    case EX_BP:
+#ifdef CONFIG_RV_SDTRIG
+      switch (trigger_action) {
+        case TRIG_ACTION_NONE: utval->val = epc; break;
+        case TRIG_ACTION_BKPT_EXCPT:
+          utval->val = triggered_tval;
+          trigger_action = TRIG_ACTION_NONE;
+          break;
+        default: panic("Unsupported trigger action %d", trigger_action); break;
+      }
+#else
+      utval->val = epc;
+#endif // CONFIG_RV_SDTRIG
+      break;
+    case EX_II:
+      utval->val = MUXDEF(CONFIG_TVAL_EX_II, cpu.instr, 0);
+      break;
+    default:
+      utval->val = 0;
+  }
+  cpu.mode = MODE_U;
+  return get_trap_pc(utvec->val, ucause->val);
+}
+#endif // CONFIG_RV_N
 
 word_t raise_intr(word_t NO, vaddr_t epc) {
   Logti("raise intr cause NO: %ld, epc: %lx\n", NO, epc);
@@ -125,7 +183,8 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
 #endif // CONFIG_RV_SMRNMI
   bool isNMI = MUXDEF(CONFIG_RV_SMRNMI, cpu.hasNMI && (NO & INTR_BIT), false);
   bool delegS = intr_deleg_S(NO);
-  bool delegM = !delegS && !isNMI;
+  bool delegU = MUXDEF(CONFIG_RV_N, intr_deleg_U(NO), false);
+  bool delegM = !delegS && !delegU && !isNMI;
   bool s_EX_DT = MUXDEF(CONFIG_RV_SSDBLTRP, delegS && mstatus->sdt, false);
   bool m_EX_DT = MUXDEF(CONFIG_RV_SMDBLTRP, delegM && mstatus->mdt, false);
   word_t trap_pc = 0;
@@ -135,17 +194,25 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
   int hld_st_temp = hld_st;
   hld_st = 0;
   bool delegVS = intr_deleg_VS(NO);
-  delegM = !delegS && !delegVS && !isNMI;
+  delegM = !delegS && !delegVS && !delegU && !isNMI;
   delegS &= !delegVS;
+  delegU &= !delegVS;
 #ifdef CONFIG_RV_IMSIC
   if (NO & INTR_BIT) {
     delegS  = cpu.interrupt_delegate.interrupt_to_hs;
     delegVS = cpu.interrupt_delegate.interrupt_to_vs;
+    delegU = false;
     delegM = !delegS && !delegVS && !isNMI;
   }
 #endif
   bool vs_EX_DT = MUXDEF(CONFIG_RV_SSDBLTRP, delegVS && vsstatus->sdt, false);
   m_EX_DT = MUXDEF(CONFIG_RV_SMDBLTRP, delegM && mstatus->mdt, false);
+#ifdef CONFIG_RV_N
+  if (delegU) {
+    trap_pc = take_user_trap(NO, epc);
+  }
+  else
+#endif // CONFIG_RV_N
   if ((delegVS && !vs_EX_DT) || (virtualInterruptIsHvictlInject && !isNMI)){
 #ifdef CONFIG_RV_IMSIC
     int vs_guest_no = NO & 0xff;
@@ -176,6 +243,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
       case EX_HWE:
+#ifdef CONFIG_RV_DASICS
+      case EX_DUIAF: case EX_DULAF: case EX_DUSAF:
+#endif  // CONFIG_RV_DASICS
         break;
       case EX_BP :
 #ifdef CONFIG_RV_SDTRIG
@@ -209,6 +279,12 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     cpu.v = 0;
 #else
   bool vs_EX_DT = false;
+#ifdef CONFIG_RV_N
+  if (delegU) {
+    trap_pc = take_user_trap(NO, epc);
+  }
+  else
+#endif // CONFIG_RV_N
   if (delegS && !s_EX_DT) {
 #endif
     scause->val = NO;
@@ -225,6 +301,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
       case EX_HWE:
+#ifdef CONFIG_RV_DASICS
+      case EX_DUIAF: case EX_DULAF: case EX_DUSAF:
+#endif  // CONFIG_RV_DASICS
         IFDEF(CONFIG_RVH, htval->val = 0);
         IFDEF(CONFIG_RVH, htinst->val = 0);
         break;
@@ -281,6 +360,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
       case EX_HWE:
+#ifdef CONFIG_RV_DASICS
+      case EX_DUIAF: case EX_DULAF: case EX_DUSAF:
+#endif  // CONFIG_RV_DASICS
         IFDEF(CONFIG_RVH, mtval2->val = 0);
         IFDEF(CONFIG_RVH, mtinst->val = 0);
         break;

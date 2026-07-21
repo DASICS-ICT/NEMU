@@ -374,6 +374,11 @@ static inline bool csr_normal_permit_check(uint32_t addr) {
 
   // Attempts to access a CSR without appropriate privilege level
   int csr_priv = BITS(addr, 9, 8); // get csr priv from csr addr
+#ifdef CONFIG_RV_DASICS
+  if (!(cpu.mode >= csr_priv && dasics_in_trusted_zone(cpu.pc))) {
+    return false;
+  }
+#endif  // CONFIG_RV_DASICS
 #ifdef CONFIG_RVH
   bool check_pass = access_table[cpu.v][cpu.mode][csr_priv];
 #else
@@ -646,9 +651,21 @@ static inline word_t* csr_decode(uint32_t addr) {
                         // (1 << EX_SWC) |
                         // (1 << EX_HWE))
 
-// #define MEDELEG_MASK MUXDEF(CONFIG_RVH,  MEDELEG_RVH, MEDELEG_NONRVH)
-#define MEDELEG_MASK MEDELEG_NONRVH
+#ifdef CONFIG_RV_DASICS
+#define MEDELEG_DASICS ((1UL << EX_DUIAF) | \
+                        (1UL << EX_DULAF) | \
+                        (1UL << EX_DUSAF))
+#else
+#define MEDELEG_DASICS 0
+#endif  // CONFIG_RV_DASICS
 
+// #define MEDELEG_MASK MUXDEF(CONFIG_RVH,  MEDELEG_RVH, MEDELEG_NONRVH)
+#define MEDELEG_MASK (MEDELEG_NONRVH | MEDELEG_DASICS)
+
+#ifdef CONFIG_RV_N
+#define SEDELEG_MASK MEDELEG_MASK
+#define SIDELEG_MASK UIE_MASK
+#endif // CONFIG_RV_N
 
 #define MIDELEG_WMASK_SSI (1 << 1)
 #define MIDELEG_WMASK_STI (1 << 5)
@@ -720,6 +737,10 @@ void init_smstateen() {
   mstateen1->val = 0;
   mstateen2->val = 0;
   mstateen3->val = 0;
+#ifdef CONFIG_RV_DASICS
+  mstateen0->val |= MSTATEEN0_CS;
+  sstateen0->val |= SSTATEEN0_CS;
+#endif
 #if defined(CONFIG_RV_AIA) && !defined(CONFIG_RV_SMCSRIND)
   mstateen0->val |= MSTATEEN0_CSRIND;
   IFDEF(CONFIG_RVH, hstateen0->val |= MSTATEEN0_CSRIND);
@@ -775,6 +796,13 @@ void init_smstateen() {
 #define is_mhpmcounter(p) (p >= &(csr_array[CSR_MHPMCOUNTER_BASE]) && p < &(csr_array[CSR_MHPMCOUNTER_BASE + CSR_MHPMCOUNTER_NUM]))
 #define is_mhpmevent(p) (p >= &(csr_array[CSR_MHPMEVENT_BASE]) && p < &(csr_array[CSR_MHPMEVENT_BASE + CSR_MHPMEVENT_NUM]))
 
+#ifdef CONFIG_RV_DASICS
+#define is_write_dasics_mem_bound (dest >= &(csr_array[CSR_DLBOUND0]) && dest < (&(csr_array[CSR_DLBOUND0]) + MAX_DASICS_LIBBOUNDS * 2))
+#define is_write_dasics_jump_bound (dest >= &(csr_array[CSR_DJBOUND0]) && dest < (&(csr_array[CSR_DJBOUND0]) + MAX_DASICS_JUMPBOUNDS * 2))
+#define DUMCFG_MASK MCFG_UENA
+#define BOUND_ADDR_ALIGN 0x7
+#endif  // CONFIG_RV_DASICS
+
 typedef enum {
   CPU_MODE_U = 0,
   CPU_MODE_VU,
@@ -806,6 +834,82 @@ inline word_t sstatus_read(bool vsreg_read, bool bare_read) {
 #endif //CONFIG_RV_SSDBLTRP
   return gen_status_sd(mstatus->val) | (mstatus->val & sstatus_rmask);
 }
+
+#ifdef CONFIG_RV_DASICS
+bool dasics_in_trusted_zone(uint64_t pc)
+{
+  bool is_umain_enable = dumcfg->mcfg_uena;
+  bool in_umain_zone = pc >= dumbound0->val && pc < dumbound1->val && cpu.mode == MODE_U && is_umain_enable;
+  bool in_u_trusted_zone = in_umain_zone || (cpu.mode == MODE_U && !is_umain_enable);
+
+  return cpu.mode >= MODE_S || in_u_trusted_zone;
+}
+
+uint8_t dasics_libcfg_from_index(int i) {
+  assert(0 <= i && i < MAX_DASICS_LIBBOUNDS);
+  return (csr_array[CSR_DLCFG0] >> (i << 2)) & LIBCFG_MASK;
+}
+
+word_t dasics_libbound_from_index(int i) {
+  assert(0 <= i && i < (MAX_DASICS_LIBBOUNDS << 1));
+  return csr_array[CSR_DLBOUND0 + i];
+}
+
+uint16_t dasics_jumpcfg_from_index(int i) {
+  assert(0 <= i && i < MAX_DASICS_JUMPBOUNDS);
+  return (csr_array[CSR_DJCFG] >> (i << 4)) & JUMPCFG_MASK;
+}
+
+word_t dasics_jumpbound_low_from_index(int i) {
+  assert(0 <= i && i < MAX_DASICS_JUMPBOUNDS);
+  return csr_array[CSR_DJBOUND0 + 2 * i];
+}
+
+word_t dasics_jumpbound_high_from_index(int i) {
+  assert(0 <= i && i < MAX_DASICS_JUMPBOUNDS);
+  return csr_array[CSR_DJBOUND0 + 2 * i + 1];
+}
+
+bool dasics_match_dlib(uint64_t addr, uint8_t cfg)
+{
+  for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
+    uint8_t cfgval = dasics_libcfg_from_index(i);
+    word_t boundlo = dasics_libbound_from_index(i << 1);
+    word_t boundhi = dasics_libbound_from_index((i << 1) + 1);
+
+    if (!((cfgval & cfg) ^ cfg) && boundlo <= addr && addr < boundhi) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type) {
+  if (dasics_in_trusted_zone(pc)) {
+    return;
+  }
+
+  if (type == MEM_TYPE_WRITE) {
+    bool close_st_ex = dumcfg->mcfg_cust;
+    for (int i = 0; i < len; ++i) {
+      if (!close_st_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_W)) {
+        cpu.trapInfo.tval = vaddr + i;
+        Logm("DASICS store exception occur %lx", vaddr);
+        longjmp_exception(EX_DUSAF);
+      }
+    }
+  } else if (type == MEM_TYPE_READ) {
+    bool close_ld_ex = dumcfg->mcfg_cult;
+    for (int i = 0; i < len; ++i) {
+      if (!close_ld_ex && !dasics_match_dlib(vaddr + i, LIBCFG_V | LIBCFG_R)) {
+        cpu.trapInfo.tval = vaddr + i;
+        Logm("DASICS load exception occur %lx", vaddr);
+        longjmp_exception(EX_DULAF);
+      }
+    }
+  }
+}
+#endif  // CONFIG_RV_DASICS
 
 #ifdef CONFIG_RV_PMP_CSR
 // get 8-bit config of one PMP entries by index.
@@ -1042,6 +1146,24 @@ static inline void non_vmode_set_sie(word_t src) {
 #endif // CONFIG_RV_SSCOFPMF
 #endif // CONFIG_RV_AIA
 }
+
+#ifdef CONFIG_RV_N
+static inline word_t get_uie() {
+  return uie->val & UIE_MASK;
+}
+
+static inline void set_uie(word_t src) {
+  uie->val = mask_bitset(uie->val, UIE_MASK, src);
+}
+
+static inline word_t get_uip() {
+  return get_mip() & UIP_MASK;
+}
+
+static inline void set_uip(word_t src) {
+  mip->val = mask_bitset(mip->val, UIP_MASK, src);
+}
+#endif // CONFIG_RV_N
 
 static inline void set_tvec(word_t* dest, word_t src) {
   tvec_t newVal;
@@ -1661,6 +1783,17 @@ static word_t csr_read(uint32_t csrid) {
   word_t *src = csr_decode(csrid);
   switch (csrid) {
     /************************* Unprivileged and User-Level CSRs *************************/
+#ifdef CONFIG_RV_N
+    case CSR_USTATUS: return ustatus->val & USTATUS_MASK;
+    case CSR_UIE: return get_uie();
+    case CSR_UTVEC: return utvec->val;
+    case CSR_USCRATCH: return uscratch->val;
+    case CSR_UEPC: return uepc->val;
+    case CSR_UCAUSE: return ucause->val;
+    case CSR_UTVAL: return utval->val;
+    case CSR_UIP: return get_uip();
+#endif // CONFIG_RV_N
+
 #ifndef CONFIG_FPU_NONE
     case CSR_FFLAGS: return fcsr->fflags.val & FFLAGS_MASK;
     case CSR_FRM: return fcsr->frm & FRM_MASK;
@@ -1695,6 +1828,10 @@ static word_t csr_read(uint32_t csrid) {
 
     /************************* Supervisor-Level CSRs *************************/
     case CSR_SSTATUS: return sstatus_read(false, false);
+#ifdef CONFIG_RV_N
+    case CSR_SEDELEG: return sedeleg->val & SEDELEG_MASK;
+    case CSR_SIDELEG: return sideleg->val & SIDELEG_MASK;
+#endif // CONFIG_RV_N
 
 #ifdef CONFIG_RV_SMSTATEEN
     case CSR_SSTATEEN0 ... CSR_SSTATEEN3:
@@ -1852,6 +1989,10 @@ static word_t csr_read(uint32_t csrid) {
         return get_mip();
 #endif
 
+#ifdef CONFIG_RV_DASICS
+    case CSR_DUMCFG: return dumcfg->val & DUMCFG_MASK;
+#endif  // CONFIG_RV_DASICS
+
 #ifdef CONFIG_RV_PMP_CSR
     case CSR_PMPADDR_BASE ... CSR_PMPADDR_BASE+CSR_PMPADDR_MAX_NUM-1:
     {
@@ -1984,6 +2125,33 @@ static void csr_write(uint32_t csrid, word_t src) {
   word_t *dest = csr_decode(csrid);
   switch (csrid) {
     /************************* Unprivileged and User-Level CSRs *************************/
+#ifdef CONFIG_RV_N
+    case CSR_USTATUS:
+      ustatus->val = mask_bitset(ustatus->val, USTATUS_MASK, src);
+      break;
+    case CSR_UIE:
+      set_uie(src);
+      break;
+    case CSR_UTVEC:
+      set_tvec(dest, src);
+      break;
+    case CSR_USCRATCH:
+      uscratch->val = src;
+      break;
+    case CSR_UEPC:
+      uepc->val = src & (~0x1UL);
+      break;
+    case CSR_UCAUSE:
+      ucause->val = src;
+      break;
+    case CSR_UTVAL:
+      utval->val = src;
+      break;
+    case CSR_UIP:
+      set_uip(src);
+      break;
+#endif // CONFIG_RV_N
+
 #ifndef CONFIG_FPU_NONE
     case CSR_FFLAGS:
       *dest = src & FFLAGS_MASK;
@@ -2043,6 +2211,11 @@ static void csr_write(uint32_t csrid, word_t src) {
     }
 
     case CSR_SCOUNTEREN: scounteren->val = mask_bitset(scounteren->val, COUNTEREN_MASK, src); break;
+
+#ifdef CONFIG_RV_N
+    case CSR_SEDELEG: sedeleg->val = src & SEDELEG_MASK; break;
+    case CSR_SIDELEG: sideleg->val = src & SIDELEG_MASK; break;
+#endif // CONFIG_RV_N
 
     case CSR_SENVCFG:
       senvcfg->val = mask_bitset(senvcfg->val, SENVCFG_WMASK & (~MENVCFG_WMASK_CBIE) & (~SENVCFG_WMASK_PMM), src);
@@ -2395,6 +2568,16 @@ static void csr_write(uint32_t csrid, word_t src) {
 
     case CSR_MEPC: *dest = src & (~0x1UL); break;
     case CSR_MIP: set_mip(src); break;
+
+#ifdef CONFIG_RV_DASICS
+    case CSR_DUMCFG:
+      dumcfg->val = mask_bitset(dumcfg->val, DUMCFG_MASK, src);
+      break;
+    case CSR_DLBOUND0 ... CSR_DLBOUND0 + MAX_DASICS_LIBBOUNDS * 2 - 1:
+    case CSR_DJBOUND0 ... CSR_DJBOUND0 + MAX_DASICS_JUMPBOUNDS * 2 - 1:
+      *dest = src & ~BOUND_ADDR_ALIGN;
+      break;
+#endif  // CONFIG_RV_DASICS
 
 #ifdef CONFIG_RV_IMSIC
     case CSR_MISELECT:
@@ -3257,6 +3440,21 @@ word_t riscv64_priv_sret() {
   update_mmu_state();
   return sepc->val;
 }
+
+#ifdef CONFIG_RV_N
+/// @brief Do RISC-V 64 privileged instruction: URET
+/// @return the next PC after URET
+word_t riscv64_priv_uret() {
+  if (cpu.mode != MODE_U) {
+    longjmp_exception(EX_II);
+  }
+  ustatus->uie = ustatus->upie;
+  ustatus->upie = 1;
+  cpu.mode = MODE_U;
+  update_mmu_state();
+  return uepc->val;
+}
+#endif // CONFIG_RV_N
 
 /// @brief Do RISC-V 64 privileged instruction: MRET
 /// @return the next PC after MRET

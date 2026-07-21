@@ -143,6 +143,7 @@ int isa_fetch_decode(Decode *s) {
     case EXEC_ID_c_ebreak:
     case EXEC_ID_mret: case EXEC_ID_sret: case EXEC_ID_ecall: case EXEC_ID_ebreak:
     IFDEF(CONFIG_RV_SMRNMI, case EXEC_ID_mnret:)
+    IFDEF(CONFIG_RV_N, case EXEC_ID_uret:)
       s->type = INSTR_TYPE_I; break;
   }
 

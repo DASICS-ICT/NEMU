@@ -38,6 +38,19 @@
 #define CUSTOM_CSR_MBMC       0xbC2
 #define CUSTOM_CSR_SFETCHCTL  0x9e0
 
+#ifdef CONFIG_RV_DASICS
+#define CSR_DUMCFG       0x9e1
+#define CSR_DUMBOUND0    0x9e2
+#define CSR_DUMBOUND1    0x9e3
+#define CSR_DLCFG0       0x880
+#define CSR_DLBOUND0     0x890
+#define CSR_DLBOUND1     0x891
+#define CSR_DJBOUND0     0x8c0
+#define CSR_DJCFG        0x8c8
+#define CSR_DMAINCALL    0x8b0
+#define CSR_DRETPC       0x8b1
+#endif // CONFIG_RV_DASICS
+
 #define CUSTOM_CSR_SBPCTL_WMASK     0x7f
 #define CUSTOM_CSR_SPFCTL_WMASK     0x3fffff
 // #define CUSTOM_CSR_SLVPREDCTL_WMASK 0x1ff
@@ -54,6 +67,16 @@
 */
 
 /* Unprivileged CSR */
+/** Unprivileged Trap Setup and Handling CSRs **/
+#ifdef CONFIG_RV_N
+  #define CSRS_UNPRIV_TRAP(f) \
+    f(ustatus    , 0x000) f(uie        , 0x004) f(utvec      , 0x005) \
+    f(uscratch   , 0x040) f(uepc       , 0x041) f(ucause     , 0x042) \
+    f(utval      , 0x043) f(uip        , 0x044)
+#else // CONFIG_RV_N
+  #define CSRS_UNPRIV_TRAP(f)
+#endif // CONFIG_RV_N
+
 /** Unprivileged Floating-Point CSRs **/
 #ifndef CONFIG_FPU_NONE
   #define CSRS_UNPRIV_FLOAT(f) \
@@ -99,6 +122,27 @@
   CSRS_UNPRIV_CNTR(f) \
   CSRS_UNPRIV_HPMCOUNTER(f)
 
+// CSRs for DASICS protection mechanism
+#ifdef CONFIG_RV_DASICS
+#define CSRS_DASICS(f) \
+  f(dumcfg,      0x9e1) f(dumbound0,   0x9e2) f(dumbound1,   0x9e3) \
+  f(dlcfg0,      0x880) \
+  f(dlbound0,    0x890) f(dlbound1,    0x891) f(dlbound2,    0x892) f(dlbound3,    0x893) \
+  f(dlbound4,    0x894) f(dlbound5,    0x895) f(dlbound6,    0x896) f(dlbound7,    0x897) \
+  f(dlbound8,    0x898) f(dlbound9,    0x899) f(dlbound10,   0x89a) f(dlbound11,   0x89b) \
+  f(dlbound12,   0x89c) f(dlbound13,   0x89d) f(dlbound14,   0x89e) f(dlbound15,   0x89f) \
+  f(dlbound16,   0x8a0) f(dlbound17,   0x8a1) f(dlbound18,   0x8a2) f(dlbound19,   0x8a3) \
+  f(dlbound20,   0x8a4) f(dlbound21,   0x8a5) f(dlbound22,   0x8a6) f(dlbound23,   0x8a7) \
+  f(dlbound24,   0x8a8) f(dlbound25,   0x8a9) f(dlbound26,   0x8aa) f(dlbound27,   0x8ab) \
+  f(dlbound28,   0x8ac) f(dlbound29,   0x8ad) f(dlbound30,   0x8ae) f(dlbound31,   0x8af) \
+  f(dmaincall,   0x8b0) f(dretpc,      0x8b1) \
+  f(djbound0lo,  0x8c0) f(djbound0hi,  0x8c1) f(djbound1lo,  0x8c2) f(djbound1hi,  0x8c3) \
+  f(djbound2lo,  0x8c4) f(djbound2hi,  0x8c5) f(djbound3lo,  0x8c6) f(djbound3hi,  0x8c7) \
+  f(djcfg,       0x8c8)
+#else
+#define CSRS_DASICS(f)
+#endif  // CONFIG_RV_DASICS
+
 /** Unprivileged Vector CSRs **/
 #ifdef CONFIG_RVV
   #define CSRS_UNPRIV_VECTOR(f) \
@@ -111,6 +155,7 @@
 
 /** ALL **/
 #define CSRS_UNPRIV(f) \
+  CSRS_UNPRIV_TRAP(f) \
   CSRS_UNPRIV_FLOAT(f) \
   CSRS_UNPRIV_COUNTER_TIMERS(f) \
   CSRS_UNPRIV_VECTOR(f)
@@ -118,8 +163,16 @@
 
 /* Supervisor-level CSR */
 /** Supervisor Trap Setup **/
+#ifdef CONFIG_RV_N
+  #define CSRS_S_TRAP_DELEG(f) \
+    f(sedeleg    , 0x102) f(sideleg    , 0x103)
+#else // CONFIG_RV_N
+  #define CSRS_S_TRAP_DELEG(f)
+#endif // CONFIG_RV_N
+
 #define CSRS_S_TRAP_SETUP(f) \
-  f(sstatus    , 0x100) f(sie        , 0x104) f(stvec      , 0x105) \
+  f(sstatus    , 0x100) CSRS_S_TRAP_DELEG(f) \
+  f(sie        , 0x104) f(stvec      , 0x105) \
   f(scounteren , 0x106)
 
 /** Supervisor Configuration **/
@@ -576,7 +629,8 @@
   CSRS_UNPRIV(f) \
   CSRS_S(f) \
   CSRS_H_VS(f) \
-  CSRS_M(f)
+  CSRS_M(f) \
+  CSRS_DASICS(f)
 
 
 /**
@@ -1090,6 +1144,11 @@ CSR_STRUCT_END(sstatus)
 
 typedef tvec_t stvec_t;
 
+#ifdef CONFIG_RV_N
+typedef medeleg_t sedeleg_t;
+typedef mideleg_t sideleg_t;
+#endif // CONFIG_RV_N
+
 CSR_STRUCT_START(sip)
   uint64_t usip : 1;
   uint64_t ssip : 1;
@@ -1571,6 +1630,40 @@ CSR_STRUCT_END(fcsr)
 
 #endif // CONFIG_FPU_NONE
 
+#ifdef CONFIG_RV_N
+CSR_STRUCT_START(ustatus)
+  uint64_t uie  : 1;  // [0]
+  uint64_t pad0 : 3;  // [3:1]
+  uint64_t upie : 1;  // [4]
+  uint64_t pad1 :59;  // [63:5]
+CSR_STRUCT_END(ustatus)
+
+CSR_STRUCT_START(uie)
+CSR_STRUCT_END(uie)
+
+CSR_STRUCT_START(utvec)
+  uint64_t mode : 2;
+  uint64_t base :62;
+CSR_STRUCT_END(utvec)
+
+CSR_STRUCT_START(uscratch)
+CSR_STRUCT_END(uscratch)
+
+CSR_STRUCT_START(uepc)
+CSR_STRUCT_END(uepc)
+
+CSR_STRUCT_START(ucause)
+  uint64_t code:63;
+  uint64_t intr: 1;
+CSR_STRUCT_END(ucause)
+
+CSR_STRUCT_START(utval)
+CSR_STRUCT_END(utval)
+
+CSR_STRUCT_START(uip)
+CSR_STRUCT_END(uip)
+#endif // CONFIG_RV_N
+
 /** Unprivileged Vector CSRs **/
 
 #ifdef CONFIG_RVV
@@ -1631,6 +1724,174 @@ CSR_STRUCT_END(instret)
 #ifdef CONFIG_RV_ZIHPM
 CSR_STRUCT_DUMMY_LIST(CSRS_UNPRIV_HPMCOUNTER)
 #endif // CONFIG_RV_ZIHPM
+
+#ifdef CONFIG_RV_DASICS
+
+#define MCFG_UENA   0x2ul
+
+CSR_STRUCT_START(dumcfg)
+  uint64_t pad0:1;
+  uint64_t mcfg_uena:1;
+  uint64_t pad5:1;
+  uint64_t mcfg_cust:1;
+  uint64_t mcfg_cult:1;
+  uint64_t mcfg_cuft:1;
+  uint64_t pad1:1;
+  uint64_t pad2:1;
+  uint64_t pad3:1;
+  uint64_t pad4:1;
+CSR_STRUCT_END(dumcfg)
+
+CSR_STRUCT_START(dumbound0)
+CSR_STRUCT_END(dumbound0)
+
+CSR_STRUCT_START(dumbound1)
+CSR_STRUCT_END(dumbound1)
+
+#define LIBCFG_MASK 0xful
+#define LIBCFG_V    0x8ul
+#define LIBCFG_R    0x2ul
+#define LIBCFG_W    0x1ul
+
+#define JUMPCFG_MASK 0xfffful
+#define JUMPCFG_V    0x1ul
+
+#define MAX_DASICS_LIBBOUNDS  16
+#define MAX_DASICS_JUMPBOUNDS 4
+
+CSR_STRUCT_START(dlcfg0)
+CSR_STRUCT_END(dlcfg0)
+
+CSR_STRUCT_START(dlbound0)
+CSR_STRUCT_END(dlbound0)
+
+CSR_STRUCT_START(dlbound1)
+CSR_STRUCT_END(dlbound1)
+
+CSR_STRUCT_START(dlbound2)
+CSR_STRUCT_END(dlbound2)
+
+CSR_STRUCT_START(dlbound3)
+CSR_STRUCT_END(dlbound3)
+
+CSR_STRUCT_START(dlbound4)
+CSR_STRUCT_END(dlbound4)
+
+CSR_STRUCT_START(dlbound5)
+CSR_STRUCT_END(dlbound5)
+
+CSR_STRUCT_START(dlbound6)
+CSR_STRUCT_END(dlbound6)
+
+CSR_STRUCT_START(dlbound7)
+CSR_STRUCT_END(dlbound7)
+
+CSR_STRUCT_START(dlbound8)
+CSR_STRUCT_END(dlbound8)
+
+CSR_STRUCT_START(dlbound9)
+CSR_STRUCT_END(dlbound9)
+
+CSR_STRUCT_START(dlbound10)
+CSR_STRUCT_END(dlbound10)
+
+CSR_STRUCT_START(dlbound11)
+CSR_STRUCT_END(dlbound11)
+
+CSR_STRUCT_START(dlbound12)
+CSR_STRUCT_END(dlbound12)
+
+CSR_STRUCT_START(dlbound13)
+CSR_STRUCT_END(dlbound13)
+
+CSR_STRUCT_START(dlbound14)
+CSR_STRUCT_END(dlbound14)
+
+CSR_STRUCT_START(dlbound15)
+CSR_STRUCT_END(dlbound15)
+
+CSR_STRUCT_START(dlbound16)
+CSR_STRUCT_END(dlbound16)
+
+CSR_STRUCT_START(dlbound17)
+CSR_STRUCT_END(dlbound17)
+
+CSR_STRUCT_START(dlbound18)
+CSR_STRUCT_END(dlbound18)
+
+CSR_STRUCT_START(dlbound19)
+CSR_STRUCT_END(dlbound19)
+
+CSR_STRUCT_START(dlbound20)
+CSR_STRUCT_END(dlbound20)
+
+CSR_STRUCT_START(dlbound21)
+CSR_STRUCT_END(dlbound21)
+
+CSR_STRUCT_START(dlbound22)
+CSR_STRUCT_END(dlbound22)
+
+CSR_STRUCT_START(dlbound23)
+CSR_STRUCT_END(dlbound23)
+
+CSR_STRUCT_START(dlbound24)
+CSR_STRUCT_END(dlbound24)
+
+CSR_STRUCT_START(dlbound25)
+CSR_STRUCT_END(dlbound25)
+
+CSR_STRUCT_START(dlbound26)
+CSR_STRUCT_END(dlbound26)
+
+CSR_STRUCT_START(dlbound27)
+CSR_STRUCT_END(dlbound27)
+
+CSR_STRUCT_START(dlbound28)
+CSR_STRUCT_END(dlbound28)
+
+CSR_STRUCT_START(dlbound29)
+CSR_STRUCT_END(dlbound29)
+
+CSR_STRUCT_START(dlbound30)
+CSR_STRUCT_END(dlbound30)
+
+CSR_STRUCT_START(dlbound31)
+CSR_STRUCT_END(dlbound31)
+
+CSR_STRUCT_START(dmaincall)
+CSR_STRUCT_END(dmaincall)
+
+CSR_STRUCT_START(dretpc)
+CSR_STRUCT_END(dretpc)
+
+CSR_STRUCT_START(djbound0lo)
+CSR_STRUCT_END(djbound0lo)
+
+CSR_STRUCT_START(djbound0hi)
+CSR_STRUCT_END(djbound0hi)
+
+CSR_STRUCT_START(djbound1lo)
+CSR_STRUCT_END(djbound1lo)
+
+CSR_STRUCT_START(djbound1hi)
+CSR_STRUCT_END(djbound1hi)
+
+CSR_STRUCT_START(djbound2lo)
+CSR_STRUCT_END(djbound2lo)
+
+CSR_STRUCT_START(djbound2hi)
+CSR_STRUCT_END(djbound2hi)
+
+CSR_STRUCT_START(djbound3lo)
+CSR_STRUCT_END(djbound3lo)
+
+CSR_STRUCT_START(djbound3hi)
+CSR_STRUCT_END(djbound3hi)
+
+CSR_STRUCT_START(djcfg)
+CSR_STRUCT_END(djcfg)
+
+#endif  // CONFIG_RV_DASICS
 
 /**  Machine Non-Maskable Interrupt Handling **/
 #ifdef CONFIG_RV_SMRNMI
@@ -1725,6 +1986,13 @@ MAP(CSRS, CSRS_DECL)
 #define IDXVL     0xc20
 #define IDXVTYPE  0xc21
 #define IDXVLENB  0xc22
+
+#ifdef CONFIG_RV_N
+/** User-Level Trap CSRs **/
+#define USTATUS_MASK (USTATUS_UIE | USTATUS_UPIE)
+#define UIE_MASK     (MIP_USIP | MIP_UTIP | MIP_UEIP)
+#define UIP_MASK     UIE_MASK
+#endif // CONFIG_RV_N
 
 /** CSR satp **/
 #define SATP_MODE_BARE 0
@@ -1828,5 +2096,17 @@ word_t pmp_tor_mask();
 uint8_t pmacfg_from_index(int idx);
 word_t pmaaddr_from_index(int idx);
 word_t pma_tor_mask();
+
+// DASICS
+#ifdef CONFIG_RV_DASICS
+bool dasics_in_trusted_zone(uint64_t pc);
+uint8_t dasics_libcfg_from_index(int i);
+word_t dasics_libbound_from_index(int i);
+uint16_t dasics_jumpcfg_from_index(int i);
+word_t dasics_jumpbound_low_from_index(int i);
+word_t dasics_jumpbound_high_from_index(int i);
+bool dasics_match_dlib(uint64_t addr, uint8_t cfg);
+void dasics_ldst_helper(vaddr_t pc, vaddr_t vaddr, int len, int type);
+#endif  // CONFIG_RV_DASICS
 
 #endif // __CSR_H__

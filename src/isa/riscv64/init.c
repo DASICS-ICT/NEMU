@@ -142,6 +142,9 @@ void init_isa() {
 #ifndef CONFIG_FPU_NONE
   misa->extensions |= ext('d') | ext('f');
 #endif // CONFIG_FPU_NONE
+#ifdef CONFIG_RV_N
+  misa->extensions |= ext('n');
+#endif // CONFIG_RV_N
 #ifdef CONFIG_RVH
   // misa->extensions |= ext('h');
   hstatus->vsxl = 2; // equal to max len (spike)

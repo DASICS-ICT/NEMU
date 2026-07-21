@@ -159,6 +159,21 @@ void isa_reg_display() {
   DISPLAY_CSR("mie", mie->val);
   printf("\n");
 
+#ifdef CONFIG_RV_N
+  DISPLAY_HR("N Extension CSRs");
+  DISPLAY_CSR("ustatus", ustatus->val & USTATUS_MASK);
+  DISPLAY_CSR("uie", uie->val & UIE_MASK);
+  DISPLAY_CSR("uip", get_mip() & UIP_MASK);
+  printf("\n");
+  DISPLAY_CSR("utvec", utvec->val);
+  DISPLAY_CSR("uscratch", uscratch->val);
+  DISPLAY_CSR("uepc", uepc->val);
+  printf("\n");
+  DISPLAY_CSR("ucause", ucause->val);
+  DISPLAY_CSR("utval", utval->val);
+  printf("\n");
+#endif // CONFIG_RV_N
+
   DISPLAY_CSR("mideleg", mideleg->val);
   DISPLAY_CSR("medeleg", medeleg->val);
   printf("\n");
@@ -214,6 +229,36 @@ void isa_reg_display() {
      DISPLAY_CSR("mbmc", mbmc->val);
      printf("\n");
    #endif
+
+  #ifdef CONFIG_RV_DASICS
+    DISPLAY_HR("DASICS CSRs");
+    DISPLAY_CSR("dumcfg", dumcfg->val);
+    DISPLAY_CSR("dumbound0", dumbound0->val);
+    DISPLAY_CSR("dumbound1", dumbound1->val);
+    printf("\n");
+    DISPLAY_CSR("dmaincall", dmaincall->val);
+    DISPLAY_CSR("dretpc", dretpc->val);
+    DISPLAY_CSR("dlcfg0", dlcfg0->val);
+    printf("\n");
+    for (int i = 0; i < MAX_DASICS_LIBBOUNDS; ++i) {
+      printf("%2d: cfg:0x%02x boundlo:0x%016lx boundhi:0x%016lx",
+          i, dasics_libcfg_from_index(i),
+          dasics_libbound_from_index(i << 1),
+          dasics_libbound_from_index((i << 1) + 1));
+      if (i % 2 == 1) printf("\n");
+      else printf("|");
+    }
+    DISPLAY_CSR("djcfg", djcfg->val);
+    printf("\n");
+    for (int i = 0; i < MAX_DASICS_JUMPBOUNDS; ++i) {
+      printf("%2d: cfg:0x%02x boundlo:0x%016lx boundhi:0x%016lx",
+          i, dasics_jumpcfg_from_index(i),
+          dasics_jumpbound_low_from_index(i),
+          dasics_jumpbound_high_from_index(i));
+      if (i % 2 == 1) printf("\n");
+      else printf("|");
+    }
+  #endif  // CONFIG_RV_DASICS
 
   #ifdef CONFIG_RV_PMP_CSR
     DISPLAY_HR("PMP CSRs");

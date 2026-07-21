@@ -56,6 +56,13 @@
   #define SYS_SMRNMI_INSTR_NULLARY(f)
 #endif // CONFIG_RV_SMRNMI
 
+#ifdef CONFIG_RV_N
+  #define SYS_N_INSTR_NULLARY(f) \
+    f(uret)
+#else // CONFIG_RV_N
+  #define SYS_N_INSTR_NULLARY(f)
+#endif // CONFIG_RV_N
+
 #ifdef CONFIG_RV_SVINVAL
   #define SYS_SVINVAL_INSTR_NULLARY(f) \
     f(sfence_w_inval) f(sfence_inval_ir)
@@ -66,6 +73,7 @@
 #define SYS_INSTR_NULLARY(f) \
   f(ecall) f(ebreak) f(c_ebreak) f(mret) f(sret) f(wfi) \
   SYS_SMRNMI_INSTR_NULLARY(f) \
+  SYS_N_INSTR_NULLARY(f) \
   SYS_SVINVAL_INSTR_NULLARY(f)
 
 /********************** SYS INSTR BINARY (2 op) **********************/

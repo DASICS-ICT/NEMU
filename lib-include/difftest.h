@@ -42,6 +42,18 @@ enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 #define BASE_SIZE (sizeof(uint64_t) * (32 + 1)) // GRPs + pc
 #endif //RV64_FULL_DIFF
 
+#if defined (RV64_FULL_DIFF) && defined (CONFIG_RV_N)
+#define RV_N_REG_SIZE (sizeof(uint64_t) * 8)
+#else
+#define RV_N_REG_SIZE 0
+#endif // CONFIG_RV_N
+
+#if defined (RV64_FULL_DIFF) && defined (CONFIG_RV_DASICS)
+#define RV_DASICS_REG_SIZE (sizeof(uint64_t) * (3 + 1 + 32 + 2 + 8 + 1))
+#else
+#define RV_DASICS_REG_SIZE 0
+#endif  // CONFIG_RV_DASICS
+
 #if defined (RV64_FULL_DIFF) && defined (CONFIG_RVV)
 #define RVV_EXT_REG_SIZE (sizeof(uint64_t) * (64 + 7))
 #else
@@ -60,7 +72,7 @@ enum { DIFFTEST_TO_DUT, DIFFTEST_TO_REF };
 #define TRIGGER_REG_SIZE 0
 #endif //CONFIG_RV_SDTRIG
 
-#define DIFFTEST_REG_SIZE (BASE_SIZE + RVH_EXT_REG_SIZE + RVV_EXT_REG_SIZE + TRIGGER_REG_SIZE)
+#define DIFFTEST_REG_SIZE (BASE_SIZE + RV_N_REG_SIZE + RVH_EXT_REG_SIZE + RVV_EXT_REG_SIZE + TRIGGER_REG_SIZE + RV_DASICS_REG_SIZE)
 
 #else
 # error Unsupported ISA
