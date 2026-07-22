@@ -65,6 +65,20 @@ static inline def_DHelper(J) {
   id_src2->imm = s->snpc;
 }
 
+#ifdef CONFIG_RV_DASICS
+static inline def_DHelper(dasicscall_j) {
+  uint32_t instr = s->isa.instr.val;
+  sword_t offset = ((sword_t)(int32_t)(instr & 0x80000000) >> 9) |
+    ((instr & 0x00000080) << 14) |
+    ((instr & 0x001f8000) >> 0) |
+    ((instr & 0x00000f00) << 3) |
+    ((instr & 0x7fe00000) >> 20);
+  decode_op_i(s, id_src1, s->pc + offset, true);
+  decode_op_r(s, id_dest, 1, false);
+  id_src2->imm = s->snpc;
+}
+#endif // CONFIG_RV_DASICS
+
 static inline def_DHelper(B) {
   sword_t offset = (s->isa.instr.b.simm12 << 12) | (s->isa.instr.b.imm11 << 11) |
     (s->isa.instr.b.imm10_5 << 5) | (s->isa.instr.b.imm4_1 << 1);

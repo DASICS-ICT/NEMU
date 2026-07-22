@@ -180,7 +180,9 @@ void init_custom_csr() {
   srnctl->wfi_enable = 1;
 #endif // CONFIG_RV_SVINVAL
 
+#ifndef CONFIG_RV_DASICS
   mcorepwr->powerdown = 0;
+#endif
 
   mflushpwr->flushl2 = 0;
   mflushpwr->l2flushed = 0;
@@ -584,6 +586,12 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define LCI MUXDEF(CONFIG_RV_AIA, LCI_MASK, 0)
 #define LCI_NO_LCOFI MUXDEF(CONFIG_RV_AIA, LCI_EXCLUDE_LCOFI_MASK, 0)
 
+#ifdef CONFIG_RV_DASICS
+#define MEDELEG_DASICS ((1ULL << EX_DUCF) | (1ULL << EX_DSCF))
+#else
+#define MEDELEG_DASICS 0
+#endif
+
 #ifdef CONFIG_RVH
 #define HVIP_MASK     (VSI_MASK | LCI_NO_LCOFI)
 #define HIP_RMASK     (MIP_VSTIP | MIP_VSEIP | MIP_SGEIP)
@@ -628,7 +636,8 @@ static inline word_t* csr_decode(uint32_t addr) {
                      (1 << EX_IGPF) | \
                      (1 << EX_LGPF) | \
                      (1 << EX_VI  ) | \
-                     (1 << EX_SGPF))
+                     (1 << EX_SGPF) | \
+                     MEDELEG_DASICS)
 
 #define MEDELEG_NONRVH ((1 << EX_IAM) | \
                         (1 << EX_IAF) | \
@@ -642,7 +651,8 @@ static inline word_t* csr_decode(uint32_t addr) {
                         (1 << EX_ECS) | \
                         (1 << EX_IPF) | \
                         (1 << EX_LPF) | \
-                        (1 << EX_SPF))
+                        (1 << EX_SPF) | \
+                        MEDELEG_DASICS)
                         // (1 << EX_SWC) |
                         // (1 << EX_HWE))
 
@@ -768,6 +778,285 @@ void init_smstateen() {
 #define is_write(csr) (dest == (void *)(csr))
 #define is_access(csr) (dest_access == (void *)(csr))
 #define mask_bitset(old, mask, new) (((old) & ~(mask)) | ((new) & (mask)))
+
+#ifdef CONFIG_RV_DASICS
+static inline word_t dasics_read_main_cfg(word_t mask) {
+  return csr_array[DASICS_CSR_SMAIN_CFG] & mask;
+}
+
+static inline void dasics_write_main_cfg(word_t mask, word_t src) {
+  csr_array[DASICS_CSR_SMAIN_CFG] = mask_bitset(csr_array[DASICS_CSR_SMAIN_CFG], mask, src);
+}
+
+static inline bool dasics_pc_in_half_open_range(vaddr_t pc, word_t lo, word_t hi) {
+  return lo <= pc && pc < hi;
+}
+
+static inline bool dasics_exec_is_main_enabled(void) {
+  word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
+
+  if (cpu.mode == MODE_S) {
+    return (main_cfg & DASICS_MAIN_CFG_SENA) != 0;
+  }
+
+  if (cpu.mode == MODE_U) {
+    return (main_cfg & DASICS_MAIN_CFG_UENA) != 0;
+  }
+
+  return false;
+}
+
+static inline bool dasics_exec_pc_is_trusted(vaddr_t pc) {
+  if (cpu.mode == MODE_M || !dasics_exec_is_main_enabled()) {
+    return true;
+  }
+
+  if (cpu.mode == MODE_S) {
+    return dasics_pc_in_half_open_range(pc, csr_array[DASICS_CSR_SMAIN_BOUND_LO], csr_array[DASICS_CSR_SMAIN_BOUND_HI]);
+  }
+
+  if (cpu.mode == MODE_U) {
+    return dasics_pc_in_half_open_range(pc, csr_array[DASICS_CSR_UMAIN_BOUND_LO], csr_array[DASICS_CSR_UMAIN_BOUND_HI]);
+  }
+
+  return true;
+}
+
+static inline bool dasics_exec_pc_is_untrusted(vaddr_t pc) {
+  return !dasics_exec_pc_is_trusted(pc);
+}
+
+static inline bool dasics_exec_jump_fault_is_closed(void) {
+  word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
+
+  if (cpu.mode == MODE_S) {
+    return (main_cfg & DASICS_MAIN_CFG_CSFT) != 0;
+  }
+
+  if (cpu.mode == MODE_U) {
+    return (main_cfg & DASICS_MAIN_CFG_CUFT) != 0;
+  }
+
+  return true;
+}
+
+static inline bool dasics_exec_ecall_fault_is_closed(void) {
+  word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
+
+  if (cpu.mode == MODE_S) {
+    return (main_cfg & DASICS_MAIN_CFG_CSET) != 0;
+  }
+
+  if (cpu.mode == MODE_U) {
+    return (main_cfg & DASICS_MAIN_CFG_CUET) != 0;
+  }
+
+  return true;
+}
+
+static inline bool dasics_exec_mem_fault_is_closed(bool is_store) {
+  word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
+
+  if (cpu.mode == MODE_S) {
+    return (main_cfg & (is_store ? DASICS_MAIN_CFG_CSST : DASICS_MAIN_CFG_CSLT)) != 0;
+  }
+
+  if (cpu.mode == MODE_U) {
+    return (main_cfg & (is_store ? DASICS_MAIN_CFG_CUST : DASICS_MAIN_CFG_CULT)) != 0;
+  }
+
+  return true;
+}
+
+static inline bool dasics_csr_target_match(uint32_t addr, vaddr_t target) {
+  return csr_array[addr] == target;
+}
+
+static inline bool dasics_lib_bound_entry_permits_range(
+    int index, vaddr_t first, vaddr_t last, word_t required_cfg) {
+  word_t cfg = (csr_array[DASICS_CSR_LIB_CFG] >> (index * DASICS_LIB_CFG_SLOT_BITS)) & DASICS_LIB_CFG_MASK;
+  if ((cfg & required_cfg) != required_cfg) {
+    return false;
+  }
+
+  word_t lo = csr_array[DASICS_CSR_LIB_BOUND_LO(index)];
+  word_t hi = csr_array[DASICS_CSR_LIB_BOUND_HI(index)];
+  return lo < hi && lo <= first && last < hi;
+}
+
+static inline bool dasics_mem_addr_allowed(vaddr_t addr, word_t required_cfg) {
+  for (int i = 0; i < DASICS_LIB_ENTRY_NUM; i++) {
+    if (dasics_lib_bound_entry_permits_range(i, addr, addr, required_cfg)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static inline bool dasics_mem_access_allowed(vaddr_t addr, int len, bool is_store) {
+  word_t required_cfg = DASICS_LIB_CFG_VALID | (is_store ? DASICS_LIB_CFG_WRITE : DASICS_LIB_CFG_READ);
+  if (len <= 0) {
+    return true;
+  }
+
+  vaddr_t last = addr + (len - 1);
+  if (last < addr) {
+    // Address-wrap behavior remains outside the frozen scalar-range contract.
+    for (int i = 0; i < len; i++) {
+      if (!dasics_mem_addr_allowed(addr + i, required_cfg)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  for (int i = 0; i < DASICS_LIB_ENTRY_NUM; i++) {
+    if (dasics_lib_bound_entry_permits_range(i, addr, last, required_cfg)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static inline bool dasics_jump_bound_entry_valid(int index) {
+  word_t cfg = (csr_array[DASICS_CSR_JUMP_CFG] >> (index * DASICS_JUMP_CFG_SLOT_BITS)) & DASICS_JUMP_CFG_MASK;
+  return (cfg & DASICS_JUMP_CFG_VALID) != 0;
+}
+
+static inline bool dasics_target_in_jump_bound(vaddr_t target) {
+  for (int i = 0; i < DASICS_JUMP_ENTRY_NUM; i++) {
+    if (!dasics_jump_bound_entry_valid(i)) {
+      continue;
+    }
+
+    word_t lo = csr_array[DASICS_CSR_JUMP_BOUND_LO(i)];
+    word_t hi = csr_array[DASICS_CSR_JUMP_BOUND_HI(i)];
+    if (lo < hi && dasics_pc_in_half_open_range(target, lo, hi)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static inline bool dasics_jump_target_allowed(vaddr_t target) {
+  return dasics_target_in_jump_bound(target) ||
+         dasics_csr_target_match(DASICS_CSR_RETURN_PC, target) ||
+         dasics_csr_target_match(DASICS_CSR_MAIN_CALL, target) ||
+         dasics_csr_target_match(DASICS_CSR_ACTIVE_ZONE_RETURN_PC, target);
+}
+
+static inline word_t dasics_check_fault_cause(void) {
+  return cpu.mode == MODE_S ? EX_DSCF : EX_DUCF;
+}
+
+static inline void dasics_prepare_check_fault(word_t reason, word_t tval) {
+  csr_array[DASICS_CSR_FREASON] = reason;
+  cpu.trapInfo.tval = tval;
+  cpu.trapInfo.tval2 = 0;
+  cpu.trapInfo.tinst = 0;
+}
+
+static inline void dasics_raise_check_fault(word_t reason, word_t tval) {
+  dasics_prepare_check_fault(reason, tval);
+  longjmp_exception(dasics_check_fault_cause());
+}
+
+static inline bool dasics_ecall_fault_should_fire(word_t cause, vaddr_t pc) {
+  if (cause != EX_ECU && cause != EX_ECS) {
+    return false;
+  }
+
+#ifdef CONFIG_RVH
+  if (cpu.v) {
+    return false;
+  }
+#endif
+
+  if (cause == EX_ECU && cpu.mode != MODE_U) {
+    return false;
+  }
+
+  if (cause == EX_ECS && cpu.mode != MODE_S) {
+    return false;
+  }
+
+  return dasics_exec_is_main_enabled() &&
+         !dasics_exec_ecall_fault_is_closed() &&
+         dasics_exec_pc_is_untrusted(pc);
+}
+
+static inline word_t dasics_trap_or_ecall_fault(word_t cause, vaddr_t pc) {
+  if (!dasics_ecall_fault_should_fire(cause, pc)) {
+    return raise_intr(cause, pc);
+  }
+
+  dasics_prepare_check_fault(DASICS_FREASON_ECALL, 0);
+  return raise_intr(dasics_check_fault_cause(), pc);
+}
+
+static inline void dasics_mem_permit_check(vaddr_t pc, vaddr_t vaddr, int len, bool is_store) {
+  if (!dasics_exec_is_main_enabled() ||
+      dasics_exec_mem_fault_is_closed(is_store) ||
+      !dasics_exec_pc_is_untrusted(pc)) {
+    return;
+  }
+
+  if (!dasics_mem_access_allowed(vaddr, len, is_store)) {
+    dasics_raise_check_fault(is_store ? DASICS_FREASON_STORE : DASICS_FREASON_LOAD, vaddr);
+  }
+}
+
+static inline void dasics_csr_access_permit_check(uint32_t addr, vaddr_t pc) {
+  if (dasics_is_protected_csr(addr) && dasics_exec_pc_is_untrusted(pc)) {
+    longjmp_exception(EX_II);
+  }
+}
+
+void riscv64_dasics_call_permit_check(vaddr_t pc) {
+  if (!dasics_exec_is_main_enabled() || dasics_exec_pc_is_untrusted(pc)) {
+    longjmp_exception(EX_II);
+  }
+}
+
+void riscv64_dasics_write_return_pc(word_t value) {
+  csr_array[DASICS_CSR_RETURN_PC] = value;
+}
+
+void riscv64_dasics_load_permit_check(vaddr_t pc, vaddr_t vaddr, int len) {
+  dasics_mem_permit_check(pc, vaddr, len, false);
+}
+
+void riscv64_dasics_store_permit_check(vaddr_t pc, vaddr_t vaddr, int len) {
+  dasics_mem_permit_check(pc, vaddr, len, true);
+}
+
+void riscv64_dasics_jump_target_permit_check(vaddr_t pc, vaddr_t target) {
+  if (!dasics_exec_is_main_enabled() ||
+      dasics_exec_jump_fault_is_closed() ||
+      !dasics_exec_pc_is_untrusted(pc)) {
+    return;
+  }
+
+  if (!dasics_jump_target_allowed(target)) {
+    dasics_raise_check_fault(DASICS_FREASON_JUMP, target);
+  }
+}
+
+void riscv64_dasics_branch_target_permit_check(vaddr_t pc, vaddr_t target) {
+  if (!dasics_exec_is_main_enabled() ||
+      dasics_exec_jump_fault_is_closed() ||
+      !dasics_exec_pc_is_untrusted(pc)) {
+    return;
+  }
+
+  if (!dasics_jump_target_allowed(target)) {
+    dasics_raise_check_fault(DASICS_FREASON_JUMP, target);
+  }
+}
+#endif
 
 #define is_pmpcfg(p) (p >= &(csr_array[CSR_PMPCFG_BASE]) && p < &(csr_array[CSR_PMPCFG_BASE + CSR_PMPCFG_MAX_NUM]))
 #define is_pmpaddr(p) (p >= &(csr_array[CSR_PMPADDR_BASE]) && p < &(csr_array[CSR_PMPADDR_BASE + CSR_PMPADDR_MAX_NUM]))
@@ -1929,6 +2218,16 @@ static word_t csr_read(uint32_t csrid) {
       // But instruction counter of NEMU is not accurate when enabling Performance optimization.
       difftest_skip_ref();
       return get_minstret();
+
+#ifdef CONFIG_RV_DASICS
+    case DASICS_CSR_FREASON:
+      return *src & DASICS_FREASON_MASK;
+    case DASICS_CSR_UMAIN_CFG:
+      return dasics_read_main_cfg(DASICS_MAIN_CFG_UMAIN_MASK);
+    case DASICS_CSR_SMAIN_CFG:
+      return dasics_read_main_cfg(DASICS_MAIN_CFG_SMAIN_MASK);
+#endif
+
     /************************* All Others Normal CSRs *************************/
     default: return *src;
   }
@@ -2619,8 +2918,30 @@ static void csr_write(uint32_t csrid, word_t src) {
 
     case CSR_MHPMCOUNTER_BASE ... CSR_MHPMCOUNTER_BASE+CSR_MHPMCOUNTER_NUM-1: break;
 
+#ifndef CONFIG_RV_DASICS
     case CUSTOM_CSR_MCOREPWR: *dest = mask_bitset(*dest, CUSTOM_CSR_MCOREPWR_WMASK, src); break;
+#endif
     case CUSTOM_CSR_MFLUSHPWR: *dest = mask_bitset(*dest, CUSTOM_CSR_MFLUSHPWR_WMASK, src); break;
+
+#ifdef CONFIG_RV_DASICS
+    case DASICS_CSR_FREASON:
+      *dest = src & DASICS_FREASON_MASK;
+      break;
+    case DASICS_CSR_UMAIN_CFG:
+      dasics_write_main_cfg(DASICS_MAIN_CFG_UMAIN_MASK, src);
+      break;
+    case DASICS_CSR_SMAIN_CFG:
+      dasics_write_main_cfg(DASICS_MAIN_CFG_SMAIN_MASK, src);
+      break;
+    case DASICS_CSR_LIB_BOUND_LO(0) ... DASICS_CSR_LIB_BOUND_HI(DASICS_LIB_ENTRY_NUM - 1):
+    case DASICS_CSR_JUMP_BOUND_LO(0) ... DASICS_CSR_JUMP_BOUND_HI(DASICS_JUMP_ENTRY_NUM - 1):
+    case DASICS_CSR_UMAIN_BOUND_LO:
+    case DASICS_CSR_UMAIN_BOUND_HI:
+    case DASICS_CSR_SMAIN_BOUND_LO:
+    case DASICS_CSR_SMAIN_BOUND_HI:
+      *dest = src & DASICS_BOUND_MASK;
+      break;
+#endif
 
 #ifdef CONFIG_RV_MBMC
     case CUSTOM_CSR_MBMC:
@@ -3029,7 +3350,7 @@ static inline bool csrind_permit_check(const uint32_t addr) {
 }
 #endif // CONFIG_RV_SMCSRIND || CONFIG_RV_AIA
 
-static inline void csr_permit_check(uint32_t addr, bool is_write) {
+static inline void csr_permit_check(uint32_t addr, bool is_write, vaddr_t pc) {
   bool has_vi = false; // virtual instruction
   word_t *dest_access = csr_decode(addr);
   // check csr_exit, priv
@@ -3064,6 +3385,8 @@ static inline void csr_permit_check(uint32_t addr, bool is_write) {
   has_vi |= csrind_permit_check(addr);
 #endif
   if (has_vi) longjmp_exception(EX_VI);
+
+  IFDEF(CONFIG_RV_DASICS, dasics_csr_access_permit_check(addr, pc));
 }
 
 #ifdef CONFIG_RV_IMSIC
@@ -3080,8 +3403,8 @@ static void sync_old_xtopi() {
 }
 #endif // CONFIG_RV_IMSIC
 
-void riscv64_priv_csrrw(rtlreg_t *dest, word_t val, word_t csrid, word_t rd) {
-  csr_permit_check(csrid, true);
+void riscv64_priv_csrrw(rtlreg_t *dest, word_t val, word_t csrid, word_t rd, vaddr_t pc) {
+  csr_permit_check(csrid, true, pc);
   if (rd) {
     *dest = csr_read(csrid);
   }
@@ -3092,8 +3415,8 @@ void riscv64_priv_csrrw(rtlreg_t *dest, word_t val, word_t csrid, word_t rd) {
 #endif // CONFIG_RV_IMSIC
 }
 
-void riscv64_priv_csrrs(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1) {
-  csr_permit_check(csrid, rs1 != 0);
+void riscv64_priv_csrrs(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1, vaddr_t pc) {
+  csr_permit_check(csrid, rs1 != 0, pc);
   *dest = csr_read(csrid);
   if (rs1) {
     csr_write(csrid, val | *dest);
@@ -3104,8 +3427,8 @@ void riscv64_priv_csrrs(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1) {
 #endif // CONFIG_RV_IMSIC
 }
 
-void riscv64_priv_csrrc(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1) {
-  csr_permit_check(csrid, rs1 != 0);
+void riscv64_priv_csrrc(rtlreg_t *dest, word_t val, word_t csrid, word_t rs1, vaddr_t pc) {
+  csr_permit_check(csrid, rs1 != 0, pc);
   *dest = csr_read(csrid);
   if (rs1) {
     csr_write(csrid, (~val) & *dest);
@@ -3447,7 +3770,13 @@ void isa_hostcall(uint32_t id, rtlreg_t *dest, const rtlreg_t *src1,
       ret = *src1 + 4;
       break;
 #else
-    case HOSTCALL_TRAP: ret = raise_intr(imm, *src1); break;
+    case HOSTCALL_TRAP:
+#ifdef CONFIG_RV_DASICS
+      ret = dasics_trap_or_ecall_fault(imm, *src1);
+#else
+      ret = raise_intr(imm, *src1);
+#endif
+      break;
 #endif
     default: panic("Unsupported hostcall ID = %d", id);
   }
