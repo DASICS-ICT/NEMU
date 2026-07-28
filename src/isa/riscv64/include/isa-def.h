@@ -104,6 +104,7 @@ typedef struct {
 
   // shadow CSRs for difftest
   uint64_t mode;
+  uint64_t virtMode;
   uint64_t mstatus, sstatus;
   uint64_t mepc, sepc;
   uint64_t mtval, stval;
@@ -113,6 +114,8 @@ typedef struct {
   uint64_t mip, mie;
   uint64_t mscratch, sscratch;
   uint64_t mideleg, medeleg;
+  uint64_t ustatus, uie, utvec, uscratch, uepc;
+  uint64_t ucause, utval, uip, sedeleg, sideleg;
   uint64_t pc;
   // Above will be synced by regcpy when run difftest, DO NOT TOUCH
 

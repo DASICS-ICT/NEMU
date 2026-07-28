@@ -41,6 +41,7 @@ void ramcmp() {
 // For processor difftest only
 
 void csr_prepare() {
+  cpu.virtMode = MUXDEF(CONFIG_RVH, cpu.v, 0);
   cpu.mstatus = mstatus_read();
   cpu.mcause  = mcause->val;
   cpu.mepc    = mepc->val;
@@ -56,6 +57,21 @@ void csr_prepare() {
   cpu.sscratch = sscratch->val;
   cpu.mideleg  = mideleg->val;
   cpu.medeleg  = medeleg->val;
+#ifdef CONFIG_RV_DASICS
+  cpu.ustatus  = mstatus->val & (MSTATUS_UIE | MSTATUS_UPIE);
+  cpu.uie      = uie->val;
+  cpu.utvec    = utvec->val;
+  cpu.uscratch = uscratch->val;
+  cpu.uepc     = uepc->val;
+  cpu.ucause   = ucause->val;
+  cpu.utval    = utval->val;
+  cpu.uip      = uip->val;
+  cpu.sedeleg  = sedeleg->val;
+  cpu.sideleg  = sideleg->val;
+#else
+  cpu.ustatus = cpu.uie = cpu.utvec = cpu.uscratch = cpu.uepc = 0;
+  cpu.ucause = cpu.utval = cpu.uip = cpu.sedeleg = cpu.sideleg = 0;
+#endif
   cpu.mtval    = mtval->val;
   cpu.stval    = stval->val;
   cpu.mtvec    = mtvec->val;
@@ -98,6 +114,7 @@ void csr_prepare() {
 }
 
 void csr_writeback() {
+  IFDEF(CONFIG_RVH, cpu.v = cpu.virtMode != 0);
   mstatus->val = cpu.mstatus;
   // Keep the value of mstatus->sd always zero
   // The value used to diff with REF/DUT will set mstatus->sd with fs or vs is dirty.
@@ -115,6 +132,19 @@ void csr_writeback() {
   sscratch->val = cpu.sscratch;
   mideleg->val  = cpu.mideleg;
   medeleg->val  = cpu.medeleg;
+#ifdef CONFIG_RV_DASICS
+  const word_t ustatus_mask = MSTATUS_UIE | MSTATUS_UPIE;
+  mstatus->val = (mstatus->val & ~ustatus_mask) | (cpu.ustatus & ustatus_mask);
+  uie->val      = cpu.uie;
+  utvec->val    = cpu.utvec;
+  uscratch->val = cpu.uscratch;
+  uepc->val     = cpu.uepc;
+  ucause->val   = cpu.ucause;
+  utval->val    = cpu.utval;
+  uip->val      = cpu.uip;
+  sedeleg->val  = cpu.sedeleg;
+  sideleg->val  = cpu.sideleg;
+#endif
   mtval->val    = cpu.mtval;
   stval->val    = cpu.stval;
   mtvec->val    = cpu.mtvec;
