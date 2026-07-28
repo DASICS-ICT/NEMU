@@ -161,7 +161,19 @@ void isa_reg_display() {
 
   DISPLAY_CSR("mideleg", mideleg->val);
   DISPLAY_CSR("medeleg", medeleg->val);
+#ifdef CONFIG_RV_DASICS
+  DISPLAY_CSR("sedeleg", sedeleg->val);
+#endif
   printf("\n");
+
+#ifdef CONFIG_RV_DASICS
+  DISPLAY_CSR("ustatus", mstatus->val & (MSTATUS_UIE | MSTATUS_UPIE));
+  DISPLAY_CSR("utvec", utvec->val);
+  DISPLAY_CSR("uepc", uepc->val);
+  DISPLAY_CSR("ucause", ucause->val);
+  DISPLAY_CSR("utval", utval->val);
+  printf("\n");
+#endif
 
   #ifdef CONFIG_RVH
     DISPLAY_CSR("hideleg", get_hideleg());

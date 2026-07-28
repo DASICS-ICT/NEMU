@@ -410,7 +410,11 @@ static inline word_t* csr_decode(uint32_t addr) {
 // WPRI, SXL, UXL cannot be written
 
 // base mstatus wmask
-#define MSTATUS_WMASK_BASE (0x7e19aaUL)
+#define MSTATUS_WMASK_N MUXDEF(CONFIG_RV_DASICS, MSTATUS_UIE | MSTATUS_UPIE, 0)
+#define MSTATUS_WMASK_BASE (0x7e19aaUL | MSTATUS_WMASK_N)
+
+#define USTATUS_MASK (MSTATUS_UIE | MSTATUS_UPIE)
+#define U_INTERRUPT_CSR_MASK ((1ULL << 0) | (1ULL << 4) | (1ULL << 8))
 
 // FS
 #if !defined(CONFIG_FPU_NONE) || defined(CONFIG_RV_MSTATUS_FS_WRITABLE)
@@ -1950,6 +1954,9 @@ static word_t csr_read(uint32_t csrid) {
   word_t *src = csr_decode(csrid);
   switch (csrid) {
     /************************* Unprivileged and User-Level CSRs *************************/
+#ifdef CONFIG_RV_DASICS
+    case CSR_USTATUS: return mstatus->val & USTATUS_MASK;
+#endif
 #ifndef CONFIG_FPU_NONE
     case CSR_FFLAGS: return fcsr->fflags.val & FFLAGS_MASK;
     case CSR_FRM: return fcsr->frm & FRM_MASK;
@@ -2283,6 +2290,21 @@ static void csr_write(uint32_t csrid, word_t src) {
   word_t *dest = csr_decode(csrid);
   switch (csrid) {
     /************************* Unprivileged and User-Level CSRs *************************/
+#ifdef CONFIG_RV_DASICS
+    case CSR_USTATUS:
+      mstatus->val = mask_bitset(mstatus->val, USTATUS_MASK, src);
+      break;
+    case CSR_UIE:
+    case CSR_UIP:
+      *dest = src & U_INTERRUPT_CSR_MASK;
+      break;
+    case CSR_UTVEC:
+      set_tvec(dest, src);
+      break;
+    case CSR_UEPC:
+      *dest = src & ~1ULL;
+      break;
+#endif
 #ifndef CONFIG_FPU_NONE
     case CSR_FFLAGS:
       *dest = src & FFLAGS_MASK;
@@ -2307,6 +2329,14 @@ static void csr_write(uint32_t csrid, word_t src) {
 #endif // CONFIG_RVV
 
     /************************* Supervisor-Level CSRs *************************/
+#ifdef CONFIG_RV_DASICS
+    case CSR_SEDELEG:
+      sedeleg->val = src & medeleg->val & MEDELEG_MASK;
+      break;
+    case CSR_SIDELEG:
+      sideleg->val = src & U_INTERRUPT_CSR_MASK;
+      break;
+#endif
     case CSR_SSTATUS:
     {
       IFDEF(CONFIG_RV_SSDBLTRP, bool write_sdt = false);
@@ -3580,6 +3610,27 @@ word_t riscv64_priv_sret() {
   update_mmu_state();
   return sepc->val;
 }
+
+#ifdef CONFIG_RV_DASICS
+word_t riscv64_priv_uret() {
+#ifdef CONFIG_RVH
+  if (cpu.v) {
+    longjmp_exception(EX_VI);
+  }
+#endif
+  if (cpu.mode != MODE_U) {
+    longjmp_exception(EX_II);
+  }
+
+  word_t upie = mstatus->val & MSTATUS_UPIE;
+  mstatus->val = mask_bitset(mstatus->val, MSTATUS_UIE, upie ? MSTATUS_UIE : 0);
+  mstatus->val |= MSTATUS_UPIE;
+  cpu.mode = MODE_U;
+  IFDEF(CONFIG_RVH, cpu.v = 0);
+  update_mmu_state();
+  return uepc->val;
+}
+#endif
 
 /// @brief Do RISC-V 64 privileged instruction: MRET
 /// @return the next PC after MRET

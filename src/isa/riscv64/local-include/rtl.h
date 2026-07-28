@@ -76,6 +76,9 @@ int riscv64_priv_hstore(Decode *s, rtlreg_t *src, const rtlreg_t * addr, int len
 /// @brief Do RISC-V 64 privileged instruction: SRET
 /// @return the next PC after SRET
 word_t riscv64_priv_sret();
+#ifdef CONFIG_RV_DASICS
+word_t riscv64_priv_uret();
+#endif
 
 /// @brief Do RISC-V 64 privileged instruction: MRET
 /// @return the next PC after MRET

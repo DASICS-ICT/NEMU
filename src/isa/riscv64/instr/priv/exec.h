@@ -41,6 +41,13 @@ def_EHelper(sret) {
   rtl_priv_jr(s, s0);
 }
 
+#ifdef CONFIG_RV_DASICS
+def_EHelper(uret) {
+  *s0 = riscv64_priv_uret();
+  rtl_priv_jr(s, s0);
+}
+#endif
+
 def_EHelper(mret) {
   *s0 = riscv64_priv_mret();
   rtl_priv_jr(s, s0);

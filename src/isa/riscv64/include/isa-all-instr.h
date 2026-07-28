@@ -63,8 +63,15 @@
   #define SYS_SVINVAL_INSTR_NULLARY(f)
 #endif // CONFIG_RV_SVINVAL
 
+#ifdef CONFIG_RV_DASICS
+  #define SYS_DASICS_INSTR_NULLARY(f) f(uret)
+#else
+  #define SYS_DASICS_INSTR_NULLARY(f)
+#endif
+
 #define SYS_INSTR_NULLARY(f) \
   f(ecall) f(ebreak) f(c_ebreak) f(mret) f(sret) f(wfi) \
+  SYS_DASICS_INSTR_NULLARY(f) \
   SYS_SMRNMI_INSTR_NULLARY(f) \
   SYS_SVINVAL_INSTR_NULLARY(f)
 

@@ -109,10 +109,6 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     case EX_IPF:
     case EX_LPF:
     case EX_SPF:
-#ifdef CONFIG_RV_DASICS
-    case EX_DUCF:
-    case EX_DSCF:
-#endif
       difftest_skip_dut(1, 2); break;
   }
 #endif
@@ -131,6 +127,27 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
 #endif // CONFIG_RV_SMRNMI
   bool isNMI = MUXDEF(CONFIG_RV_SMRNMI, cpu.hasNMI && (NO & INTR_BIT), false);
   bool delegS = intr_deleg_S(NO);
+#ifdef CONFIG_RV_DASICS
+  word_t cause = NO & RISCV_CAUSE_INDEX_MASK;
+  bool delegU = !(NO & INTR_BIT) && cause < 64 && cpu.mode == MODE_U &&
+                !MUXDEF(CONFIG_RVH, cpu.v, false) && delegS &&
+                ((sedeleg->val >> cause) & 1);
+  if (delegU) {
+    word_t old_uie = mstatus->val & MSTATUS_UIE;
+    mstatus->val = (mstatus->val & ~MSTATUS_UPIE) |
+        (old_uie ? MSTATUS_UPIE : 0);
+    mstatus->val &= ~MSTATUS_UIE;
+    uepc->val = epc & ~1ULL;
+    ucause->val = NO;
+    utval->val = cpu.trapInfo.tval;
+    cpu.mode = MODE_U;
+    IFDEF(CONFIG_RVH, cpu.v = 0);
+    word_t u_trap_pc = get_trap_pc(utvec->val, ucause->val);
+    update_mmu_state();
+    clear_trapinfo();
+    return u_trap_pc;
+  }
+#endif
   bool delegM = !delegS && !isNMI;
   bool s_EX_DT = MUXDEF(CONFIG_RV_SSDBLTRP, delegS && mstatus->sdt, false);
   bool m_EX_DT = MUXDEF(CONFIG_RV_SMDBLTRP, delegM && mstatus->mdt, false);

@@ -49,6 +49,18 @@
 
 #include "../local-include/dasics-config.h"
 
+#ifdef CONFIG_RV_DASICS
+#define CSRS_U_TRAP(f) \
+  f(ustatus    , 0x000) f(uie        , 0x004) f(utvec      , 0x005) \
+  f(uscratch   , 0x040) f(uepc       , 0x041) f(ucause     , 0x042) \
+  f(utval      , 0x043) f(uip        , 0x044)
+#define CSRS_S_N_DELEG(f) \
+  f(sedeleg    , 0x102) f(sideleg    , 0x103)
+#else
+#define CSRS_U_TRAP(f)
+#define CSRS_S_N_DELEG(f)
+#endif
+
 /**
  * Mapping between CSR name and addr
  *
@@ -113,6 +125,7 @@
 
 /** ALL **/
 #define CSRS_UNPRIV(f) \
+  CSRS_U_TRAP(f) \
   CSRS_UNPRIV_FLOAT(f) \
   CSRS_UNPRIV_COUNTER_TIMERS(f) \
   CSRS_UNPRIV_VECTOR(f)
@@ -121,7 +134,8 @@
 /* Supervisor-level CSR */
 /** Supervisor Trap Setup **/
 #define CSRS_S_TRAP_SETUP(f) \
-  f(sstatus    , 0x100) f(sie        , 0x104) f(stvec      , 0x105) \
+  f(sstatus    , 0x100) CSRS_S_N_DELEG(f) \
+  f(sie        , 0x104) f(stvec      , 0x105) \
   f(scounteren , 0x106)
 
 /** Supervisor Configuration **/
@@ -738,6 +752,46 @@ CSR_STRUCT_START(mstatus)
   uint64_t pad7:20; // [62:43]
   uint64_t sd  : 1; // [63]
 CSR_STRUCT_END(mstatus)
+
+#ifdef CONFIG_RV_DASICS
+CSR_STRUCT_START(ustatus)
+  uint64_t uie  : 1;
+  uint64_t pad0 : 3;
+  uint64_t upie : 1;
+  uint64_t pad1 :59;
+CSR_STRUCT_END(ustatus)
+
+CSR_STRUCT_START(uie)
+CSR_STRUCT_END(uie)
+
+CSR_STRUCT_START(utvec)
+  uint64_t mode : 2;
+  uint64_t base :62;
+CSR_STRUCT_END(utvec)
+
+CSR_STRUCT_START(uscratch)
+CSR_STRUCT_END(uscratch)
+
+CSR_STRUCT_START(uepc)
+CSR_STRUCT_END(uepc)
+
+CSR_STRUCT_START(ucause)
+  uint64_t code:63;
+  uint64_t intr: 1;
+CSR_STRUCT_END(ucause)
+
+CSR_STRUCT_START(utval)
+CSR_STRUCT_END(utval)
+
+CSR_STRUCT_START(uip)
+CSR_STRUCT_END(uip)
+
+CSR_STRUCT_START(sedeleg)
+CSR_STRUCT_END(sedeleg)
+
+CSR_STRUCT_START(sideleg)
+CSR_STRUCT_END(sideleg)
+#endif
 
 typedef enum ExtContextStatus {
   EXT_CONTEXT_DISABLED = 0,

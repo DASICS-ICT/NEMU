@@ -2479,6 +2479,14 @@
 #define CSR_VL 0xc20
 #define CSR_VTYPE 0xc21
 #define CSR_VLENB 0xc22
+#define CSR_USTATUS 0x000
+#define CSR_UIE 0x004
+#define CSR_UTVEC 0x005
+#define CSR_USCRATCH 0x040
+#define CSR_UEPC 0x041
+#define CSR_UCAUSE 0x042
+#define CSR_UTVAL 0x043
+#define CSR_UIP 0x044
 #define CSR_SSTATUS 0x100
 #define CSR_SEDELEG 0x102
 #define CSR_SIDELEG 0x103
