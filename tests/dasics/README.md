@@ -9,13 +9,16 @@ initialization state from leaking between cases,
 and each case explicitly clears all LibBound, JumpCfg, and special-target state
 that it may consume. Build artifacts are written below `/tmp` by default.
 
-Run it against a DASICS reference shared object:
+The supported invocation in a LinkNan workspace is the top-level task:
 
 ```bash
-make -j$(nproc) -C tests/dasics check \
-  NEMU_SO=/path/to/build/riscv64-nemu-interpreter-so \
-  NEMU_SO_SHA256=<trusted-sha256>
+xmake nemu-dasics-semantics-test --jobs=48
 ```
+
+The local Makefile is an implementation detail used by that task. The top-level
+entry builds and identifies the exact reference shared object, supplies its
+SHA-256, and keeps the test artifacts and log under
+`build/software/nemu-dasics-semantics/`.
 
 The default semantic gate covers only cases with a unique architectural oracle:
 
@@ -73,12 +76,10 @@ Four cross-bound observations are specification-blocked. An 8-byte scalar that
 crosses the 8-byte bound-address grain is necessarily misaligned, while the
 priority between an ordinary misaligned exception and an FDI range-check fault
 is not frozen. These observations are excluded from the default gate and never
-produce a semantic PASS or FAIL. Capture them separately with:
+produce a semantic PASS or FAIL. Capture them separately from the LinkNan root:
 
 ```bash
-make -j$(nproc) -C tests/dasics diagnostic \
-  NEMU_SO=/path/to/build/riscv64-nemu-interpreter-so \
-  NEMU_SO_SHA256=<trusted-sha256>
+xmake nemu-dasics-semantics-test --jobs=48 --diagnostic
 ```
 
 The diagnostic output records `mcause`, `mepc`, `mtval`, `FReason`, and whether

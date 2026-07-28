@@ -151,6 +151,7 @@ class RefRegs(ctypes.Structure):
         ("gpr", ctypes.c_uint64 * 32),
         ("fpr", ctypes.c_uint64 * 32),
         ("mode", ctypes.c_uint64),
+        ("virt_mode", ctypes.c_uint64),
         ("mstatus", ctypes.c_uint64),
         ("sstatus", ctypes.c_uint64),
         ("mepc", ctypes.c_uint64),
@@ -168,6 +169,16 @@ class RefRegs(ctypes.Structure):
         ("sscratch", ctypes.c_uint64),
         ("mideleg", ctypes.c_uint64),
         ("medeleg", ctypes.c_uint64),
+        ("ustatus", ctypes.c_uint64),
+        ("uie", ctypes.c_uint64),
+        ("utvec", ctypes.c_uint64),
+        ("uscratch", ctypes.c_uint64),
+        ("uepc", ctypes.c_uint64),
+        ("ucause", ctypes.c_uint64),
+        ("utval", ctypes.c_uint64),
+        ("uip", ctypes.c_uint64),
+        ("sedeleg", ctypes.c_uint64),
+        ("sideleg", ctypes.c_uint64),
         ("pc", ctypes.c_uint64),
         ("fcsr", ctypes.c_uint64),
         ("tselect", ctypes.c_uint64),
@@ -310,7 +321,7 @@ def run_isolated_case(arguments, index):
     elf_path = require_file(arguments.elf, "test ELF")
     bin_path = require_file(arguments.bin, "test binary")
     nm_path = require_tool(arguments.nm, "RISC-V nm")
-    if ctypes.sizeof(RefRegs) != 696 or RefRegs.pc.offset != 656:
+    if ctypes.sizeof(RefRegs) != 784 or RefRegs.pc.offset != 744:
         raise RuntimeError("unexpected dedicated-reference register ABI")
 
     done_pc = read_symbol(nm_path, elf_path, "test_done")
