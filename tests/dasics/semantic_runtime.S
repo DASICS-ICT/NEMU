@@ -1,5 +1,12 @@
   .equ CSR_MSTATEEN0, 0x30c
   .equ CSR_SSTATEEN0, 0x10c
+  .equ CSR_USTATUS, 0x000
+  .equ CSR_UTVEC, 0x005
+  .equ CSR_USCRATCH, 0x040
+  .equ CSR_UEPC, 0x041
+  .equ CSR_UCAUSE, 0x042
+  .equ CSR_UTVAL, 0x043
+  .equ CSR_SEDELEG, 0x102
   .equ CSR_LIB_CFG, 0x880
   .equ CSR_LIB_BOUND0_LO, 0x890
   .equ CSR_LIB_BOUND0_HI, 0x891
@@ -28,6 +35,8 @@
   .equ CSR_SMAIN_BOUND_HI, 0xbc3
 
   .equ MSTATUS_MPP_MASK, (3 << 11)
+  .equ MSTATUS_UIE, (1 << 0)
+  .equ MSTATUS_UPIE, (1 << 4)
   .equ STATEEN_CUSTOM, 1
   .equ PMP_TOR_RWX, 0x0f
   .equ UCFG_JUMP_ONLY, 0x1e
@@ -172,13 +181,15 @@
   .equ CASE_S_STORE_BOUND_ALLOW, 120
   .equ CASE_S_JUMP_BOUND_ALLOW, 121
   .equ CASE_S_JUMP_SPECIAL_ALLOW, 122
+  .equ CASE_N_HU_LOAD_TRAP_URET, 123
+  .equ CASE_N_HU_STORE_TRAP_URET, 124
   .equ CASE_SCALAR_LOAD_FIRST, CASE_LB_ALLOW
   .equ CASE_SCALAR_STORE_FIRST, CASE_SB_ALLOW
   .equ CASE_SCALAR_LAST, CASE_SW_DENY
-  .equ CASE_DIAG_LOAD_ADJACENT, 123
-  .equ CASE_DIAG_LOAD_OVERLAP, 124
-  .equ CASE_DIAG_STORE_ADJACENT, 125
-  .equ CASE_DIAG_LOAD_TVAL, 126
+  .equ CASE_DIAG_LOAD_ADJACENT, 125
+  .equ CASE_DIAG_LOAD_OVERLAP, 126
+  .equ CASE_DIAG_STORE_ADJACENT, 127
+  .equ CASE_DIAG_LOAD_TVAL, 128
   .equ CASE_DIAG_FIRST, CASE_DIAG_LOAD_ADJACENT
 
   .macro CLEAR_CASE_STATE
@@ -537,6 +548,10 @@ _start:
   beq s0, t0, case_s_jump_bound_allow
   li t0, CASE_S_JUMP_SPECIAL_ALLOW
   beq s0, t0, case_s_jump_special_allow
+  li t0, CASE_N_HU_LOAD_TRAP_URET
+  beq s0, t0, case_n_hu_load_trap_uret
+  li t0, CASE_N_HU_STORE_TRAP_URET
+  beq s0, t0, case_n_hu_store_trap_uret
   li t0, CASE_DIAG_LOAD_ADJACENT
   beq s0, t0, case_load_adjacent_bounds
   li t0, CASE_DIAG_LOAD_OVERLAP
@@ -1574,6 +1589,57 @@ case_s_jump_special_allow:
   la t0, s_jump_special_allow_site
   j enter_smode
 
+prepare_n_hu_case:
+  csrr t0, misa
+  srli t0, t0, 13
+  andi t0, t0, 1
+  beqz t0, test_fail
+  li t0, (1 << CAUSE_CHECK_U)
+  csrs medeleg, t0
+  csrr t1, medeleg
+  and t1, t1, t0
+  beqz t1, test_fail
+  csrw CSR_SEDELEG, t0
+  csrr t1, CSR_SEDELEG
+  and t1, t1, t0
+  beqz t1, test_fail
+  la t0, n_hu_trap_handler
+  csrw CSR_UTVEC, t0
+  csrw CSR_UMAIN_BOUND_LO, t0
+  la t0, n_hu_handler_fail
+  csrw CSR_UMAIN_BOUND_HI, t0
+  li t0, 0x4e2d68752d747261
+  csrw CSR_USCRATCH, t0
+  li t0, MSTATUS_UIE
+  csrw CSR_USTATUS, t0
+  li a1, 0
+  ret
+
+case_n_hu_load_trap_uret:
+  call prepare_load_case
+  li t0, LIB_CFG_ONE_READ
+  csrw CSR_LIB_CFG, t0
+  la t0, test_data
+  csrw CSR_LIB_BOUND0_LO, t0
+  addi t1, t0, 8
+  csrw CSR_LIB_BOUND0_HI, t1
+  call prepare_n_hu_case
+  li a2, 0x5a5a5a5a5a5a5a5a
+  la t0, n_hu_load_entry
+  j enter_umode
+
+case_n_hu_store_trap_uret:
+  call prepare_store_case
+  li t0, LIB_CFG_ONE_WRITE
+  csrw CSR_LIB_CFG, t0
+  la t0, test_data
+  csrw CSR_LIB_BOUND0_LO, t0
+  addi t1, t0, 8
+  csrw CSR_LIB_BOUND0_HI, t1
+  call prepare_n_hu_case
+  la t0, n_hu_store_entry
+  j enter_umode
+
 case_bound_warl:
   CHECK_BOUND CSR_UMAIN_BOUND_LO
   CHECK_BOUND CSR_UMAIN_BOUND_HI
@@ -2435,6 +2501,93 @@ s_jump_special_allow_target:
   li a2, 0x8c
 s_jump_special_allow_ecall:
   ecall
+
+  .align 2
+n_hu_load_entry:
+  la t0, test_data
+n_hu_load_fault:
+  ld a2, 8(t0)
+  j test_fail
+
+n_hu_load_recovery:
+  csrr t0, CSR_USTATUS
+  li t1, (MSTATUS_UIE | MSTATUS_UPIE)
+  bne t0, t1, test_fail
+  li t0, 0x4e
+  bne a1, t0, test_fail
+  li t0, 0x5a5a5a5a5a5a5a5a
+  bne a2, t0, test_fail
+  li a0, 0
+  j test_done
+
+n_hu_store_entry:
+  la t0, test_data
+  li t1, -1
+n_hu_store_fault:
+  sd t1, 8(t0)
+  j test_fail
+
+n_hu_store_recovery:
+  csrr t0, CSR_USTATUS
+  li t1, (MSTATUS_UIE | MSTATUS_UPIE)
+  bne t0, t1, test_fail
+  li t0, 0x4e
+  bne a1, t0, test_fail
+  la t0, test_data
+  ld t1, 8(t0)
+  li t2, 0x2222222222222222
+  bne t1, t2, test_fail
+  li a0, 0
+  j test_done
+
+  .align 2
+n_hu_trap_handler:
+  csrr t0, CSR_UCAUSE
+  li t1, CAUSE_CHECK_U
+  bne t0, t1, n_hu_handler_fail
+  csrr t0, CSR_USTATUS
+  li t1, MSTATUS_UPIE
+  bne t0, t1, n_hu_handler_fail
+  csrr t0, CSR_USCRATCH
+  li t1, 0x4e2d68752d747261
+  bne t0, t1, n_hu_handler_fail
+  csrr t0, CSR_UTVAL
+  la t1, test_data
+  addi t1, t1, 8
+  bne t0, t1, n_hu_handler_fail
+  csrr t0, CSR_UEPC
+  li t1, CASE_N_HU_LOAD_TRAP_URET
+  beq s0, t1, n_hu_check_load
+  li t1, CASE_N_HU_STORE_TRAP_URET
+  beq s0, t1, n_hu_check_store
+  j n_hu_handler_fail
+
+n_hu_check_load:
+  la t1, n_hu_load_fault
+  bne t0, t1, n_hu_handler_fail
+  csrr t0, CSR_FREASON
+  li t1, FREASON_LOAD
+  bne t0, t1, n_hu_handler_fail
+  la t0, n_hu_load_recovery
+  j n_hu_handler_return
+
+n_hu_check_store:
+  la t1, n_hu_store_fault
+  bne t0, t1, n_hu_handler_fail
+  csrr t0, CSR_FREASON
+  li t1, FREASON_STORE
+  bne t0, t1, n_hu_handler_fail
+  la t0, n_hu_store_recovery
+
+n_hu_handler_return:
+  csrw CSR_UEPC, t0
+  li a1, 0x4e
+  .word 0x00200073
+  j n_hu_handler_fail
+
+n_hu_handler_fail:
+  li a1, 0xdead
+  j test_fail
 
   .align 2
 trap_handler:

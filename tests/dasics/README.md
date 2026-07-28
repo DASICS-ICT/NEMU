@@ -70,7 +70,11 @@ The default semantic gate covers only cases with a unique architectural oracle:
   including destination, CSR, and `FReason` preservation;
 - S-mode raw `DASICSCALL.J/JR` trusted, disabled, and untrusted behavior; and
 - U-mode and S-mode MainBound high-end, empty, reversed, and below-low
-  classification using precise ecall-fault witnesses.
+  classification using precise ecall-fault witnesses; and
+- N-extension HU load/store check faults delegated through `medeleg[24]` and
+  `sedeleg[24]`, including HU handler entry, `ucause/uepc/utval/uscratch`,
+  `ustatus.UIE/UPIE`, `FReason`, `uret` recovery, non-virtual `virtMode=0`,
+  unchanged denied-load destination, and suppressed denied-store side effect.
 
 Four cross-bound observations are specification-blocked. An 8-byte scalar that
 crosses the 8-byte bound-address grain is necessarily misaligned, while the

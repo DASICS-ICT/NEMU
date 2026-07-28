@@ -136,6 +136,13 @@ GATE_CASES = (
     "s_untrusted_special_target_allowed",
 )
 
+N_EXTENSION_CASES = (
+    "n_hu_load_trap_uret",
+    "n_hu_store_trap_uret",
+)
+
+GATE_CASES += N_EXTENSION_CASES
+
 DIAGNOSTIC_CASES = (
     "load_spanning_adjacent_bounds",
     "load_spanning_overlapping_bounds",
@@ -299,21 +306,57 @@ def run_case(library, image, done_pc, index, max_steps):
     for steps in range(max_steps + 1):
         library.difftest_regcpy(ctypes.byref(registers), False)
         if registers.pc == done_pc:
-            return (
-                registers.gpr[10],
-                steps,
-                registers.mcause,
-                registers.mepc,
-                registers.mtval,
-                registers.gpr[11],
-                registers.gpr[12],
-            )
+            return registers, steps
         if steps != max_steps:
             library.difftest_exec(1)
     raise RuntimeError(
         f"case={CASE_NAMES[index]} did not reach test_done within {max_steps} steps; "
         f"pc=0x{registers.pc:x}"
     )
+
+
+def validate_n_extension_result(registers, elf_path, nm_path, index):
+    name = CASE_NAMES[index]
+    if name not in N_EXTENSION_CASES:
+        return
+
+    recovery_symbol = {
+        "n_hu_load_trap_uret": "n_hu_load_recovery",
+        "n_hu_store_trap_uret": "n_hu_store_recovery",
+    }[name]
+    expected = {
+        "result": 0,
+        "handler_marker": 0x4E,
+        "mode": 0,
+        "virt_mode": 0,
+        "ustatus": 0x11,
+        "utvec": read_symbol(nm_path, elf_path, "n_hu_trap_handler"),
+        "uscratch": 0x4E2D68752D747261,
+        "uepc": read_symbol(nm_path, elf_path, recovery_symbol),
+        "ucause": 0x18,
+        "utval": read_symbol(nm_path, elf_path, "test_data") + 8,
+    }
+    actual = {
+        "result": registers.gpr[10],
+        "handler_marker": registers.gpr[11],
+        "mode": registers.mode,
+        "virt_mode": registers.virt_mode,
+        "ustatus": registers.ustatus,
+        "utvec": registers.utvec,
+        "uscratch": registers.uscratch,
+        "uepc": registers.uepc,
+        "ucause": registers.ucause,
+        "utval": registers.utval,
+    }
+    mismatches = [
+        f"{field}=0x{actual[field]:x}/expected=0x{value:x}"
+        for field, value in expected.items()
+        if actual[field] != value
+    ]
+    if registers.sedeleg & (1 << 0x18) == 0:
+        mismatches.append(f"sedeleg=0x{registers.sedeleg:x}/missing-cause-0x18")
+    if mismatches:
+        raise RuntimeError(f"case={name} N-extension state mismatch: {', '.join(mismatches)}")
 
 
 def run_isolated_case(arguments, index):
@@ -328,7 +371,24 @@ def run_isolated_case(arguments, index):
     image = bin_path.read_bytes()
     library = ctypes.CDLL(str(so_path), mode=os.RTLD_NOW | os.RTLD_LOCAL)
     configure_api(library)
-    return run_case(library, image, done_pc, index, arguments.max_steps)
+    registers, steps = run_case(library, image, done_pc, index, arguments.max_steps)
+    validate_n_extension_result(registers, elf_path, nm_path, index)
+    return (
+        registers.gpr[10],
+        steps,
+        registers.mcause,
+        registers.mepc,
+        registers.mtval,
+        registers.gpr[11],
+        registers.gpr[12],
+        registers.mode,
+        registers.virt_mode,
+        registers.ustatus,
+        registers.uepc,
+        registers.ucause,
+        registers.utval,
+        registers.sedeleg,
+    )
 
 
 def main():
@@ -347,13 +407,28 @@ def main():
     if arguments.case_index is not None:
         if arguments.case_index < 0 or arguments.case_index >= len(CASE_NAMES):
             raise ValueError(f"invalid case index: {arguments.case_index}")
-        result, steps, mcause, mepc, mtval, detail, aux = run_isolated_case(
-            arguments, arguments.case_index
-        )
+        (
+            result,
+            steps,
+            mcause,
+            mepc,
+            mtval,
+            detail,
+            aux,
+            mode,
+            virt_mode,
+            ustatus,
+            uepc,
+            ucause,
+            utval,
+            sedeleg,
+        ) = run_isolated_case(arguments, arguments.case_index)
         print(
             f"CASE_RESULT result=0x{result:x} steps={steps} "
             f"mcause=0x{mcause:x} mepc=0x{mepc:x} mtval=0x{mtval:x} "
-            f"detail=0x{detail:x} aux=0x{aux:x}",
+            f"detail=0x{detail:x} aux=0x{aux:x} mode=0x{mode:x} "
+            f"virt=0x{virt_mode:x} ustatus=0x{ustatus:x} uepc=0x{uepc:x} "
+            f"ucause=0x{ucause:x} utval=0x{utval:x} sedeleg=0x{sedeleg:x}",
             flush=True,
         )
         return 0
@@ -396,7 +471,11 @@ def main():
         match = re.fullmatch(
             r"CASE_RESULT result=0x([0-9a-f]+) steps=([0-9]+) "
             r"mcause=0x([0-9a-f]+) mepc=0x([0-9a-f]+) "
-            r"mtval=0x([0-9a-f]+) detail=0x([0-9a-f]+) aux=0x([0-9a-f]+)",
+            r"mtval=0x([0-9a-f]+) detail=0x([0-9a-f]+) aux=0x([0-9a-f]+) "
+            r"mode=0x([0-9a-f]+) virt=0x([0-9a-f]+) "
+            r"ustatus=0x([0-9a-f]+) uepc=0x([0-9a-f]+) "
+            r"ucause=0x([0-9a-f]+) utval=0x([0-9a-f]+) "
+            r"sedeleg=0x([0-9a-f]+)",
             completed.stdout.strip(),
         )
         if not match:
@@ -408,6 +487,13 @@ def main():
         mtval = int(match.group(5), 16)
         detail = int(match.group(6), 16)
         aux = int(match.group(7), 16)
+        mode = int(match.group(8), 16)
+        virt_mode = int(match.group(9), 16)
+        ustatus = int(match.group(10), 16)
+        uepc = int(match.group(11), 16)
+        ucause = int(match.group(12), 16)
+        utval = int(match.group(13), 16)
+        sedeleg = int(match.group(14), 16)
         if arguments.diagnostic:
             if result != 0:
                 raise RuntimeError(
@@ -420,7 +506,15 @@ def main():
                 flush=True,
             )
             continue
-        if result == 0:
+        if result == 0 and name in N_EXTENSION_CASES:
+            print(
+                f"PASS case={name} steps={steps} mode=HU "
+                f"prv={mode} virt={virt_mode} ustatus=0x{ustatus:x} "
+                f"uepc=0x{uepc:x} ucause=0x{ucause:x} utval=0x{utval:x} "
+                f"sedeleg=0x{sedeleg:x}",
+                flush=True,
+            )
+        elif result == 0:
             print(f"PASS case={name} steps={steps}", flush=True)
         else:
             print(
