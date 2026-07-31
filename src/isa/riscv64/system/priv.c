@@ -730,6 +730,11 @@ void init_smstateen() {
   mstateen1->val = 0;
   mstateen2->val = 0;
   mstateen3->val = 0;
+#ifdef CONFIG_RV_DASICS
+  mstateen0->val |= MSTATEEN0_CS;
+  IFDEF(CONFIG_RVH, hstateen0->val |= MSTATEEN0_CS);
+  sstateen0->val |= SSTATEEN0_CS;
+#endif
 #if defined(CONFIG_RV_AIA) && !defined(CONFIG_RV_SMCSRIND)
   mstateen0->val |= MSTATEEN0_CSRIND;
   IFDEF(CONFIG_RVH, hstateen0->val |= MSTATEEN0_CSRIND);
