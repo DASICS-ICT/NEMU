@@ -65,6 +65,22 @@ const char * isa_get_privilege_mode_str() {
 #define DISPLAY_HR(name) \
   printf("---------------- %s ----------------\n", name)
 
+#ifdef CONFIG_RV_DASICS
+extern rtlreg_t csr_array[4096];
+
+static inline word_t dasics_reg_csr(uint32_t addr) {
+  return csr_array[addr];
+}
+
+static inline word_t dasics_reg_lib_cfg(int index) {
+  return (dasics_reg_csr(DASICS_CSR_LIB_CFG) >> (index * DASICS_LIB_CFG_SLOT_BITS)) & DASICS_LIB_CFG_MASK;
+}
+
+static inline word_t dasics_reg_jump_cfg(int index) {
+  return (dasics_reg_csr(DASICS_CSR_JUMP_CFG) >> (index * DASICS_JUMP_CFG_SLOT_BITS)) & DASICS_JUMP_CFG_MASK;
+}
+#endif // CONFIG_RV_DASICS
+
 void isa_reg_display() {
   csr_prepare();
 
@@ -214,6 +230,42 @@ void isa_reg_display() {
      DISPLAY_CSR("mbmc", mbmc->val);
      printf("\n");
    #endif
+
+  #ifdef CONFIG_RV_DASICS
+    DISPLAY_HR("DASICS CSRs");
+    DISPLAY_CSR("umaincfg", dasics_reg_csr(DASICS_CSR_UMAIN_CFG));
+    DISPLAY_CSR("umainlo", dasics_reg_csr(DASICS_CSR_UMAIN_BOUND_LO));
+    DISPLAY_CSR("umainhi", dasics_reg_csr(DASICS_CSR_UMAIN_BOUND_HI));
+    printf("\n");
+    DISPLAY_CSR("smaincfg", dasics_reg_csr(DASICS_CSR_SMAIN_CFG));
+    DISPLAY_CSR("smainlo", dasics_reg_csr(DASICS_CSR_SMAIN_BOUND_LO));
+    DISPLAY_CSR("smainhi", dasics_reg_csr(DASICS_CSR_SMAIN_BOUND_HI));
+    printf("\n");
+    DISPLAY_CSR("maincall", dasics_reg_csr(DASICS_CSR_MAIN_CALL));
+    DISPLAY_CSR("returnpc", dasics_reg_csr(DASICS_CSR_RETURN_PC));
+    DISPLAY_CSR("azretpc", dasics_reg_csr(DASICS_CSR_ACTIVE_ZONE_RETURN_PC));
+    printf("\n");
+    DISPLAY_CSR("freason", dasics_reg_csr(DASICS_CSR_FREASON));
+    DISPLAY_CSR("libcfg", dasics_reg_csr(DASICS_CSR_LIB_CFG));
+    DISPLAY_CSR("jumpcfg", dasics_reg_csr(DASICS_CSR_JUMP_CFG));
+    printf("\n");
+    for (int i = 0; i < DASICS_LIB_ENTRY_NUM; i++) {
+      printf("%2d: cfg:0x%02lx lo:0x%016lx hi:0x%016lx",
+          i, dasics_reg_lib_cfg(i),
+          dasics_reg_csr(DASICS_CSR_LIB_BOUND_LO(i)),
+          dasics_reg_csr(DASICS_CSR_LIB_BOUND_HI(i)));
+      if (i % 2 == 1) printf("\n");
+      else printf(" | ");
+    }
+    for (int i = 0; i < DASICS_JUMP_ENTRY_NUM; i++) {
+      printf("%2d: cfg:0x%04lx lo:0x%016lx hi:0x%016lx",
+          i, dasics_reg_jump_cfg(i),
+          dasics_reg_csr(DASICS_CSR_JUMP_BOUND_LO(i)),
+          dasics_reg_csr(DASICS_CSR_JUMP_BOUND_HI(i)));
+      if (i % 2 == 1) printf("\n");
+      else printf(" | ");
+    }
+  #endif // CONFIG_RV_DASICS
 
   #ifdef CONFIG_RV_PMP_CSR
     DISPLAY_HR("PMP CSRs");
