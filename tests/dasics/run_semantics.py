@@ -141,7 +141,28 @@ N_EXTENSION_CASES = (
     "n_hu_store_trap_uret",
 )
 
-GATE_CASES += N_EXTENSION_CASES
+N_CSR_PROTECTION_CASES = (
+    "n_csr_untrusted_hu_read_ustatus",
+    "n_csr_untrusted_hu_read_uie",
+    "n_csr_untrusted_hu_read_utvec",
+    "n_csr_untrusted_hu_read_uscratch",
+    "n_csr_untrusted_hu_read_uepc",
+    "n_csr_untrusted_hu_read_ucause",
+    "n_csr_untrusted_hu_read_utval",
+    "n_csr_untrusted_hu_read_uip",
+    "n_csr_untrusted_hu_write_ustatus",
+    "n_csr_untrusted_hu_write_uie",
+    "n_csr_untrusted_hu_write_utvec",
+    "n_csr_untrusted_hu_write_uscratch",
+    "n_csr_untrusted_hu_write_uepc",
+    "n_csr_untrusted_hu_write_ucause",
+    "n_csr_untrusted_hu_write_utval",
+    "n_csr_untrusted_hu_write_uip",
+    "n_csr_trusted_hu_all_allowed",
+    "n_csr_untrusted_hs_all_allowed",
+)
+
+GATE_CASES += N_EXTENSION_CASES + N_CSR_PROTECTION_CASES
 
 DIAGNOSTIC_CASES = (
     "load_spanning_adjacent_bounds",

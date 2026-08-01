@@ -1014,7 +1014,13 @@ static inline void dasics_mem_permit_check(vaddr_t pc, vaddr_t vaddr, int len, b
 }
 
 static inline void dasics_csr_access_permit_check(uint32_t addr, vaddr_t pc) {
-  if (dasics_is_protected_csr(addr) && dasics_exec_pc_is_untrusted(pc)) {
+  bool is_nonvirtual_hu = cpu.mode == MODE_U;
+#ifdef CONFIG_RVH
+  is_nonvirtual_hu = is_nonvirtual_hu && !cpu.v;
+#endif
+  bool deny_standard_n_csr = is_nonvirtual_hu && dasics_is_standard_n_csr(addr);
+  if ((dasics_is_protected_csr(addr) || deny_standard_n_csr) &&
+      dasics_exec_pc_is_untrusted(pc)) {
     longjmp_exception(EX_II);
   }
 }

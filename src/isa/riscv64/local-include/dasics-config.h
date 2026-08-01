@@ -105,4 +105,11 @@ static inline bool dasics_is_protected_csr(uint32_t addr) {
          addr == DASICS_CSR_SMAIN_BOUND_HI;
 }
 
+static inline bool dasics_is_standard_n_csr(uint32_t addr) {
+  return addr == 0x000 || // ustatus
+         addr == 0x004 || // uie
+         addr == 0x005 || // utvec
+         (addr >= 0x040 && addr <= 0x044); // uscratch, uepc, ucause, utval, uip
+}
+
 #endif

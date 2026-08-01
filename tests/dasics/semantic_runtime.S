@@ -1,11 +1,13 @@
   .equ CSR_MSTATEEN0, 0x30c
   .equ CSR_SSTATEEN0, 0x10c
   .equ CSR_USTATUS, 0x000
+  .equ CSR_UIE, 0x004
   .equ CSR_UTVEC, 0x005
   .equ CSR_USCRATCH, 0x040
   .equ CSR_UEPC, 0x041
   .equ CSR_UCAUSE, 0x042
   .equ CSR_UTVAL, 0x043
+  .equ CSR_UIP, 0x044
   .equ CSR_SEDELEG, 0x102
   .equ CSR_LIB_CFG, 0x880
   .equ CSR_LIB_BOUND0_LO, 0x890
@@ -183,13 +185,35 @@
   .equ CASE_S_JUMP_SPECIAL_ALLOW, 122
   .equ CASE_N_HU_LOAD_TRAP_URET, 123
   .equ CASE_N_HU_STORE_TRAP_URET, 124
+  .equ CASE_N_CSR_HU_READ_USTATUS, 125
+  .equ CASE_N_CSR_HU_READ_UIE, 126
+  .equ CASE_N_CSR_HU_READ_UTVEC, 127
+  .equ CASE_N_CSR_HU_READ_USCRATCH, 128
+  .equ CASE_N_CSR_HU_READ_UEPC, 129
+  .equ CASE_N_CSR_HU_READ_UCAUSE, 130
+  .equ CASE_N_CSR_HU_READ_UTVAL, 131
+  .equ CASE_N_CSR_HU_READ_UIP, 132
+  .equ CASE_N_CSR_HU_WRITE_USTATUS, 133
+  .equ CASE_N_CSR_HU_WRITE_UIE, 134
+  .equ CASE_N_CSR_HU_WRITE_UTVEC, 135
+  .equ CASE_N_CSR_HU_WRITE_USCRATCH, 136
+  .equ CASE_N_CSR_HU_WRITE_UEPC, 137
+  .equ CASE_N_CSR_HU_WRITE_UCAUSE, 138
+  .equ CASE_N_CSR_HU_WRITE_UTVAL, 139
+  .equ CASE_N_CSR_HU_WRITE_UIP, 140
+  .equ CASE_N_CSR_HU_TRUSTED_ALL, 141
+  .equ CASE_N_CSR_HS_UNTRUSTED_ALL, 142
+  .equ CASE_N_CSR_HU_READ_FIRST, CASE_N_CSR_HU_READ_USTATUS
+  .equ CASE_N_CSR_HU_READ_LAST, CASE_N_CSR_HU_READ_UIP
+  .equ CASE_N_CSR_HU_WRITE_FIRST, CASE_N_CSR_HU_WRITE_USTATUS
+  .equ CASE_N_CSR_HU_WRITE_LAST, CASE_N_CSR_HU_WRITE_UIP
   .equ CASE_SCALAR_LOAD_FIRST, CASE_LB_ALLOW
   .equ CASE_SCALAR_STORE_FIRST, CASE_SB_ALLOW
   .equ CASE_SCALAR_LAST, CASE_SW_DENY
-  .equ CASE_DIAG_LOAD_ADJACENT, 125
-  .equ CASE_DIAG_LOAD_OVERLAP, 126
-  .equ CASE_DIAG_STORE_ADJACENT, 127
-  .equ CASE_DIAG_LOAD_TVAL, 128
+  .equ CASE_DIAG_LOAD_ADJACENT, 143
+  .equ CASE_DIAG_LOAD_OVERLAP, 144
+  .equ CASE_DIAG_STORE_ADJACENT, 145
+  .equ CASE_DIAG_LOAD_TVAL, 146
   .equ CASE_DIAG_FIRST, CASE_DIAG_LOAD_ADJACENT
 
   .macro CLEAR_CASE_STATE
@@ -552,6 +576,42 @@ _start:
   beq s0, t0, case_n_hu_load_trap_uret
   li t0, CASE_N_HU_STORE_TRAP_URET
   beq s0, t0, case_n_hu_store_trap_uret
+  li t0, CASE_N_CSR_HU_READ_USTATUS
+  beq s0, t0, case_n_csr_hu_read_ustatus
+  li t0, CASE_N_CSR_HU_READ_UIE
+  beq s0, t0, case_n_csr_hu_read_uie
+  li t0, CASE_N_CSR_HU_READ_UTVEC
+  beq s0, t0, case_n_csr_hu_read_utvec
+  li t0, CASE_N_CSR_HU_READ_USCRATCH
+  beq s0, t0, case_n_csr_hu_read_uscratch
+  li t0, CASE_N_CSR_HU_READ_UEPC
+  beq s0, t0, case_n_csr_hu_read_uepc
+  li t0, CASE_N_CSR_HU_READ_UCAUSE
+  beq s0, t0, case_n_csr_hu_read_ucause
+  li t0, CASE_N_CSR_HU_READ_UTVAL
+  beq s0, t0, case_n_csr_hu_read_utval
+  li t0, CASE_N_CSR_HU_READ_UIP
+  beq s0, t0, case_n_csr_hu_read_uip
+  li t0, CASE_N_CSR_HU_WRITE_USTATUS
+  beq s0, t0, case_n_csr_hu_write_ustatus
+  li t0, CASE_N_CSR_HU_WRITE_UIE
+  beq s0, t0, case_n_csr_hu_write_uie
+  li t0, CASE_N_CSR_HU_WRITE_UTVEC
+  beq s0, t0, case_n_csr_hu_write_utvec
+  li t0, CASE_N_CSR_HU_WRITE_USCRATCH
+  beq s0, t0, case_n_csr_hu_write_uscratch
+  li t0, CASE_N_CSR_HU_WRITE_UEPC
+  beq s0, t0, case_n_csr_hu_write_uepc
+  li t0, CASE_N_CSR_HU_WRITE_UCAUSE
+  beq s0, t0, case_n_csr_hu_write_ucause
+  li t0, CASE_N_CSR_HU_WRITE_UTVAL
+  beq s0, t0, case_n_csr_hu_write_utval
+  li t0, CASE_N_CSR_HU_WRITE_UIP
+  beq s0, t0, case_n_csr_hu_write_uip
+  li t0, CASE_N_CSR_HU_TRUSTED_ALL
+  beq s0, t0, case_n_csr_hu_trusted_all
+  li t0, CASE_N_CSR_HS_UNTRUSTED_ALL
+  beq s0, t0, case_n_csr_hs_untrusted_all
   li t0, CASE_DIAG_LOAD_ADJACENT
   beq s0, t0, case_load_adjacent_bounds
   li t0, CASE_DIAG_LOAD_OVERLAP
@@ -1640,6 +1700,69 @@ case_n_hu_store_trap_uret:
   la t0, n_hu_store_entry
   j enter_umode
 
+  .macro N_CSR_HU_READ_DENY_CASE case_name, site_name, csr
+\case_name:
+  CLEAR_CASE_STATE
+  li t0, UCFG_ECALL_CLOSED
+  csrw CSR_UMAIN_CFG, t0
+  csrw \csr, zero
+  SET_EXPECTED CAUSE_ILLEGAL_INSTRUCTION, \site_name\()_site, 0
+  SET_EXPECTED_AUX 0x5a5a5a5a5a5a5a5a, 0
+  la t0, \site_name\()_entry
+  j enter_umode
+  .endm
+
+  .macro N_CSR_HU_WRITE_DENY_CASE case_name, site_name, csr
+\case_name:
+  CLEAR_CASE_STATE
+  li t0, UCFG_ECALL_CLOSED
+  csrw CSR_UMAIN_CFG, t0
+  csrw \csr, zero
+  SET_EXPECTED CAUSE_ILLEGAL_INSTRUCTION, \site_name\()_site, 0
+  SET_EXPECTED_AUX -1, 0
+  la t0, \site_name\()_entry
+  j enter_umode
+  .endm
+
+  N_CSR_HU_READ_DENY_CASE case_n_csr_hu_read_ustatus, n_csr_hu_read_ustatus, CSR_USTATUS
+  N_CSR_HU_READ_DENY_CASE case_n_csr_hu_read_uie, n_csr_hu_read_uie, CSR_UIE
+  N_CSR_HU_READ_DENY_CASE case_n_csr_hu_read_utvec, n_csr_hu_read_utvec, CSR_UTVEC
+  N_CSR_HU_READ_DENY_CASE case_n_csr_hu_read_uscratch, n_csr_hu_read_uscratch, CSR_USCRATCH
+  N_CSR_HU_READ_DENY_CASE case_n_csr_hu_read_uepc, n_csr_hu_read_uepc, CSR_UEPC
+  N_CSR_HU_READ_DENY_CASE case_n_csr_hu_read_ucause, n_csr_hu_read_ucause, CSR_UCAUSE
+  N_CSR_HU_READ_DENY_CASE case_n_csr_hu_read_utval, n_csr_hu_read_utval, CSR_UTVAL
+  N_CSR_HU_READ_DENY_CASE case_n_csr_hu_read_uip, n_csr_hu_read_uip, CSR_UIP
+  N_CSR_HU_WRITE_DENY_CASE case_n_csr_hu_write_ustatus, n_csr_hu_write_ustatus, CSR_USTATUS
+  N_CSR_HU_WRITE_DENY_CASE case_n_csr_hu_write_uie, n_csr_hu_write_uie, CSR_UIE
+  N_CSR_HU_WRITE_DENY_CASE case_n_csr_hu_write_utvec, n_csr_hu_write_utvec, CSR_UTVEC
+  N_CSR_HU_WRITE_DENY_CASE case_n_csr_hu_write_uscratch, n_csr_hu_write_uscratch, CSR_USCRATCH
+  N_CSR_HU_WRITE_DENY_CASE case_n_csr_hu_write_uepc, n_csr_hu_write_uepc, CSR_UEPC
+  N_CSR_HU_WRITE_DENY_CASE case_n_csr_hu_write_ucause, n_csr_hu_write_ucause, CSR_UCAUSE
+  N_CSR_HU_WRITE_DENY_CASE case_n_csr_hu_write_utval, n_csr_hu_write_utval, CSR_UTVAL
+  N_CSR_HU_WRITE_DENY_CASE case_n_csr_hu_write_uip, n_csr_hu_write_uip, CSR_UIP
+
+case_n_csr_hu_trusted_all:
+  CLEAR_CASE_STATE
+  li t0, UCFG_ECALL_CLOSED
+  csrw CSR_UMAIN_CFG, t0
+  la t0, n_csr_hu_trusted_entry
+  csrw CSR_UMAIN_BOUND_LO, t0
+  la t0, n_csr_hu_trusted_end
+  csrw CSR_UMAIN_BOUND_HI, t0
+  SET_EXPECTED CAUSE_ECALL_U, n_csr_hu_trusted_ecall, 0
+  SET_EXPECTED_AUX 0x4e435352, 0
+  la t0, n_csr_hu_trusted_entry
+  j enter_umode
+
+case_n_csr_hs_untrusted_all:
+  CLEAR_CASE_STATE
+  li t0, SCFG_ALL_CLOSED
+  csrw CSR_SMAIN_CFG, t0
+  SET_EXPECTED CAUSE_ECALL_S, n_csr_hs_untrusted_ecall, 0
+  SET_EXPECTED_AUX 0x4853435352, 0
+  la t0, n_csr_hs_untrusted_entry
+  j enter_smode
+
 case_bound_warl:
   CHECK_BOUND CSR_UMAIN_BOUND_LO
   CHECK_BOUND CSR_UMAIN_BOUND_HI
@@ -2192,6 +2315,69 @@ s_csr_untrusted_write_site:
   csrw CSR_LIB_CFG, a2
   ecall
 
+  .macro N_CSR_HU_READ_DENY_SITE name, csr
+  .balign 8
+\name\()_entry:
+  li a2, 0x5a5a5a5a5a5a5a5a
+\name\()_site:
+  csrr a2, \csr
+  ecall
+  .endm
+
+  .macro N_CSR_HU_WRITE_DENY_SITE name, csr
+  .balign 8
+\name\()_entry:
+  li a2, -1
+\name\()_site:
+  csrw \csr, a2
+  ecall
+  .endm
+
+  N_CSR_HU_READ_DENY_SITE n_csr_hu_read_ustatus, CSR_USTATUS
+  N_CSR_HU_READ_DENY_SITE n_csr_hu_read_uie, CSR_UIE
+  N_CSR_HU_READ_DENY_SITE n_csr_hu_read_utvec, CSR_UTVEC
+  N_CSR_HU_READ_DENY_SITE n_csr_hu_read_uscratch, CSR_USCRATCH
+  N_CSR_HU_READ_DENY_SITE n_csr_hu_read_uepc, CSR_UEPC
+  N_CSR_HU_READ_DENY_SITE n_csr_hu_read_ucause, CSR_UCAUSE
+  N_CSR_HU_READ_DENY_SITE n_csr_hu_read_utval, CSR_UTVAL
+  N_CSR_HU_READ_DENY_SITE n_csr_hu_read_uip, CSR_UIP
+  N_CSR_HU_WRITE_DENY_SITE n_csr_hu_write_ustatus, CSR_USTATUS
+  N_CSR_HU_WRITE_DENY_SITE n_csr_hu_write_uie, CSR_UIE
+  N_CSR_HU_WRITE_DENY_SITE n_csr_hu_write_utvec, CSR_UTVEC
+  N_CSR_HU_WRITE_DENY_SITE n_csr_hu_write_uscratch, CSR_USCRATCH
+  N_CSR_HU_WRITE_DENY_SITE n_csr_hu_write_uepc, CSR_UEPC
+  N_CSR_HU_WRITE_DENY_SITE n_csr_hu_write_ucause, CSR_UCAUSE
+  N_CSR_HU_WRITE_DENY_SITE n_csr_hu_write_utval, CSR_UTVAL
+  N_CSR_HU_WRITE_DENY_SITE n_csr_hu_write_uip, CSR_UIP
+
+  .macro N_CSR_ALL_ACCESS_SITE name, marker
+  .balign 8
+\name\()_entry:
+  csrr t0, CSR_USTATUS
+  csrr t0, CSR_UIE
+  csrr t0, CSR_UTVEC
+  csrr t0, CSR_USCRATCH
+  csrr t0, CSR_UEPC
+  csrr t0, CSR_UCAUSE
+  csrr t0, CSR_UTVAL
+  csrr t0, CSR_UIP
+  csrw CSR_USTATUS, zero
+  csrw CSR_UIE, zero
+  csrw CSR_UTVEC, zero
+  csrw CSR_USCRATCH, zero
+  csrw CSR_UEPC, zero
+  csrw CSR_UCAUSE, zero
+  csrw CSR_UTVAL, zero
+  csrw CSR_UIP, zero
+  li a2, \marker
+\name\()_ecall:
+  ecall
+\name\()_end:
+  .endm
+
+  N_CSR_ALL_ACCESS_SITE n_csr_hu_trusted, 0x4e435352
+  N_CSR_ALL_ACCESS_SITE n_csr_hs_untrusted, 0x4853435352
+
   .macro S_CALL_J_SITE name, marker
   .balign 8
 \name\()_site:
@@ -2510,9 +2696,6 @@ n_hu_load_fault:
   j test_fail
 
 n_hu_load_recovery:
-  csrr t0, CSR_USTATUS
-  li t1, (MSTATUS_UIE | MSTATUS_UPIE)
-  bne t0, t1, test_fail
   li t0, 0x4e
   bne a1, t0, test_fail
   li t0, 0x5a5a5a5a5a5a5a5a
@@ -2528,9 +2711,6 @@ n_hu_store_fault:
   j test_fail
 
 n_hu_store_recovery:
-  csrr t0, CSR_USTATUS
-  li t1, (MSTATUS_UIE | MSTATUS_UPIE)
-  bne t0, t1, test_fail
   li t0, 0x4e
   bne a1, t0, test_fail
   la t0, test_data
@@ -2712,6 +2892,16 @@ trap_handler:
   beq s0, t0, check_expected_a2
   li t0, CASE_S_JUMP_SPECIAL_ALLOW
   beq s0, t0, check_expected_a2
+  li t0, CASE_N_CSR_HU_READ_FIRST
+  bltu s0, t0, trap_pass
+  li t0, CASE_N_CSR_HU_READ_LAST
+  bgeu t0, s0, check_expected_a2
+  li t0, CASE_N_CSR_HU_WRITE_LAST
+  bgeu t0, s0, check_n_csr_write_effect
+  li t0, CASE_N_CSR_HU_TRUSTED_ALL
+  beq s0, t0, check_expected_a2
+  li t0, CASE_N_CSR_HS_UNTRUSTED_ALL
+  beq s0, t0, check_expected_a2
   j trap_pass
 trap_pass:
   li a0, 0
@@ -2867,6 +3057,54 @@ check_s_csr_write_effect:
   la t0, expected_aux0
   ld t0, 0(t0)
   bne t1, t0, side_effect_fail
+  j trap_pass
+
+check_n_csr_write_effect:
+  li t0, -1
+  bne a2, t0, side_effect_fail
+  li t0, CASE_N_CSR_HU_WRITE_USTATUS
+  beq s0, t0, check_n_csr_write_ustatus
+  li t0, CASE_N_CSR_HU_WRITE_UIE
+  beq s0, t0, check_n_csr_write_uie
+  li t0, CASE_N_CSR_HU_WRITE_UTVEC
+  beq s0, t0, check_n_csr_write_utvec
+  li t0, CASE_N_CSR_HU_WRITE_USCRATCH
+  beq s0, t0, check_n_csr_write_uscratch
+  li t0, CASE_N_CSR_HU_WRITE_UEPC
+  beq s0, t0, check_n_csr_write_uepc
+  li t0, CASE_N_CSR_HU_WRITE_UCAUSE
+  beq s0, t0, check_n_csr_write_ucause
+  li t0, CASE_N_CSR_HU_WRITE_UTVAL
+  beq s0, t0, check_n_csr_write_utval
+  li t0, CASE_N_CSR_HU_WRITE_UIP
+  beq s0, t0, check_n_csr_write_uip
+  j side_effect_fail
+
+check_n_csr_write_ustatus:
+  csrr t1, CSR_USTATUS
+  j check_n_csr_write_zero
+check_n_csr_write_uie:
+  csrr t1, CSR_UIE
+  j check_n_csr_write_zero
+check_n_csr_write_utvec:
+  csrr t1, CSR_UTVEC
+  j check_n_csr_write_zero
+check_n_csr_write_uscratch:
+  csrr t1, CSR_USCRATCH
+  j check_n_csr_write_zero
+check_n_csr_write_uepc:
+  csrr t1, CSR_UEPC
+  j check_n_csr_write_zero
+check_n_csr_write_ucause:
+  csrr t1, CSR_UCAUSE
+  j check_n_csr_write_zero
+check_n_csr_write_utval:
+  csrr t1, CSR_UTVAL
+  j check_n_csr_write_zero
+check_n_csr_write_uip:
+  csrr t1, CSR_UIP
+check_n_csr_write_zero:
+  bnez t1, side_effect_fail
   j trap_pass
 
 check_s_call_j_trusted_effect:
