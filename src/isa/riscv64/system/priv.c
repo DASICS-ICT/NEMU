@@ -1069,6 +1069,39 @@ void riscv64_dasics_cbo_permit_check(vaddr_t pc, vaddr_t vaddr, int len, int man
   }
 }
 
+void riscv64_dasics_amo_permit_check(vaddr_t pc, vaddr_t vaddr, int len, int kind) {
+  cpu.dasics_skip_mem_check = true;
+
+  bool is_store_class = kind != RISCV64_DASICS_AMO_LR;
+  if (!dasics_exec_is_main_enabled() ||
+      dasics_exec_mem_fault_is_closed(is_store_class) ||
+      !dasics_exec_pc_is_untrusted(pc)) {
+    return;
+  }
+
+  word_t required_cfg = DASICS_LIB_CFG_VALID;
+  if (kind == RISCV64_DASICS_AMO_LR) {
+    required_cfg |= DASICS_LIB_CFG_READ;
+  } else if (kind == RISCV64_DASICS_AMO_SC) {
+    required_cfg |= DASICS_LIB_CFG_WRITE;
+  } else {
+    required_cfg |= DASICS_LIB_CFG_READ | DASICS_LIB_CFG_WRITE;
+  }
+
+  if (len > 0) {
+    vaddr_t last = vaddr + (len - 1);
+    if (last < vaddr) {
+      dasics_raise_check_fault(
+          is_store_class ? DASICS_FREASON_STORE : DASICS_FREASON_LOAD, vaddr);
+    }
+  }
+
+  if (!dasics_mem_range_allowed(vaddr, len, required_cfg)) {
+    dasics_raise_check_fault(
+        is_store_class ? DASICS_FREASON_STORE : DASICS_FREASON_LOAD, vaddr);
+  }
+}
+
 void riscv64_dasics_jump_target_permit_check(vaddr_t pc, vaddr_t target) {
   if (!dasics_exec_is_main_enabled() ||
       dasics_exec_jump_fault_is_closed() ||
