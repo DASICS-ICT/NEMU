@@ -19,6 +19,9 @@
 #include <rtl/rtl.h>
 #include "../local-include/trigger.h"
 #include "../local-include/intr.h"
+#ifdef CONFIG_RV_DASICS
+#include "../../local-include/rtl.h"
+#endif
 #include "cpu/difftest.h"
 __attribute__((cold))
 def_rtl(amo_slow_path, rtlreg_t *dest, const rtlreg_t *src1, const rtlreg_t *src2) {
@@ -79,6 +82,16 @@ def_rtl(amo_slow_path, rtlreg_t *dest, const rtlreg_t *src1, const rtlreg_t *src
     }
     longjmp_exception(ex);
   }
+
+#ifdef CONFIG_RV_DASICS
+  if (funct5 == 0b00010) {
+    riscv64_dasics_amo_permit_check(s->pc, *src1, width, RISCV64_DASICS_AMO_LR);
+  } else if (funct5 == 0b00011) {
+    riscv64_dasics_amo_permit_check(s->pc, *src1, width, RISCV64_DASICS_AMO_SC);
+  } else {
+    riscv64_dasics_amo_permit_check(s->pc, *src1, width, RISCV64_DASICS_AMO_RMW);
+  }
+#endif
 
   if (funct5 == 0b00010) { // lr
     assert(!cpu.amo);
