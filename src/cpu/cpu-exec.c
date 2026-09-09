@@ -679,6 +679,9 @@ static void execute(int n) {
     printf("ahead pc %lx %lx\n", g_nr_guest_instr, cpu.pc);
 #endif // CONFIG_LIGHTQS_DEBUG
     cpu.amo = false;
+#ifdef CONFIG_RV_DASICS
+    cpu.dasics_skip_mem_check = false;
+#endif
     cpu.pbmt = 0;
     cpu.vaddrMisAlignException = 0;
     fetch_decode(&s, cpu.pc);
@@ -825,6 +828,9 @@ void cpu_exec(uint64_t n) {
 
       cpu.pc = raise_intr(g_ex_cause, prev_s->pc);
       cpu.amo = false; // clean up
+#ifdef CONFIG_RV_DASICS
+      cpu.dasics_skip_mem_check = false;
+#endif
       cpu.pbmt = 0;
       cpu.isVldst = false;
 

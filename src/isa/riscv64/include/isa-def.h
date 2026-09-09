@@ -152,6 +152,9 @@ typedef struct {
 
   // exec state
   bool amo;
+#ifdef CONFIG_RV_DASICS
+  bool dasics_skip_mem_check;
+#endif
   uint32_t pbmt;
   bool isVldst;
   int mem_exception;

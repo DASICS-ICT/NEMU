@@ -898,15 +898,13 @@ static inline bool dasics_mem_addr_allowed(vaddr_t addr, word_t required_cfg) {
   return false;
 }
 
-static inline bool dasics_mem_access_allowed(vaddr_t addr, int len, bool is_store) {
-  word_t required_cfg = DASICS_LIB_CFG_VALID | (is_store ? DASICS_LIB_CFG_WRITE : DASICS_LIB_CFG_READ);
+static inline bool dasics_mem_range_allowed(vaddr_t addr, int len, word_t required_cfg) {
   if (len <= 0) {
     return true;
   }
 
   vaddr_t last = addr + (len - 1);
   if (last < addr) {
-    // Address-wrap behavior remains outside the frozen scalar-range contract.
     for (int i = 0; i < len; i++) {
       if (!dasics_mem_addr_allowed(addr + i, required_cfg)) {
         return false;
@@ -922,6 +920,11 @@ static inline bool dasics_mem_access_allowed(vaddr_t addr, int len, bool is_stor
   }
 
   return false;
+}
+
+static inline bool dasics_mem_access_allowed(vaddr_t addr, int len, bool is_store) {
+  word_t required_cfg = DASICS_LIB_CFG_VALID | (is_store ? DASICS_LIB_CFG_WRITE : DASICS_LIB_CFG_READ);
+  return dasics_mem_range_allowed(addr, len, required_cfg);
 }
 
 static inline bool dasics_jump_bound_entry_valid(int index) {
@@ -1041,6 +1044,29 @@ void riscv64_dasics_load_permit_check(vaddr_t pc, vaddr_t vaddr, int len) {
 
 void riscv64_dasics_store_permit_check(vaddr_t pc, vaddr_t vaddr, int len) {
   dasics_mem_permit_check(pc, vaddr, len, true);
+}
+
+void riscv64_dasics_cbo_permit_check(vaddr_t pc, vaddr_t vaddr, int len, int manage) {
+  cpu.dasics_skip_mem_check = true;
+
+  bool mem_fault_closed = manage
+      ? (dasics_exec_mem_fault_is_closed(false) && dasics_exec_mem_fault_is_closed(true))
+      : dasics_exec_mem_fault_is_closed(true);
+  if (len <= 0 ||
+      !dasics_exec_is_main_enabled() ||
+      mem_fault_closed ||
+      !dasics_exec_pc_is_untrusted(pc)) {
+    return;
+  }
+
+  vaddr_t first = vaddr & ~((vaddr_t)len - 1);
+  bool allowed = dasics_mem_range_allowed(first, len, DASICS_LIB_CFG_VALID | DASICS_LIB_CFG_WRITE);
+  if (manage && !allowed) {
+    allowed = dasics_mem_range_allowed(first, len, DASICS_LIB_CFG_VALID | DASICS_LIB_CFG_READ);
+  }
+  if (!allowed) {
+    dasics_raise_check_fault(DASICS_FREASON_STORE, vaddr);
+  }
 }
 
 void riscv64_dasics_jump_target_permit_check(vaddr_t pc, vaddr_t target) {

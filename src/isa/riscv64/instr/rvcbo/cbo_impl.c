@@ -16,6 +16,10 @@
 #include "cbo_impl.h"
 #include "../local-include/intr.h"
 #include "../local-include/trigger.h"
+#ifdef CONFIG_RV_DASICS
+#include "../local-include/csr.h"
+#include "../local-include/rtl.h"
+#endif
 #include <common.h>
 #include <rtl/rtl.h>
 #include <device/mmio.h>
@@ -85,10 +89,41 @@ static int convert_load_to_store_exception(int ori_cause) {
 }
 
 
+#ifdef CONFIG_RV_DASICS
+static void dasics_cbo_precheck(Decode *s, bool manage) {
+  riscv64_dasics_cbo_permit_check(s->pc, *dsrc1, CACHE_BLOCK_SIZE, manage);
+}
+
+static bool dasics_cbo_inval_is_manage(void) {
+  if (cpu.mode == MODE_M) {
+    return false;
+  }
+  if (menvcfg->cbie == 1) {
+    return true;
+  }
+#ifdef CONFIG_RVH
+  if (cpu.v && henvcfg->cbie == 1) {
+    return true;
+  }
+  if ((cpu.v || cpu.mode == MODE_U) && senvcfg->cbie == 1) {
+    return true;
+  }
+#else
+  if (cpu.mode == MODE_U && senvcfg->cbie == 1) {
+    return true;
+  }
+#endif
+  return false;
+}
+#endif
+
 void cbo_zero(Decode *s){
   rtlreg_t* addr_p = dsrc1;
 
   not_translate_check(*addr_p, MEM_TYPE_WRITE);
+#ifdef CONFIG_RV_DASICS
+  dasics_cbo_precheck(s, false);
+#endif
 
   rtlreg_t block_addr = *addr_p & ~CACHE_BLOCK_MASK;
   for (uint64_t i = 0; i < CACHE_BLOCK_OPS; i++) {
@@ -108,6 +143,9 @@ void cbo_inval(Decode *s){
     rtlreg_t* addr_p = dsrc1;
 
     not_translate_check(*addr_p, MEM_TYPE_READ);
+#ifdef CONFIG_RV_DASICS
+    dasics_cbo_precheck(s, dasics_cbo_inval_is_manage());
+#endif
 
     // do nothing
     IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
@@ -125,6 +163,9 @@ void cbo_flush(Decode *s){
     rtlreg_t *addr_p = dsrc1;
 
     not_translate_check(*addr_p, MEM_TYPE_READ);
+#ifdef CONFIG_RV_DASICS
+    dasics_cbo_precheck(s, true);
+#endif
 
     // do nothing
     IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
@@ -142,6 +183,9 @@ void cbo_clean(Decode *s){
     rtlreg_t *addr_p = dsrc1;
 
     not_translate_check(*addr_p, MEM_TYPE_READ);
+#ifdef CONFIG_RV_DASICS
+    dasics_cbo_precheck(s, true);
+#endif
 
     // do nothing
     IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
@@ -156,6 +200,9 @@ void cbo_zero_mmu(Decode *s){
   rtlreg_t *addr_p = dsrc1;
 
   paddr_t base_addr_p = translate_and_check(*addr_p, MEM_TYPE_WRITE);
+#ifdef CONFIG_RV_DASICS
+  dasics_cbo_precheck(s, false);
+#endif
 
   rtlreg_t block_addr = base_addr_p & ~CACHE_BLOCK_MASK;
   for (uint64_t i = 0; i < CACHE_BLOCK_OPS; i++) {
@@ -176,6 +223,9 @@ void cbo_inval_mmu(Decode *s){
     rtlreg_t *addr_p = dsrc1;
 
     translate_and_check(*addr_p, MEM_TYPE_READ);
+#ifdef CONFIG_RV_DASICS
+    dasics_cbo_precheck(s, dasics_cbo_inval_is_manage());
+#endif
 
     // do nothing
     IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
@@ -193,6 +243,9 @@ void cbo_flush_mmu(Decode *s){
     rtlreg_t *addr_p = dsrc1;
 
     translate_and_check(*addr_p, MEM_TYPE_READ);
+#ifdef CONFIG_RV_DASICS
+    dasics_cbo_precheck(s, true);
+#endif
 
     // do nothing
     IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));
@@ -211,6 +264,9 @@ void cbo_clean_mmu(Decode *s){
     rtlreg_t *addr_p = dsrc1;
 
     translate_and_check(*addr_p, MEM_TYPE_READ);
+#ifdef CONFIG_RV_DASICS
+    dasics_cbo_precheck(s, true);
+#endif
 
     // do nothing
     IFNDEF(CONFIG_DIFFTEST_REF_NEMU, difftest_skip_dut(1, 2));

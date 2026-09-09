@@ -226,7 +226,8 @@ static inline word_t vaddr_read_internal(void *s, vaddr_t addr, int len, int typ
   }
 
 #ifdef CONFIG_RV_DASICS
-  if (type == MEM_TYPE_READ && dasics_should_check_data_access((struct Decode *)s)) {
+  if (type == MEM_TYPE_READ && dasics_should_check_data_access((struct Decode *)s) &&
+      !cpu.dasics_skip_mem_check) {
     riscv64_dasics_load_permit_check(((struct Decode *)s)->pc, addr, len);
   }
 #endif
@@ -319,7 +320,7 @@ void vaddr_write(struct Decode *s, vaddr_t addr, int len, word_t data, int mmu_m
   isa_misalign_data_addr_check(addr, len, MEM_TYPE_WRITE);
 
 #ifdef CONFIG_RV_DASICS
-  if (dasics_should_check_data_access(s)) {
+  if (dasics_should_check_data_access(s) && !cpu.dasics_skip_mem_check) {
     riscv64_dasics_store_permit_check(s->pc, addr, len);
   }
 #endif
