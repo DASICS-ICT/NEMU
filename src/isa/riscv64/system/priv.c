@@ -872,6 +872,34 @@ static inline bool dasics_exec_mem_fault_is_closed(bool is_store) {
   return true;
 }
 
+static inline bool dasics_exec_amo_fault_is_closed(void) {
+  word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
+
+  if (cpu.mode == MODE_S) {
+    return (main_cfg & DASICS_MAIN_CFG_CSAT) != 0;
+  }
+
+  if (cpu.mode == MODE_U) {
+    return (main_cfg & DASICS_MAIN_CFG_CUAT) != 0;
+  }
+
+  return true;
+}
+
+static inline bool dasics_exec_cbo_fault_is_closed(void) {
+  word_t main_cfg = csr_array[DASICS_CSR_SMAIN_CFG];
+
+  if (cpu.mode == MODE_S) {
+    return (main_cfg & DASICS_MAIN_CFG_CSCT) != 0;
+  }
+
+  if (cpu.mode == MODE_U) {
+    return (main_cfg & DASICS_MAIN_CFG_CUCT) != 0;
+  }
+
+  return true;
+}
+
 static inline bool dasics_csr_target_match(uint32_t addr, vaddr_t target) {
   return csr_array[addr] == target;
 }
@@ -1049,12 +1077,9 @@ void riscv64_dasics_store_permit_check(vaddr_t pc, vaddr_t vaddr, int len) {
 void riscv64_dasics_cbo_permit_check(vaddr_t pc, vaddr_t vaddr, int len, int manage) {
   cpu.dasics_skip_mem_check = true;
 
-  bool mem_fault_closed = manage
-      ? (dasics_exec_mem_fault_is_closed(false) && dasics_exec_mem_fault_is_closed(true))
-      : dasics_exec_mem_fault_is_closed(true);
   if (len <= 0 ||
       !dasics_exec_is_main_enabled() ||
-      mem_fault_closed ||
+      dasics_exec_cbo_fault_is_closed() ||
       !dasics_exec_pc_is_untrusted(pc)) {
     return;
   }
@@ -1073,8 +1098,12 @@ void riscv64_dasics_amo_permit_check(vaddr_t pc, vaddr_t vaddr, int len, int kin
   cpu.dasics_skip_mem_check = true;
 
   bool is_store_class = kind != RISCV64_DASICS_AMO_LR;
+  bool mem_closed = kind == RISCV64_DASICS_AMO_RMW
+      ? false
+      : dasics_exec_mem_fault_is_closed(is_store_class);
   if (!dasics_exec_is_main_enabled() ||
-      dasics_exec_mem_fault_is_closed(is_store_class) ||
+      dasics_exec_amo_fault_is_closed() ||
+      mem_closed ||
       !dasics_exec_pc_is_untrusted(pc)) {
     return;
   }
