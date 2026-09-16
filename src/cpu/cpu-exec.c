@@ -416,6 +416,10 @@ static void execute(int n) {
     __attribute__((unused)) rtlreg_t ls0, ls1, ls2;
     br_taken = false;
 
+#ifdef CONFIG_RV_DASICS
+    void isa_utimer_tick(void);
+    if (s->EHelper != &&exec_nemu_decode) isa_utimer_tick();
+#endif
     goto *(s->EHelper);
 
 #undef s0
@@ -689,6 +693,10 @@ static void execute(int n) {
       fprintf(stderr, "(%d) [NEMU] pc = 0x%lx inst %x\n", getpid(), s.pc,
               s.isa.instr.val);
     }
+#endif
+#ifdef CONFIG_RV_DASICS
+    void isa_utimer_tick(void);
+    isa_utimer_tick();
 #endif
     s.EHelper(&s);
 

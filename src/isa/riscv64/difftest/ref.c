@@ -59,13 +59,13 @@ void csr_prepare() {
   cpu.medeleg  = medeleg->val;
 #ifdef CONFIG_RV_DASICS
   cpu.ustatus  = mstatus->val & (MSTATUS_UIE | MSTATUS_UPIE);
-  cpu.uie      = uie->val;
+  cpu.uie      = (uie->val & ~(1ULL << 4)) | (mie->val & mideleg->val & sideleg->val & (1ULL << 4));
   cpu.utvec    = utvec->val;
   cpu.uscratch = uscratch->val;
   cpu.uepc     = uepc->val;
   cpu.ucause   = ucause->val;
   cpu.utval    = utval->val;
-  cpu.uip      = uip->val;
+  cpu.uip      = (uip->val & ~(1ULL << 4)) | (get_mip() & mideleg->val & sideleg->val & (1ULL << 4));
   cpu.sedeleg  = sedeleg->val;
   cpu.sideleg  = sideleg->val;
 #else
@@ -494,4 +494,10 @@ void isa_update_hgeip() {
 
 void isa_sync_custom_mflushpwr(bool l2FlushDone) {
   mflushpwr->l2flushed = l2FlushDone;
+}
+
+void difftest_utimer_sync(uint64_t value) {
+#ifdef CONFIG_RV_DASICS
+  utimer->val = value;
+#endif
 }

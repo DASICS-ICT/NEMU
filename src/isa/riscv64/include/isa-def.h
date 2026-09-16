@@ -53,6 +53,7 @@ struct NonRegInterruptPending {
   bool from_aia_meip;
   bool from_aia_seip;
   bool lcofi_req;
+  bool utimer_pending;
 };
 
 struct FromAIA {

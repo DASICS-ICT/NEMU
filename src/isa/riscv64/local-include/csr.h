@@ -53,7 +53,7 @@
 #define CSRS_U_TRAP(f) \
   f(ustatus    , 0x000) f(uie        , 0x004) f(utvec      , 0x005) \
   f(uscratch   , 0x040) f(uepc       , 0x041) f(ucause     , 0x042) \
-  f(utval      , 0x043) f(uip        , 0x044)
+  f(utval      , 0x043) f(uip        , 0x044) f(utimer     , 0x045)
 #define CSRS_S_N_DELEG(f) \
   f(sedeleg    , 0x102) f(sideleg    , 0x103)
 #else
@@ -779,6 +779,9 @@ CSR_STRUCT_START(ucause)
   uint64_t code:63;
   uint64_t intr: 1;
 CSR_STRUCT_END(ucause)
+
+CSR_STRUCT_START(utimer)
+CSR_STRUCT_END(utimer)
 
 CSR_STRUCT_START(utval)
 CSR_STRUCT_END(utval)

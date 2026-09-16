@@ -129,9 +129,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
   bool delegS = intr_deleg_S(NO);
 #ifdef CONFIG_RV_DASICS
   word_t cause = NO & RISCV_CAUSE_INDEX_MASK;
-  bool delegU = !(NO & INTR_BIT) && cause < 64 && cpu.mode == MODE_U &&
+  bool delegU = cause < 64 && cpu.mode == MODE_U &&
                 !MUXDEF(CONFIG_RVH, cpu.v, false) && delegS &&
-                ((sedeleg->val >> cause) & 1);
+                (((NO & INTR_BIT ? sideleg->val : sedeleg->val) >> cause) & 1);
   if (delegU) {
     word_t old_uie = mstatus->val & MSTATUS_UIE;
     mstatus->val = (mstatus->val & ~MSTATUS_UPIE) |
@@ -139,7 +139,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     mstatus->val &= ~MSTATUS_UIE;
     uepc->val = epc & ~1ULL;
     ucause->val = NO;
-    utval->val = cpu.trapInfo.tval;
+    utval->val = (NO & INTR_BIT) ? 0 : cpu.trapInfo.tval;
     cpu.mode = MODE_U;
     IFDEF(CONFIG_RVH, cpu.v = 0);
     word_t u_trap_pc = get_trap_pc(utvec->val, ucause->val);
@@ -379,12 +379,13 @@ word_t isa_query_intr() {
   const int priority [] = {
     IRQ_MEIP, IRQ_MSIP, IRQ_MTIP,
     IRQ_SEIP, IRQ_SSIP, IRQ_STIP,
-    IRQ_UEIP, IRQ_USIP, IRQ_UTIP,
+    IRQ_UEIP, IRQ_USIP,
     IRQ_SGEI,
     IRQ_VSEIP, IRQ_VSSIP, IRQ_VSTIP,
 #ifdef CONFIG_RV_SSCOFPMF
-    IRQ_LCOFI
+    IRQ_LCOFI,
 #endif
+    IRQ_UTIP
   };
 #ifdef CONFIG_RV_SSCOFPMF
   intr_num = 14;
@@ -413,6 +414,10 @@ word_t isa_query_intr() {
 #else
       bool global_enable = (deleg ? ((cpu.mode == MODE_S) && mstatus->sie) || (cpu.mode < MODE_S) :
           ((cpu.mode == MODE_M) && mstatus->mie) || (cpu.mode < MODE_M));
+#endif
+#ifdef CONFIG_RV_DASICS
+      if (deleg && (sideleg->val & (1ULL << irq)))
+        global_enable = cpu.mode == MODE_U && !MUXDEF(CONFIG_RVH, cpu.v, false) && (mstatus->val & MSTATUS_UIE);
 #endif
       if (global_enable) return irq | INTR_BIT;
     }

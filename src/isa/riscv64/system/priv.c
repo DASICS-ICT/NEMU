@@ -668,12 +668,13 @@ static inline word_t* csr_decode(uint32_t addr) {
 #define MIDELEG_WMASK_STI (1 << 5)
 #define MIDELEG_WMASK_SEI (1 << 9)
 #define MIDELEG_WMASK_LCOFI MUXDEF(CONFIG_RV_SSCOFPMF, (1 << 13), 0)
-#define MIDELEG_WMASK ( MIDELEG_WMASK_SSI | \
+#define MIDELEG_WMASK ( MUXDEF(CONFIG_RV_DASICS, (1ULL << 4), 0) | MIDELEG_WMASK_SSI | \
                         MIDELEG_WMASK_STI | \
                         MIDELEG_WMASK_SEI | \
                         MIDELEG_WMASK_LCOFI)
 
-#define MIE_MASK_BASE 0xaaa
+#define UTIMER_MASK MUXDEF(CONFIG_RV_DASICS, (1ULL << 4), 0)
+#define MIE_MASK_BASE (0xaaa | UTIMER_MASK)
 #define MIP_MASK_BASE (1 << 1)
 #ifdef CONFIG_RVH
 // #define MIE_MASK_H ((1 << 2) | (1 << 6) | (1 << 10) | (1 << 12))
@@ -1325,10 +1326,11 @@ static inline word_t non_vmode_get_sie() {
   IFDEF(CONFIG_RV_SSCOFPMF, tmp |= mie->val & mideleg->val & MIP_LCOFIP);
 #endif // CONFIG_RV_AIA
 
-  return tmp;
+  return tmp | (mie->val & mideleg->val & UTIMER_MASK);
 }
 
 static inline void non_vmode_set_sie(word_t src) {
+  mie->val = mask_bitset(mie->val, mideleg->val & UTIMER_MASK, src);
 #ifdef CONFIG_RV_AIA
   mie->val = mask_bitset(mie->val, (MIP_SSIP | MIP_STIP | MIP_SEIP | MIP_LCOFIP) & mideleg->val, src);
   sie->val = mask_bitset(sie->val, (MIP_SSIP | MIP_SEIP | MIP_LCOFIP) & (~mideleg->val & mvien->val), src);
@@ -1447,6 +1449,9 @@ inline word_t get_mip() {
   word_t tmp = 0;
 
   tmp = mip->val & (MIP_MASK_BASE | MIP_LCOFIP);
+#ifdef CONFIG_RV_DASICS
+  tmp |= (word_t)(MUXDEF(CONFIG_SHARE, cpu.non_reg_interrupt_pending.utimer_pending, utimer->val == 1)) << 4;
+#endif
 
   IFDEF(CONFIG_RVH, tmp |= hvip->val & (MIP_VSSIP));
 
@@ -1528,7 +1533,7 @@ static inline word_t non_vmode_get_sip() {
 #else
   tmp = get_mip() & SIP_MASK;
 #endif // CONFIG_RV_AIA
-  return tmp;
+  return tmp | (get_mip() & mideleg->val & UTIMER_MASK);
 }
 
 static inline void non_vmode_set_sip(word_t src) {
@@ -1962,6 +1967,8 @@ static word_t csr_read(uint32_t csrid) {
     /************************* Unprivileged and User-Level CSRs *************************/
 #ifdef CONFIG_RV_DASICS
     case CSR_USTATUS: return mstatus->val & USTATUS_MASK;
+    case CSR_UIE: return (uie->val & ~UTIMER_MASK) | (mie->val & mideleg->val & sideleg->val & UTIMER_MASK);
+    case CSR_UIP: return (uip->val & ~UTIMER_MASK) | (get_mip() & mideleg->val & sideleg->val & UTIMER_MASK);
 #endif
 #ifndef CONFIG_FPU_NONE
     case CSR_FFLAGS: return fcsr->fflags.val & FFLAGS_MASK;
@@ -2301,8 +2308,11 @@ static void csr_write(uint32_t csrid, word_t src) {
       mstatus->val = mask_bitset(mstatus->val, USTATUS_MASK, src);
       break;
     case CSR_UIE:
+      uie->val = src & (U_INTERRUPT_CSR_MASK & ~UTIMER_MASK);
+      mie->val = mask_bitset(mie->val, UTIMER_MASK & mideleg->val & sideleg->val, src);
+      break;
     case CSR_UIP:
-      *dest = src & U_INTERRUPT_CSR_MASK;
+      uip->val = src & (U_INTERRUPT_CSR_MASK & ~UTIMER_MASK);
       break;
     case CSR_UTVEC:
       set_tvec(dest, src);
@@ -3387,6 +3397,9 @@ static inline bool csrind_permit_check(const uint32_t addr) {
 #endif // CONFIG_RV_SMCSRIND || CONFIG_RV_AIA
 
 static inline void csr_permit_check(uint32_t addr, bool is_write, vaddr_t pc) {
+#if defined(CONFIG_RV_DASICS) && defined(CONFIG_RVH)
+  if (addr == CSR_UTIMER && cpu.v) longjmp_exception(EX_VI);
+#endif
   bool has_vi = false; // virtual instruction
   word_t *dest_access = csr_decode(addr);
   // check csr_exit, priv
@@ -3883,5 +3896,16 @@ int riscv64_priv_hstore(Decode *s, rtlreg_t *src, const rtlreg_t * addr, int len
   IFDEF(CONFIG_RT_CHECK, assert(len == 1 || len == 2 || len == 4 || len == 8));
   hld_st = false;
   return 0;
+}
+#endif
+
+#ifdef CONFIG_RV_DASICS
+// Standalone NEMU models one HU cycle per instruction. The shared reference
+// obtains execution-time timer values and pending transitions from RTL instead.
+void isa_utimer_tick(void) {
+#ifndef CONFIG_SHARE
+  if (cpu.mode == MODE_U && !MUXDEF(CONFIG_RVH, cpu.v, false) && utimer->val > 1)
+    utimer->val--;
+#endif
 }
 #endif
