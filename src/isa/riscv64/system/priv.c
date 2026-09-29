@@ -19,6 +19,7 @@
 #include "../local-include/intr.h"
 #include "../local-include/trigger.h"
 #include "../local-include/aia.h"
+#include "../local-include/user-timer.h"
 #include "common.h"
 #include <cpu/cpu.h>
 #include <cpu/difftest.h>
@@ -1581,6 +1582,9 @@ bool iselect_is_major_ip(uint64_t iselect) {
 static word_t csr_read(uint32_t csrid) {
   word_t *src = csr_decode(csrid);
   switch (csrid) {
+#ifdef CONFIG_RV_USER_TIMER
+    case CSR_UTIMER: case CSR_UIP: return uit_read_sample(csrid);
+#endif
     /************************* Unprivileged and User-Level CSRs *************************/
 #ifndef CONFIG_FPU_NONE
     case CSR_FFLAGS: return fcsr->fflags.val & FFLAGS_MASK;
@@ -1877,6 +1881,15 @@ void update_vsatp(const vsatp_t new_val) {
 static void csr_write(uint32_t csrid, word_t src) {
   word_t *dest = csr_decode(csrid);
   switch (csrid) {
+#ifdef CONFIG_RV_USER_TIMER
+    case CSR_USTATUS: *dest = src & 0x11; break;
+    case CSR_UIE: *dest = src & 0x10; break;
+    case CSR_UTVEC: *dest = src & ~UINT64_C(3); break;
+    case CSR_UEPC: *dest = src & ~UINT64_C(1); break;
+    case CSR_USCRATCH: case CSR_UCAUSE: case CSR_UTVAL: *dest = src; break;
+    // Timer writes describe software requests only; the DUT owns timer state.
+    case CSR_UTIMER: case CSR_UIP: break;
+#endif
     /************************* Unprivileged and User-Level CSRs *************************/
 #ifndef CONFIG_FPU_NONE
     case CSR_FFLAGS:
@@ -2849,6 +2862,12 @@ static inline bool csrind_permit_check(const word_t *dest_access) {
 #endif // CONFIG_RV_IMSIC
 
 static inline void csr_permit_check(uint32_t addr, bool is_write) {
+#ifdef CONFIG_RV_USER_TIMER
+  if (uit_is_csr(addr)) {
+    if (!uit_csr_permitted()) longjmp_exception(EX_II);
+    return;
+  }
+#endif
   bool has_vi = false; // virtual instruction
   word_t *dest_access = csr_decode(addr);
   // check csr_exit, priv
@@ -2882,6 +2901,27 @@ static inline void csr_permit_check(uint32_t addr, bool is_write) {
   IFDEF(CONFIG_RV_IMSIC, has_vi |= csrind_permit_check(dest_access));
   if (has_vi) longjmp_exception(EX_VI);
 }
+
+#ifdef CONFIG_RV_USER_TIMER
+bool uit_csr_permitted(void) {
+  if (cpu.v) return false;
+  if (cpu.mode == MODE_M) return true;
+  if (!mstateen0->c) return false;
+  return cpu.mode == MODE_S || (cpu.mode == MODE_U && sstateen0->c);
+}
+
+uint64_t uit_return(void) {
+  if (cpu.mode != MODE_U || cpu.v || !cpu.uit_in_handler ||
+      MUXDEF(CONFIG_RV_SDEXT, cpu.debug_mode, false)) {
+    longjmp_exception(EX_II);
+  }
+  // Returning from a previously accepted handler does not regrant CSR access.
+  ustatus->val = (ustatus->val & ~UINT64_C(1)) | ((ustatus->val >> 4) & 1) | 0x10;
+  cpu.uit_in_handler = false;
+  return uepc->val;
+}
+#endif
+
 static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, uint32_t instr) {
   ISADecodeInfo isa;
   isa.instr.val = instr;
@@ -2890,6 +2930,12 @@ static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, uint32_t 
   uint32_t funct3 = isa.instr.i.funct3;
   bool is_write = !( BITS(funct3, 1, 1) && (rs1 == 0) );
   csr_permit_check(csrid, is_write);
+#ifdef CONFIG_RV_USER_TIMER
+  if (uit_is_csr(csrid)) {
+    bool reads = (funct3 == FUNCT3_CSRRW || funct3 == FUNCT3_CSRRWI) ? rd != 0 : true;
+    uit_validate_csr_access(csrid, reads);
+  }
+#endif
 
   switch (funct3) {
     case FUNCT3_CSRRW:
@@ -2898,12 +2944,14 @@ static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, uint32_t 
         *dest = csr_read(csrid);
       }
       csr_write(csrid, *src);
+      IFDEF(CONFIG_RV_USER_TIMER, if (uit_is_csr(csrid)) uit_note_csr_write(*src));
       break;
     case FUNCT3_CSRRS:
     case FUNCT3_CSRRSI:
       *dest = csr_read(csrid);
       if (rs1) {
         csr_write(csrid, *src | *dest);
+        IFDEF(CONFIG_RV_USER_TIMER, if (uit_is_csr(csrid)) uit_note_csr_write(*src | *dest));
       }
       break;
     case FUNCT3_CSRRC:
@@ -2911,6 +2959,7 @@ static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, uint32_t 
       *dest = csr_read(csrid);
       if (rs1) {
         csr_write(csrid, (~*src) & *dest);
+        IFDEF(CONFIG_RV_USER_TIMER, if (uit_is_csr(csrid)) uit_note_csr_write((~*src) & *dest));
       }
       break;
     default: panic("funct3 = %d is not supported for csrrw instruction\n", funct3);
@@ -3010,6 +3059,9 @@ static bool __attribute__((unused)) vsretTo (cpu_mode_t mode) {
 
 static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
   switch (op) {
+#ifdef CONFIG_RV_USER_TIMER
+    case 0x002: return uit_return();
+#endif
 #ifndef CONFIG_MODE_USER
     case 0x102: // sret
 #ifdef CONFIG_RVH

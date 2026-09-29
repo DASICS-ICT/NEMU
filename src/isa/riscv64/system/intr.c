@@ -19,8 +19,30 @@
 #include "../local-include/csr.h"
 #include "../local-include/intr.h"
 #include "../local-include/aia.h"
+#include "../local-include/user-timer.h"
 
 void update_mmu_state();
+void clear_trapinfo();
+
+#ifdef CONFIG_RV_USER_TIMER
+int32_t uit_enter_hu(void) {
+  if (cpu.mode != MODE_U || cpu.v || cpu.uit_in_handler || !uit_csr_permitted() ||
+      !(ustatus->val & 1) || !(uie->val & 0x10) ||
+      MUXDEF(CONFIG_RV_SDEXT, cpu.debug_mode, false) ||
+      MUXDEF(CONFIG_RV_SMRNMI, !mnstatus->nmie, false)) {
+    return DIFFTEST_UIT_E_CONTEXT;
+  }
+  // The event supplies timing, never the architectural return PC or target.
+  uepc->val = cpu.pc & ~UINT64_C(1);
+  ucause->val = INTR_BIT | IRQ_UTIP;
+  utval->val = 0;
+  ustatus->val = (ustatus->val & 1) << 4;
+  cpu.uit_in_handler = true;
+  cpu.pc = utvec->val;
+  clear_trapinfo();
+  return DIFFTEST_UIT_OK;
+}
+#endif
 
 
 #ifdef CONFIG_RVH
@@ -70,6 +92,7 @@ static word_t get_trap_pc(word_t xtvec, word_t xcause) {
 }
 
 word_t raise_intr(word_t NO, vaddr_t epc) {
+  IFDEF(CONFIG_DIFFTEST_UIT, if (!(NO & INTR_BIT)) uit_note_exception(NO));
   Logti("raise intr cause NO: %ld, epc: %lx\n", NO, epc);
 #ifdef CONFIG_DIFFTEST_REF_SPIKE
   switch (NO) {

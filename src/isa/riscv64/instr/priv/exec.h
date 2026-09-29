@@ -24,6 +24,10 @@ def_EHelper(name) { \
 
 #if defined(CONFIG_DEBUG) || defined(CONFIG_SHARE)
 
+#ifdef CONFIG_RV_USER_TIMER
+def_SYS_EHelper(uret)
+#endif
+
 #ifdef CONFIG_RVH
 #define def_hld_template(name) \
   def_EHelper(name){ \
@@ -141,4 +145,3 @@ def_EHelper(mop_rr_6) { rtl_i_mop(s, ddest); }
 def_EHelper(mop_rr_7) { rtl_i_mop(s, ddest); }
 
 #endif // CONFIG_RV_ZIMOP
-

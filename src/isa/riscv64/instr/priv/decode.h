@@ -88,6 +88,9 @@ def_THelper(mop_rr) {
 #if defined(CONFIG_DEBUG) || defined(CONFIG_SHARE)
 #ifdef CONFIG_RVH
 def_THelper(system) {
+#ifdef CONFIG_RV_USER_TIMER
+  def_INSTR_IDTAB("000000000010 00000 000 00000 11100 11", csr, uret);
+#endif
   def_INSTR_IDTAB("000000000000 00000 000 00000 ????? ??", csr, ecall);
 #if defined(CONFIG_RV_DEBUG) || defined(CONFIG_EBREAK_AS_TRAP)
   def_INSTR_IDTAB("000000000001 00000 000 00000 ????? ??", csr, ebreak);

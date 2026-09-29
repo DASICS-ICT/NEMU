@@ -529,6 +529,20 @@ config RV_SMSTATEEN
   bool "(Beta)Enable Smstateen extension"
   default n
 
+config DIFFTEST_UIT
+  bool "Controlled user timer reference protocol and UART TX"
+  depends on RV_SMSTATEEN && RVH && SHARE && !LIGHTQS && !MULTICORE_DIFF
+  default n
+
+config RV_USER_TIMER
+  bool "Experimental host user timer architecture"
+  depends on DIFFTEST_UIT
+  default n
+  help
+    Implements the independent host user CSR and trap state. Timer reads and
+    HU events require the versioned difftest input protocol; no timer runs
+    inside the reference. Checkpoint and runahead execution are unsupported.
+
 config MISA_UNCHANGEABLE
   bool "Make misa cannot be changed by CSR write instructions like XS"
   default y

@@ -21,6 +21,7 @@
 #include "../local-include/intr.h"
 #include "../local-include/csr.h"
 #include "../local-include/trigger.h"
+#include "../local-include/user-timer.h"
 #include <generated/autoconf.h>
 #include <stdlib.h>
 
@@ -184,6 +185,7 @@ void isa_difftest_regcpy(void *dut, bool direction) {
 #endif // CONFIG_LIGHTQS
   //ramcmp();
   if (direction == DIFFTEST_TO_REF) {
+    IFDEF(CONFIG_DIFFTEST_UIT, uit_check_import());
     memcpy(&cpu, dut, DIFFTEST_REG_SIZE);
     csr_writeback();
     // need to clear the cached mmu states as well
@@ -212,6 +214,7 @@ void isa_difftest_regcpy(void *dut, bool direction) {
 
 void isa_difftest_csrcpy(void *dut, bool direction) {
   if (direction == DIFFTEST_TO_REF) {
+    IFDEF(CONFIG_DIFFTEST_UIT, uit_check_import());
     memcpy(csr_array, dut, 4096 * sizeof(rtlreg_t));
   } else {
     memcpy(dut, csr_array, 4096 * sizeof(rtlreg_t));

@@ -28,6 +28,25 @@
 #define FUNCT3_CSRRSI 6
 #define FUNCT3_CSRRCI 7
 
+#define CSR_USTATUS 0x000
+#define CSR_UIE 0x004
+#define CSR_UTVEC 0x005
+#define CSR_USCRATCH 0x040
+#define CSR_UEPC 0x041
+#define CSR_UCAUSE 0x042
+#define CSR_UTVAL 0x043
+#define CSR_UIP 0x044
+#define CSR_UTIMER 0x800
+
+#ifdef CONFIG_RV_USER_TIMER
+#define CSRS_USER_TIMER(f) \
+  f(ustatus, CSR_USTATUS) f(uie, CSR_UIE) f(utvec, CSR_UTVEC) \
+  f(uscratch, CSR_USCRATCH) f(uepc, CSR_UEPC) f(ucause, CSR_UCAUSE) \
+  f(utval, CSR_UTVAL) f(uip, CSR_UIP) f(utimer, CSR_UTIMER)
+#else
+#define CSRS_USER_TIMER(f)
+#endif
+
 #define CUSTOM_CSR_SBPCTL     0x5c0
 #define CUSTOM_CSR_SPFCTL     0x5c1
 #define CUSTOM_CSR_SLVPREDCTL 0x5c2
@@ -109,6 +128,7 @@
 
 /** ALL **/
 #define CSRS_UNPRIV(f) \
+  CSRS_USER_TIMER(f) \
   CSRS_UNPRIV_FLOAT(f) \
   CSRS_UNPRIV_COUNTER_TIMERS(f) \
   CSRS_UNPRIV_VECTOR(f)
@@ -528,6 +548,8 @@
 
 #define CSR_STRUCT_DUMMY_LIST(list) \
   MAP(list, CSR_STRUCT_DUMMY)
+
+CSR_STRUCT_DUMMY_LIST(CSRS_USER_TIMER)
 
 /* Machine-Level CSR */
 
