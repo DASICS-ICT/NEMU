@@ -15,7 +15,7 @@
 
 #include <utils.h>
 #include <device/map.h>
-#ifdef CONFIG_DIFFTEST_UIT
+#ifdef CONFIG_RV_DASICS
 #include <isa.h>
 #include "../isa/riscv64/local-include/user-timer.h"
 #endif
@@ -120,7 +120,7 @@ static void init_fifo() {
 #endif
 
 static void serial_io_handler(uint32_t offset, int len, bool is_write) {
-#ifdef CONFIG_DIFFTEST_UIT
+#ifdef CONFIG_RV_DASICS
   uit_check_mmio(CONFIG_UARTLITE_MMIO + offset, len, is_write);
 #endif
 #ifdef CONFIG_UARTLITE_ASSERT_FOUR
@@ -132,7 +132,7 @@ static void serial_io_handler(uint32_t offset, int len, bool is_write) {
     /* We bind the serial port with the host stdout in NEMU. */
     case UARTLITE_TX_FIFO:
       if (is_write) {
-#ifdef CONFIG_DIFFTEST_UIT
+#ifdef CONFIG_RV_DASICS
           uit_record_tx(cpu.debug.current_pc, CONFIG_UARTLITE_MMIO + offset,
                         serial_base[UARTLITE_TX_FIFO], len);
 #endif
@@ -153,7 +153,7 @@ void init_uartlite() {
 #ifdef CONFIG_UARTLITE_PORT
   add_pio_map("uartlite", CONFIG_UARTLITE_PORT, serial_base, 0xd, serial_io_handler);
 #endif
-#ifdef CONFIG_DIFFTEST_UIT
+#ifdef CONFIG_RV_DASICS
   add_mmio_map_with_diff("uartlite", CONFIG_UARTLITE_MMIO, serial_base, 0xd, SKIP_FREE, serial_io_handler);
 #else
   add_mmio_map("uartlite", CONFIG_UARTLITE_MMIO, serial_base, 0xd, serial_io_handler);

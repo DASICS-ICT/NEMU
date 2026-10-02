@@ -14,6 +14,16 @@
 # See the Mulan PSL v2 for more details.
 #**************************************************************************************/
 
+ifneq ($(origin CONFIG_RV_USER_TIMER),undefined)
+  $(error RETIRED_DASICS_SELECTOR: CONFIG_RV_USER_TIMER; select CONFIG_RV_DASICS in Kconfig)
+endif
+ifneq ($(origin CONFIG_DIFFTEST_UIT),undefined)
+  $(error RETIRED_DASICS_SELECTOR: CONFIG_DIFFTEST_UIT; select CONFIG_RV_DASICS in Kconfig)
+endif
+ifneq ($(origin CONFIG_RV_DASICS),undefined)
+  $(error DASICS_MAKE_SELECTION_UNSUPPORTED: select CONFIG_RV_DASICS through a defconfig or menuconfig)
+endif
+
 ifeq ($(wildcard $(NEMU_HOME)/src/nemu-main.c),)
   $(error NEMU_HOME=$(NEMU_HOME) is not a NEMU repo)
 endif
@@ -130,6 +140,14 @@ include $(NEMU_HOME)/scripts/git.mk
 include $(NEMU_HOME)/scripts/config.mk
 include $(NEMU_HOME)/scripts/isa.mk
 include $(NEMU_HOME)/scripts/build.mk
+
+# Validate the generated selection before any native object or library build.
+# Kconfig alone may silently disable requests whose dependencies are absent.
+.PHONY: check-dasics-config
+check-dasics-config:
+	@python3 -B $(NEMU_HOME)/scripts/check-dasics-config.py .config --header include/generated/autoconf.h
+
+$(OBJS) $(LIBS) $(BINARY) $(BUILD_DIR)/lib$(NAME).a: | check-dasics-config
 
 ifdef CONFIG_DIFFTEST
 DIFF_REF_PATH = $(NEMU_HOME)/$(call remove_quote,$(CONFIG_DIFFTEST_REF_PATH))

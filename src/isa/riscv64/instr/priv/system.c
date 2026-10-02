@@ -50,7 +50,7 @@ int rtl_sys_slow_path(Decode *s, rtlreg_t *dest, const rtlreg_t *src1, uint32_t 
     }
     // is_jmp: ecall, ebreak, mret, sret, mnret
     int is_jmp = (id == 0) || (id == 1) || (id == 0x102) || (id == 0x302) ||
-      MUXDEF(CONFIG_RV_USER_TIMER, (id == 0x002), false) ||
+      MUXDEF(CONFIG_RV_DASICS, (id == 0x002), false) ||
       MUXDEF(CONFIG_RV_SMRNMI, (id == 0x702), false);
     return is_jmp;
   }

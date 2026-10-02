@@ -205,7 +205,7 @@ typedef struct {
   bool external_interrupt_select;
 #endif
 
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
   // Internal host handler context is never part of the legacy regcpy prefix.
   bool uit_in_handler;
 #endif

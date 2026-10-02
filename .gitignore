@@ -14,6 +14,9 @@
 !scripts/*.sh
 !scripts/checkpoint_example/*
 !tests/user-timer/*.py
+!tests/dasics/*.py
+!scripts/check-dasics-config.py
+!configs/riscv64-xs-dasics-ref_defconfig
 include/config
 include/generated
 build

@@ -24,7 +24,7 @@ def_EHelper(name) { \
 
 #if defined(CONFIG_DEBUG) || defined(CONFIG_SHARE)
 
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
 def_SYS_EHelper(uret)
 #endif
 

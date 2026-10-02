@@ -15,6 +15,7 @@
 ***************************************************************************************/
 
 #include "../local-include/csr.h"
+#include "../local-include/dasics.h"
 #include "../local-include/rtl.h"
 #include "../local-include/intr.h"
 #include "../local-include/trigger.h"
@@ -326,7 +327,7 @@ static inline bool csr_normal_permit_check(uint32_t addr) {
   bool has_vi = false;
   assert(addr < 4096);
   // Attempts to access a non-existent CSR raise an illegal instruction exception.
-  if(!csr_exist[addr]) {
+  if (!csr_exist[addr] && !MUXDEF(CONFIG_RV_DASICS, dasics_is_csr(addr), false)) {
     MUXDEF(CONFIG_PANIC_ON_UNIMP_CSR, panic("[NEMU] unimplemented CSR 0x%x", addr), longjmp_exception(EX_II));
   }
 
@@ -617,7 +618,8 @@ static inline word_t* csr_decode(uint32_t addr) {
                         (1 << EX_SWC) | \
                         (1 << EX_HWE))
 
-#define MEDELEG_MASK MUXDEF(CONFIG_RVH,  MEDELEG_RVH, MEDELEG_NONRVH)
+#define MEDELEG_MASK (MUXDEF(CONFIG_RVH, MEDELEG_RVH, MEDELEG_NONRVH) | \
+                     MUXDEF(CONFIG_RV_DASICS, 0x3000000ULL, 0))
 
 
 #define MIDELEG_WMASK_SSI (1 << 1)
@@ -1580,9 +1582,10 @@ bool iselect_is_major_ip(uint64_t iselect) {
 #endif
 
 static word_t csr_read(uint32_t csrid) {
+  IFDEF(CONFIG_RV_DASICS, if (dasics_is_csr(csrid)) return dasics_csr_read(csrid));
   word_t *src = csr_decode(csrid);
   switch (csrid) {
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
     case CSR_UTIMER: case CSR_UIP: return uit_read_sample(csrid);
 #endif
     /************************* Unprivileged and User-Level CSRs *************************/
@@ -1879,9 +1882,15 @@ void update_vsatp(const vsatp_t new_val) {
 #endif
 
 static void csr_write(uint32_t csrid, word_t src) {
+#ifdef CONFIG_RV_DASICS
+  if (dasics_is_csr(csrid)) {
+    dasics_csr_write(csrid, src);
+    return;
+  }
+#endif
   word_t *dest = csr_decode(csrid);
   switch (csrid) {
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
     case CSR_USTATUS: *dest = src & 0x11; break;
     case CSR_UIE: *dest = src & 0x10; break;
     case CSR_UTVEC: *dest = src & ~UINT64_C(3); break;
@@ -2688,10 +2697,12 @@ static inline bool smstateen_extension_permit_check(const uint32_t addr) {
     if ((cpu.mode < MODE_M) && (!mstateen0->c)) { longjmp_exception(EX_II); }
 #ifdef CONFIG_RVH
     else if (cpu.v && (!hstateen0->c)) { has_vi = true; }
-    else if (cpu.v && (cpu.mode == MODE_U) && (!sstateen0->c)) { has_vi = true; }
-#else // !CONFIG_RVH
-    else if ((cpu.mode == MODE_U) && (!sstateen0->c)) { longjmp_exception(EX_II); }
 #endif // CONFIG_RVH
+    else if ((cpu.mode == MODE_U) && (!sstateen0->c)) {
+      /* Host U custom access requires both stateen levels even with RVH. */
+      if (MUXDEF(CONFIG_RVH, cpu.v, false)) { has_vi = true; }
+      else { longjmp_exception(EX_II); }
+    }
   }
 
   return has_vi;
@@ -2862,7 +2873,13 @@ static inline bool csrind_permit_check(const word_t *dest_access) {
 #endif // CONFIG_RV_IMSIC
 
 static inline void csr_permit_check(uint32_t addr, bool is_write) {
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
+  if (dasics_is_csr(addr)) {
+    /* cpu.pc may already be the next PC. The saved decode owns the source PC
+     * in both interpreter paths, and this policy observes the prewrite bank. */
+    extern Decode *prev_s;
+    if (!dasics_csr_source_permitted(prev_s->pc)) longjmp_exception(EX_II);
+  }
   if (uit_is_csr(addr)) {
     if (!uit_csr_permitted()) longjmp_exception(EX_II);
     return;
@@ -2902,7 +2919,7 @@ static inline void csr_permit_check(uint32_t addr, bool is_write) {
   if (has_vi) longjmp_exception(EX_VI);
 }
 
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
 bool uit_csr_permitted(void) {
   if (cpu.v) return false;
   if (cpu.mode == MODE_M) return true;
@@ -2930,7 +2947,7 @@ static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, uint32_t 
   uint32_t funct3 = isa.instr.i.funct3;
   bool is_write = !( BITS(funct3, 1, 1) && (rs1 == 0) );
   csr_permit_check(csrid, is_write);
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
   if (uit_is_csr(csrid)) {
     bool reads = (funct3 == FUNCT3_CSRRW || funct3 == FUNCT3_CSRRWI) ? rd != 0 : true;
     uit_validate_csr_access(csrid, reads);
@@ -2944,14 +2961,14 @@ static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, uint32_t 
         *dest = csr_read(csrid);
       }
       csr_write(csrid, *src);
-      IFDEF(CONFIG_RV_USER_TIMER, if (uit_is_csr(csrid)) uit_note_csr_write(*src));
+      IFDEF(CONFIG_RV_DASICS, if (uit_is_csr(csrid)) uit_note_csr_write(*src));
       break;
     case FUNCT3_CSRRS:
     case FUNCT3_CSRRSI:
       *dest = csr_read(csrid);
       if (rs1) {
         csr_write(csrid, *src | *dest);
-        IFDEF(CONFIG_RV_USER_TIMER, if (uit_is_csr(csrid)) uit_note_csr_write(*src | *dest));
+        IFDEF(CONFIG_RV_DASICS, if (uit_is_csr(csrid)) uit_note_csr_write(*src | *dest));
       }
       break;
     case FUNCT3_CSRRC:
@@ -2959,7 +2976,7 @@ static void csrrw(rtlreg_t *dest, const rtlreg_t *src, uint32_t csrid, uint32_t 
       *dest = csr_read(csrid);
       if (rs1) {
         csr_write(csrid, (~*src) & *dest);
-        IFDEF(CONFIG_RV_USER_TIMER, if (uit_is_csr(csrid)) uit_note_csr_write((~*src) & *dest));
+        IFDEF(CONFIG_RV_DASICS, if (uit_is_csr(csrid)) uit_note_csr_write((~*src) & *dest));
       }
       break;
     default: panic("funct3 = %d is not supported for csrrw instruction\n", funct3);
@@ -3059,7 +3076,7 @@ static bool __attribute__((unused)) vsretTo (cpu_mode_t mode) {
 
 static word_t priv_instr(uint32_t op, const rtlreg_t *src) {
   switch (op) {
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
     case 0x002: return uit_return();
 #endif
 #ifndef CONFIG_MODE_USER

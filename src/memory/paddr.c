@@ -17,7 +17,7 @@
 #include <isa.h>
 #include <memory/host.h>
 #include <memory/paddr.h>
-#ifdef CONFIG_DIFFTEST_UIT
+#ifdef CONFIG_RV_DASICS
 #include "../isa/riscv64/local-include/user-timer.h"
 #endif
 #include <memory/store_queue_wrapper.h>
@@ -259,7 +259,7 @@ word_t paddr_read(paddr_t addr, int len, int type, int trap_type, int mode, vadd
   if (!check_paddr(addr, len, type, trap_type, mode, vaddr)) {
     return 0;
   }
-  IFDEF(CONFIG_DIFFTEST_UIT, if (!in_pmem(addr)) uit_check_mmio(addr, len, false));
+  IFDEF(CONFIG_RV_DASICS, if (!in_pmem(addr)) uit_check_mmio(addr, len, false));
 #ifndef CONFIG_SHARE
   if (likely(in_pmem(addr))) return pmem_read(addr, len);
   else {
@@ -397,7 +397,7 @@ void paddr_write(paddr_t addr, int len, word_t data, int mode, vaddr_t vaddr) {
   if (!check_paddr(addr, len, MEM_TYPE_WRITE, MEM_TYPE_WRITE, mode, vaddr)) {
     return;
   }
-  IFDEF(CONFIG_DIFFTEST_UIT, if (!in_pmem(addr)) uit_check_mmio(addr, len, true));
+  IFDEF(CONFIG_RV_DASICS, if (!in_pmem(addr)) uit_check_mmio(addr, len, true));
 #ifndef CONFIG_SHARE
   if (likely(in_pmem(addr))) pmem_write(addr, len, data, cross_page_store);
   else {

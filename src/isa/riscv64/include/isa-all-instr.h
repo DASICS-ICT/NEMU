@@ -61,7 +61,7 @@
 #else
 #define SYS_NMI_NULLARY(f)
 #endif
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
 #define SYS_UIT_NULLARY(f) f(uret)
 #else
 #define SYS_UIT_NULLARY(f)

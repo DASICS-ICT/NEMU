@@ -38,7 +38,7 @@
 #define CSR_UIP 0x044
 #define CSR_UTIMER 0x800
 
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
 #define CSRS_USER_TIMER(f) \
   f(ustatus, CSR_USTATUS) f(uie, CSR_UIE) f(utvec, CSR_UTVEC) \
   f(uscratch, CSR_USCRATCH) f(uepc, CSR_UEPC) f(ucause, CSR_UCAUSE) \

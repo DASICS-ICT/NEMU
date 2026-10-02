@@ -42,15 +42,22 @@ $(FIXDEP):
 	$(Q)$(MAKE) $(silent) -C $(FIXDEP_PATH)
 
 menuconfig: $(MCONF) $(CONF) $(FIXDEP)
+	$(Q)if test -f .config; then python3 -B $(NEMU_HOME)/scripts/check-dasics-config.py .config; fi
 	$(Q)$(MCONF) $(Kconfig)
 	$(Q)$(CONF) $(silent) --syncconfig $(Kconfig)
+	$(Q)python3 -B $(NEMU_HOME)/scripts/check-dasics-config.py .config --header include/generated/autoconf.h
 
 savedefconfig: $(CONF)
 	$(Q)$< $(silent) --$@=configs/defconfig $(Kconfig)
 
 %defconfig: $(CONF) $(FIXDEP)
+	$(Q)python3 -B $(NEMU_HOME)/scripts/check-dasics-config.py configs/$@
 	$(Q)$< $(silent) --defconfig=configs/$@ $(Kconfig)
 	$(Q)$< $(silent) --syncconfig $(Kconfig)
+	$(Q)python3 -B $(NEMU_HOME)/scripts/check-dasics-config.py .config --header include/generated/autoconf.h --requested configs/$@
+
+riscv64-xs-uit06-ref_defconfig riscv64-xs-uit06-off-ref_defconfig:
+	$(Q)python3 -B $(NEMU_HOME)/scripts/check-dasics-config.py configs/$@
 
 .PHONY: menuconfig savedefconfig defconfig
 

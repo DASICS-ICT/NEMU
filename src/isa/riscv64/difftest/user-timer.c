@@ -5,8 +5,7 @@
 #include "../local-include/csr.h"
 #include "../local-include/user-timer.h"
 
-#define UIT_ENABLED_FEATURES MUXDEF(CONFIG_DIFFTEST_UIT, \
-  (DIFFTEST_UIT_F_UART_TX | MUXDEF(CONFIG_RV_USER_TIMER, DIFFTEST_UIT_FEATURES, 0)), 0)
+#define UIT_ENABLED_FEATURES MUXDEF(CONFIG_RV_DASICS, DIFFTEST_UIT_FEATURES, 0)
 
 int32_t difftest_uit_query_caps(void *out, uint32_t out_bytes) {
   if (!out || out_bytes != sizeof(DifftestUitCaps)) return DIFFTEST_UIT_E_ABI;
@@ -26,7 +25,7 @@ int32_t difftest_uit_query_caps(void *out, uint32_t out_bytes) {
   return DIFFTEST_UIT_OK;
 }
 
-#ifdef CONFIG_DIFFTEST_UIT
+#ifdef CONFIG_RV_DASICS
 #if !defined(CONFIG_HAS_UARTLITE) || CONFIG_UARTLITE_MMIO != 0x40600000
 #error "Controlled user timer reference requires UARTLite TX at 0x40600004"
 #endif
@@ -59,7 +58,7 @@ static void reset_user_bank(void) {
   const uint16_t addresses[] = { CSR_USTATUS, CSR_UIE, CSR_UTVEC, CSR_USCRATCH,
     CSR_UEPC, CSR_UCAUSE, CSR_UTVAL, CSR_UIP, CSR_UTIMER };
   for (size_t i = 0; i < sizeof(addresses) / sizeof(addresses[0]); i++) csr_array[addresses[i]] = 0;
-  IFDEF(CONFIG_RV_USER_TIMER, cpu.uit_in_handler = false);
+  IFDEF(CONFIG_RV_DASICS, cpu.uit_in_handler = false);
 }
 
 void uit_reset(void) {
@@ -92,7 +91,7 @@ static _Noreturn void protocol_abort(int32_t error) {
 
 void uit_validate_fetched(uint64_t pc, uint32_t instruction) {
   uint32_t funct3 = (instruction >> 12) & 7;
-  bool controlled = (ISDEF(CONFIG_RV_USER_TIMER) && instruction == UINT32_C(0x00200073)) ||
+  bool controlled = (ISDEF(CONFIG_RV_DASICS) && instruction == UINT32_C(0x00200073)) ||
     ((instruction & 0x7f) == 0x73 && funct3 != 0 && uit_is_csr(instruction >> 20));
   if (!uit.active) {
     if (controlled) protocol_abort(uit.initialized ? DIFFTEST_UIT_E_STATE : DIFFTEST_UIT_E_UNSUPPORTED);
@@ -217,7 +216,7 @@ int32_t difftest_uit_exec(const void *input, uint32_t input_bytes, void *out, ui
 }
 
 int32_t difftest_uit_raise_event(const void *input, uint32_t input_bytes) {
-#ifndef CONFIG_RV_USER_TIMER
+#ifndef CONFIG_RV_DASICS
   return DIFFTEST_UIT_E_FEATURE;
 #else
   if (!input || input_bytes != sizeof(DifftestUitHUEvent)) return DIFFTEST_UIT_E_ABI;
@@ -252,7 +251,7 @@ int32_t difftest_uit_get_state(void *out, uint32_t out_bytes) {
     .uscratch = csr_array[CSR_USCRATCH], .uepc = csr_array[CSR_UEPC],
     .ucause = csr_array[CSR_UCAUSE], .utval = csr_array[CSR_UTVAL],
     .pc = cpu.pc, .mode = cpu.mode, .v = cpu.v,
-    .in_handler = MUXDEF(CONFIG_RV_USER_TIMER, cpu.uit_in_handler, 0)
+    .in_handler = MUXDEF(CONFIG_RV_DASICS, cpu.uit_in_handler, 0)
   };
   memcpy(out, &state, sizeof(state));
   return DIFFTEST_UIT_OK;

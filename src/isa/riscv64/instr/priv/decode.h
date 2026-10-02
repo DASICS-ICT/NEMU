@@ -88,7 +88,7 @@ def_THelper(mop_rr) {
 #if defined(CONFIG_DEBUG) || defined(CONFIG_SHARE)
 #ifdef CONFIG_RVH
 def_THelper(system) {
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
   def_INSTR_IDTAB("000000000010 00000 000 00000 11100 11", csr, uret);
 #endif
   def_INSTR_IDTAB("000000000000 00000 000 00000 ????? ??", csr, ecall);

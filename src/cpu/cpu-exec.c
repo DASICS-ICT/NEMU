@@ -30,7 +30,7 @@
 #include "../local-include/trigger.h"
 #include "../local-include/aia.h"
 #include "macro.h"
-#ifdef CONFIG_DIFFTEST_UIT
+#ifdef CONFIG_RV_DASICS
 #include "../local-include/user-timer.h"
 #endif
 
@@ -202,7 +202,7 @@ _Noreturn void longjmp_context(int cause) {
 }
 
 _Noreturn void longjmp_exception(int ex_cause) {
-  IFDEF(CONFIG_DIFFTEST_UIT, uit_note_exception(ex_cause));
+  IFDEF(CONFIG_RV_DASICS, uit_note_exception(ex_cause));
   if (context_idx == 0) {
     // context_idx == 0 means only the execute loop context saved.
   #ifdef CONFIG_GUIDED_EXEC
@@ -682,7 +682,7 @@ static void execute(int n) {
     cpu.amo = false;
     cpu.pbmt = 0;
     fetch_decode(&s, cpu.pc);
-    IFDEF(CONFIG_DIFFTEST_UIT, uit_validate_fetched(s.pc, s.isa.instr.val));
+    IFDEF(CONFIG_RV_DASICS, uit_validate_fetched(s.pc, s.isa.instr.val));
     cpu.debug.current_pc = s.pc;
     cpu.pc = s.snpc;
 #ifdef CONFIG_SHARE
@@ -692,7 +692,7 @@ static void execute(int n) {
     }
 #endif
     s.EHelper(&s);
-    IFDEF(CONFIG_DIFFTEST_UIT, uit_note_retirement());
+    IFDEF(CONFIG_RV_DASICS, uit_note_retirement());
 
     IFDEF(CONFIG_INSTR_CNT_BY_INSTR, g_nr_guest_instr += 1);
 
@@ -755,7 +755,7 @@ static void update_global() {
 
 /* Simulate how the CPU works. */
 void cpu_exec(uint64_t n) {
-  IFDEF(CONFIG_DIFFTEST_UIT, uit_note_execution());
+  IFDEF(CONFIG_RV_DASICS, uit_note_execution());
   #ifndef CONFIG_LIGHTQS
     IFDEF(CONFIG_SHARE, assert(n <= 1));
   #endif

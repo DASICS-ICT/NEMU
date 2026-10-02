@@ -915,6 +915,8 @@ def main():
     parser.add_argument("--jobs", type=int, default=min(os.cpu_count() or 1, 8))
     parser.add_argument("--case", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.expect_enabled == 0:
+        parser.error("legacy UIT-off enabled=0x20 is retired; use tests/dasics/run-model-tests.py for DASICS off; frozen historical drivers retain their original contract")
     args.reference = args.reference.resolve(strict=True)
     if args.case:
         try:

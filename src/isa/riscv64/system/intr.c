@@ -24,7 +24,7 @@
 void update_mmu_state();
 void clear_trapinfo();
 
-#ifdef CONFIG_RV_USER_TIMER
+#ifdef CONFIG_RV_DASICS
 int32_t uit_enter_hu(void) {
   if (cpu.mode != MODE_U || cpu.v || cpu.uit_in_handler || !uit_csr_permitted() ||
       !(ustatus->val & 1) || !(uie->val & 0x10) ||
@@ -92,7 +92,7 @@ static word_t get_trap_pc(word_t xtvec, word_t xcause) {
 }
 
 word_t raise_intr(word_t NO, vaddr_t epc) {
-  IFDEF(CONFIG_DIFFTEST_UIT, if (!(NO & INTR_BIT)) uit_note_exception(NO));
+  IFDEF(CONFIG_RV_DASICS, if (!(NO & INTR_BIT)) uit_note_exception(NO));
   Logti("raise intr cause NO: %ld, epc: %lx\n", NO, epc);
 #ifdef CONFIG_DIFFTEST_REF_SPIKE
   switch (NO) {

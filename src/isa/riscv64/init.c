@@ -18,6 +18,7 @@
 #include <memory/paddr.h>
 #include <memory/sparseram.h>
 #include "local-include/csr.h"
+#include "local-include/dasics.h"
 #include "local-include/user-timer.h"
 
 void init_csr();
@@ -46,7 +47,8 @@ void init_isa() {
     memset(csr_array, 0, sizeof(csr_array));
   }
   init_csr();
-  IFDEF(CONFIG_DIFFTEST_UIT, uit_reset());
+  IFDEF(CONFIG_RV_DASICS, dasics_reset());
+  IFDEF(CONFIG_RV_DASICS, uit_reset());
 
   init_custom_csr();
 
@@ -134,7 +136,7 @@ void init_isa() {
 
 #define ext(e) (1 << ((e) - 'a'))
   misa->extensions = ext('i') | ext('m') | ext('a') | ext('c') | ext('s') | ext('u');
-  IFDEF(CONFIG_RV_USER_TIMER, misa->extensions |= ext('x'));
+  IFDEF(CONFIG_RV_DASICS, misa->extensions |= ext('x'));
 #ifndef CONFIG_FPU_NONE
   misa->extensions |= ext('d') | ext('f');
 #endif // CONFIG_FPU_NONE
