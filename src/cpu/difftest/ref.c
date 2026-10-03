@@ -21,6 +21,9 @@
 #include <memory/sparseram.h>
 #include <cpu/cpu.h>
 #include <difftest.h>
+#ifdef CONFIG_RV_DASICS
+#include "../local-include/dasics.h"
+#endif
 
 extern void load_flash_contents(const char *flash_img);
 
@@ -340,6 +343,7 @@ void difftest_runahead_init() {
 }
 
 void difftest_init() {
+  IFDEF(CONFIG_RV_DASICS, fdi_check_reset());
 #ifdef CONFIG_SHARE_OUTPUT_LOG_TO_FILE
   char log_file_name[20];
   sprintf(log_file_name, "nemu-hart-%d.log", PMEM_HARTID);

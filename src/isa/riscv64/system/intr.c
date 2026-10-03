@@ -20,6 +20,7 @@
 #include "../local-include/intr.h"
 #include "../local-include/aia.h"
 #include "../local-include/user-timer.h"
+#include "../local-include/dasics.h"
 
 void update_mmu_state();
 void clear_trapinfo();
@@ -32,6 +33,7 @@ int32_t uit_enter_hu(void) {
       MUXDEF(CONFIG_RV_SMRNMI, !mnstatus->nmie, false)) {
     return DIFFTEST_UIT_E_CONTEXT;
   }
+  fdi_note_execution();
   // The event supplies timing, never the architectural return PC or target.
   uepc->val = cpu.pc & ~UINT64_C(1);
   ucause->val = INTR_BIT | IRQ_UTIP;
@@ -92,6 +94,8 @@ static word_t get_trap_pc(word_t xtvec, word_t xcause) {
 }
 
 word_t raise_intr(word_t NO, vaddr_t epc) {
+  /* External trap injection advances the model without passing cpu_exec. */
+  IFDEF(CONFIG_RV_DASICS, fdi_note_execution());
   IFDEF(CONFIG_RV_DASICS, if (!(NO & INTR_BIT)) uit_note_exception(NO));
   Logti("raise intr cause NO: %ld, epc: %lx\n", NO, epc);
 #ifdef CONFIG_DIFFTEST_REF_SPIKE

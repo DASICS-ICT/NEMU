@@ -66,6 +66,11 @@
 
 #ifdef CONFIG_RV_DASICS
 void dasics_reset(void);
+bool dasics_export_state(uint64_t words[52]);
+void fdi_check_reset(void);
+void fdi_note_reset(void);
+void fdi_note_execution(void);
+void fdi_check_import(void);
 bool dasics_is_csr(uint32_t address);
 word_t dasics_csr_read(uint32_t address);
 void dasics_csr_write(uint32_t address, word_t value);

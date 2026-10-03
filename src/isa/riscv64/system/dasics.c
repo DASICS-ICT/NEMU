@@ -57,6 +57,38 @@ void dasics_reset(void) {
   memset(&dasics_bank, 0, sizeof(dasics_bank));
 }
 
+/* Check raw storage before deriving the U alias. CSR reads alone would hide
+ * reserved-bit corruption and therefore cannot establish export canonicality. */
+bool dasics_export_state(uint64_t words[52]) {
+  if ((dasics_bank.main_cfg & ~DASICS_SMAINCFG_MASK) ||
+      (dasics_bank.lib_cfg & ~DASICS_LIBCFG_MASK) ||
+      (dasics_bank.jump_cfg & ~DASICS_JUMPCFG_MASK) ||
+      (dasics_bank.freason & ~DASICS_FREASON_MASK)) return false;
+  for (size_t i = 0; i < 2; i++) {
+    if ((dasics_bank.s_main_bound[i] | dasics_bank.u_main_bound[i]) & ~DASICS_BOUND_MASK)
+      return false;
+  }
+  for (size_t i = 0; i < 32; i++) {
+    if (dasics_bank.lib_bound[i] & ~DASICS_BOUND_MASK) return false;
+  }
+  for (size_t i = 0; i < 8; i++) {
+    if (dasics_bank.jump_bound[i] & ~DASICS_BOUND_MASK) return false;
+  }
+  words[0] = dasics_bank.main_cfg;
+  words[1] = dasics_bank.main_cfg & DASICS_UMAINCFG_MASK;
+  memcpy(words + 2, dasics_bank.s_main_bound, sizeof(dasics_bank.s_main_bound));
+  memcpy(words + 4, dasics_bank.u_main_bound, sizeof(dasics_bank.u_main_bound));
+  words[6] = dasics_bank.lib_cfg;
+  memcpy(words + 7, dasics_bank.lib_bound, sizeof(dasics_bank.lib_bound));
+  words[39] = dasics_bank.main_call_entry;
+  words[40] = dasics_bank.return_pc;
+  words[41] = dasics_bank.active_zone_return_pc;
+  words[42] = dasics_bank.freason;
+  words[43] = dasics_bank.jump_cfg;
+  memcpy(words + 44, dasics_bank.jump_bound, sizeof(dasics_bank.jump_bound));
+  return true;
+}
+
 bool dasics_is_csr(uint32_t address) {
   return dasics_csr_view(address).backing != NULL;
 }

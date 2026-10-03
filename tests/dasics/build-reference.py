@@ -25,7 +25,8 @@ HOOKS = ("uit_note_execution", "uit_note_retirement", "uit_validate_fetched", "u
          "uit_record_tx", "uit_check_import")
 EXPORTS = ("difftest_init", "difftest_set_ramsize", "difftest_regcpy", "difftest_csrcpy",
            "difftest_memcpy", "difftest_exec", "difftest_uit_query_caps", "difftest_uit_init",
-           "difftest_uit_exec", "difftest_uit_raise_event", "difftest_uit_get_state", "difftest_uit_read_tx")
+           "difftest_uit_exec", "difftest_uit_raise_event", "difftest_uit_get_state", "difftest_uit_read_tx",
+           "difftest_fdi_query_caps", "difftest_fdi_capture_reset", "difftest_fdi_init", "difftest_fdi_get_state")
 
 
 def require(condition, message):
@@ -82,6 +83,34 @@ def probe_child(reference, enabled):
     require(caps == expected, f"REFERENCE_CAPABILITY_MISMATCH: {caps}")
     require(query(pointer, 63) == -1, "REFERENCE_QUERY_SIZE_NOT_REJECTED")
     guards(raw, 64, "query rejected size")
+    fdi_query = library.difftest_fdi_query_caps
+    fdi_query.argtypes, fdi_query.restype = [C.c_void_p, C.c_uint32], C.c_int32
+    fdi_buffer, fdi_pointer = guarded(64)
+    require(fdi_query(fdi_pointer, 64) == 0, "FDI_CAPABILITIES_QUERY_FAILED")
+    guards(fdi_buffer, 64, "FDI capabilities")
+    fdi_fields = ("version", "bytes", "state_bytes", "projection_words", "supported_features", "enabled_features",
+                  "xlen", "max_harts", "init_bytes", "projection_version", "machine_abi_major", "reserved32", "reserved64")
+    fdi_values = struct.unpack("<IIIIQQIIIIIIQ", bytes(fdi_buffer)[32:96])
+    require(fdi_values == (0x10000, 64, 448, 52, 3, 3 if enabled else 0, 64, 1, 32, 1, 2, 0, 0),
+            "FDI_CAPABILITIES_MISMATCH")
+    fdi_caps = dict(zip(fdi_fields, fdi_values))
+    fdi_epoch = 0xD010000000000001
+
+    def fdi_snapshot(name, phase, epoch, pc, expected_words):
+        function = getattr(library, "difftest_fdi_" + name)
+        function.argtypes, function.restype = [C.c_uint32, C.c_void_p, C.c_uint32], C.c_int32
+        data, pointer = guarded(448)
+        before = bytes(data)
+        require(function(0, pointer, 448) == (0 if enabled else -2), "FDI_STATE_STATUS: " + name)
+        guards(data, 448, name)
+        if not enabled:
+            require(bytes(data) == before, "FDI_DISABLED_OUTPUT_CHANGED: " + name)
+            return None
+        values = struct.unpack("<IIIIQQ52Q", bytes(data)[32:480])
+        require(values[:6] == (0x10000, 448, 0, phase, epoch, pc), "FDI_STATE_HEADER: " + name)
+        require(list(values[6:]) == expected_words, "FDI_RAW_PROJECTION_MISMATCH: " + name)
+        return {"phase": phase, "epoch": epoch, "model_pc": pc, "words": list(values[6:])}
+
     library.difftest_set_ramsize.argtypes, library.difftest_set_ramsize.restype = [C.c_size_t], None
     library.difftest_set_ramsize(16 << 20)
     library.difftest_init.argtypes, library.difftest_init.restype = [], None
@@ -106,6 +135,7 @@ def probe_child(reference, enabled):
     base, sentinel = 0x80000000, 0x123456789abcdef0
     regs = read("regcpy", 1400)
     require(regs[64] == 3, "REFERENCE_INITIAL_MODE_MISMATCH")
+    fdi_reset = fdi_snapshot("capture_reset", 0, 0, regs[82], [0] * 52)
     regs[5], regs[7], regs[10], regs[71], regs[82] = sentinel, 0x7ff, sentinel, base + 0x1000, base
     write("regcpy", regs)
     require(bytes(read("regcpy", 1400)) == bytes(regs), "REGCPY_SENTINEL_MISMATCH")
@@ -125,6 +155,13 @@ def probe_child(reference, enabled):
     payload = C.create_string_buffer(struct.pack("<" + "I" * len(instructions), *instructions))
     library.difftest_memcpy.argtypes, library.difftest_memcpy.restype = [C.c_uint64, C.c_void_p, C.c_size_t, C.c_bool], None
     library.difftest_memcpy(base, payload, 4 * len(instructions), True)
+    fdi_init = library.difftest_fdi_init
+    fdi_init.argtypes, fdi_init.restype = [C.c_void_p, C.c_uint32], C.c_int32
+    init_data, init_pointer = guarded(32)
+    C.memmove(init_pointer, struct.pack("<IIIIQQ", 0x10000, 32, 0, 0, fdi_epoch, 3), 32)
+    init_before = bytes(init_data)
+    require(fdi_init(init_pointer, 32) == (0 if enabled else -2), "FDI_INITIALIZATION_STATUS")
+    require(bytes(init_data) == init_before, "FDI_INITIALIZATION_INPUT_CHANGED")
     library.difftest_exec.argtypes, library.difftest_exec.restype = [C.c_uint64], None
     for _ in instructions:
         library.difftest_exec(1)
@@ -138,6 +175,7 @@ def probe_child(reference, enabled):
     else:
         require(final[10] == sentinel and final_csrs[0x342] == 2 and final_csrs[0x341] == base + 4
                 and final[82] == base + 0x1000, "FDI_OFF_ILLEGAL_PROBE_MISMATCH")
+    fdi_current = fdi_snapshot("get_state", 1, fdi_epoch, final[82], [0x3d, 0] + [0] * 50)
     stubs = {}
     if not enabled:
         for name, size in (("init", 32), ("raise_event", 64), ("get_state", 112), ("read_tx", 64)):
@@ -162,8 +200,12 @@ def probe_child(reference, enabled):
             "final_x6": final[6], "final_x10_x13": list(final[10:14]), "final_pc": final[82],
             "fdi_csr_smoke": enabled, "fdi_off_illegal": not enabled, "stub_probes": stubs,
             "uit_initializations": 0, "dut_executions": 0,
-            "scope": "Local ABI and CSR smoke; comprehensive semantics require the separate model tests",
-            "fdi_transport": False, "fdi_difftest_comparison": False, "uit_fdi_policy": False}
+            "scope": "Reference ABI, encoded CSR smoke and independent FDI export; no DUT transport/comparison validation",
+            "reference_fdi_caps": fdi_caps, "reference_fdi_reset": fdi_reset, "reference_fdi_current": fdi_current,
+            "reference_fdi_reset_validated": enabled, "reference_fdi_export_validated": enabled,
+            "reference_fdi_disabled_rejections_validated": not enabled,
+            "dut_fdi_transport_validated": False, "fdi_difftest_comparison": False, "uit_fdi_policy": False,
+            "full_a02_on_admission": False}
 
 
 def build(args):
@@ -176,7 +218,7 @@ def build(args):
     require(original_helper.is_file(), "MISSING_INTEGRATION_EVIDENCE_HELPER")
     output = args.output.absolute()
     require(output == output.resolve(), "OUTPUT_PATH_ALIAS")
-    require(output.is_relative_to(integration / "build/dasics/m01-nemu-csr"), "OUTPUT_OUTSIDE_M01_EVIDENCE_ROOT")
+    require(output.is_relative_to(integration / "build/dasics" / args.evidence_task), "OUTPUT_OUTSIDE_TASK_EVIDENCE_ROOT")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.mkdir(exist_ok=False)
     drivers = output / "drivers"
@@ -186,7 +228,7 @@ def build(args):
     common = load_module(drivers / original_helper.name, "m01_frozen_common")
     record = {"status": "RUNNING", "started": common.now(), "host": HOST,
               "argv": [sys.executable, "-B", *sys.argv], "dasics": args.dasics,
-              "mode": args.mode, "jobs": args.jobs, "output": str(output)}
+              "mode": args.mode, "jobs": args.jobs, "output": str(output), "evidence_task": args.evidence_task}
     common.write_json(output / "started.json", record)
     try:
         enabled = args.dasics == "on"
@@ -270,7 +312,13 @@ def build(args):
             "model_implemented": ["baseline", "fdi_csrs"] if enabled else ["baseline"],
             "validated": ["ordinary_abi", "ordinary_addi", "fdi_csr_smoke" if enabled else "fdi_off_illegal"],
             "model_fdi_observation": "encoded CSR reads to ordinary GPRs" if enabled else None,
-            "fdi_transport": False, "fdi_difftest_comparison": False, "uit_fdi_policy": False,
+            "reference_fdi_caps": report["reference_fdi_caps"],
+            "reference_fdi_reset_validated": report["reference_fdi_reset_validated"],
+            "reference_fdi_export_validated": report["reference_fdi_export_validated"],
+            "reference_fdi_disabled_rejections_validated": report["reference_fdi_disabled_rejections_validated"],
+            # These fields describe validation scope, not inferred hardware capabilities.
+            "dut_fdi_transport_validated": False, "fdi_difftest_comparison": False, "uit_fdi_policy": False,
+            "scope": "Reference export only; DUT transport/comparison and complete FDI/UIT composition are unvalidated",
             "full_a02_on_admission": False, "probe": "probe.json", "probe_exit_code": receipt["exit_code"]})
         artifact_paths = [reference, source / ".config", source / "include/generated/autoconf.h",
                           source / "include/config/auto.conf", source / "lib-include/difftest-user-timer.h",
@@ -301,6 +349,7 @@ def main():
     parser.add_argument("--integration-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dasics", choices=("off", "on"), required=True)
+    parser.add_argument("--evidence-task", choices=("m01-nemu-csr", "d01-state-record"), default="m01-nemu-csr")
     parser.add_argument("--mode", choices=("shared", "standalone"), default="shared")
     parser.add_argument("--jobs", type=int, default=4)
     args = parser.parse_args()

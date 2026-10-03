@@ -32,6 +32,7 @@
 #include "macro.h"
 #ifdef CONFIG_RV_DASICS
 #include "../local-include/user-timer.h"
+#include "../local-include/dasics.h"
 #endif
 
 /* The assembly code of instructions executed is only output to the screen
@@ -755,6 +756,7 @@ static void update_global() {
 
 /* Simulate how the CPU works. */
 void cpu_exec(uint64_t n) {
+  IFDEF(CONFIG_RV_DASICS, if (n) fdi_note_execution());
   IFDEF(CONFIG_RV_DASICS, uit_note_execution());
   #ifndef CONFIG_LIGHTQS
     IFDEF(CONFIG_SHARE, assert(n <= 1));

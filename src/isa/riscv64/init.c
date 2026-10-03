@@ -39,6 +39,7 @@ void init_device();
 #define CSR_ZERO_INIT(name, addr) name->val = 0;
 
 void init_isa() {
+  IFDEF(CONFIG_RV_DASICS, fdi_note_reset());
   // NEMU has some cached states and some static variables in the source code.
   // They are assumed to have initialized states every time when the dynamic lib is loaded.
   // However, if we link NEMU as a static library, we have to manually initialize them.
