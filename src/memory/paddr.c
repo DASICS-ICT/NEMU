@@ -246,6 +246,28 @@ bool check_paddr(paddr_t addr, int len, int type, int trap_type, int mode, vaddr
   return true;
 }
 
+#ifdef CONFIG_RV_DASICS
+/* Probe the same physical permission and mapping rules without invoking a
+ * device callback, reading target data or publishing a store-commit record. */
+void paddr_check_data_access(paddr_t addr, int len, int type, vaddr_t vaddr, bool cross_page) {
+  assert(type == MEM_TYPE_READ || type == MEM_TYPE_WRITE);
+  if (cpu.pbmt != 0) isa_mmio_misalign_data_addr_check(addr, vaddr, len, type, cross_page);
+  if (!check_paddr(addr, len, type, type, cpu.mode, vaddr)) return;
+  if (in_pmem(addr)) return;
+  /* Shared reads expose MMIO only when flash support is compiled in; stores
+   * use the existing device map independently of that read-side selection. */
+  if (type == MEM_TYPE_WRITE || ISDEF(CONFIG_HAS_FLASH)) {
+    if (is_in_mmio(addr)) {
+      isa_mmio_misalign_data_addr_check(addr, vaddr, len, type, cross_page);
+      if (MUXDEF(CONFIG_ENABLE_CONFIG_MMIO_SPACE, mmio_is_real_device(addr), true)) return;
+      raise_access_fault(type == MEM_TYPE_WRITE ? EX_SAF : EX_LAF, vaddr);
+    }
+  }
+  if (!dynamic_config.ignore_illegal_mem_access)
+    raise_access_fault(type == MEM_TYPE_WRITE ? EX_SAF : EX_LAF, vaddr);
+}
+#endif
+
 word_t paddr_read(paddr_t addr, int len, int type, int trap_type, int mode, vaddr_t vaddr) {
 
   __attribute__((unused)) int cross_page_load = (mode & CROSS_PAGE_LD_FLAG) != 0;

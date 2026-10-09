@@ -2,20 +2,24 @@
 // CONFIG_RV_ZFH_MIN
 #ifdef CONFIG_RV_ZFH_MIN
 def_EHelper(flh) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 2, MEM_TYPE_READ, MMU_DIRECT));
   rtl_lm(s, ddest, dsrc1, id_src2->imm, 2, MMU_DIRECT);
   rtl_fsr(s, ddest, ddest, FPCALL_W16);
 }
 
 def_EHelper(fsh) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 2, MEM_TYPE_WRITE, MMU_DIRECT));
   rtl_sm(s, ddest, dsrc1, id_src2->imm, 2, MMU_DIRECT);
 }
 
 def_EHelper(flh_mmu) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 2, MEM_TYPE_READ, MMU_TRANSLATE));
   rtl_lm(s, ddest, dsrc1, id_src2->imm, 2, MMU_TRANSLATE);
   rtl_fsr(s, ddest, ddest, FPCALL_W16);
 }
 
 def_EHelper(fsh_mmu) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 2, MEM_TYPE_WRITE, MMU_TRANSLATE));
   rtl_sm(s, ddest, dsrc1, id_src2->imm, 2, MMU_TRANSLATE);
 }
 

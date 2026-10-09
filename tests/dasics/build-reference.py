@@ -349,7 +349,7 @@ def main():
     parser.add_argument("--integration-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dasics", choices=("off", "on"), required=True)
-    parser.add_argument("--evidence-task", choices=("m01-nemu-csr", "d01-state-record", "m02-nemu-controlflow"), default="m01-nemu-csr")
+    parser.add_argument("--evidence-task", choices=("m01-nemu-csr", "d01-state-record", "m02-nemu-controlflow", "m03-nemu-scalar-memory"), default="m01-nemu-csr")
     parser.add_argument("--mode", choices=("shared", "standalone"), default="shared")
     parser.add_argument("--jobs", type=int, default=4)
     args = parser.parse_args()

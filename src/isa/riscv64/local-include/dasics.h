@@ -72,6 +72,12 @@ typedef enum {
   DASICS_ACCESS_ECALL = 4
 } DasicsAccess;
 
+typedef enum {
+  DASICS_ALLOW,
+  DASICS_DENIED,
+  DASICS_ILLEGAL
+} DasicsAccessResult;
+
 void dasics_reset(void);
 bool dasics_export_state(uint64_t words[52]);
 void fdi_check_reset(void);
@@ -83,6 +89,7 @@ word_t dasics_csr_read(uint32_t address);
 void dasics_csr_write(uint32_t address, word_t value);
 bool dasics_csr_source_permitted(vaddr_t source_pc);
 void dasics_check_access(vaddr_t source_pc, DasicsAccess access, bool raw_allow, word_t tval);
+DasicsAccessResult dasics_scalar_permission(vaddr_t source_pc, vaddr_t address, int len, DasicsAccess access);
 void dasics_check_jump(vaddr_t source_pc, vaddr_t target);
 void dasics_fdicall(vaddr_t source_pc);
 void dasics_finish_trap(word_t cause, vaddr_t epc, bool committed);

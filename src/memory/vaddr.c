@@ -27,6 +27,10 @@
 #include <memory/vaddr.h>
 #include <memory/host-tlb.h>
 #include <cpu/decode.h>
+#ifdef CONFIG_RV_DASICS
+#include <cpu/cpu.h>
+#include "../isa/riscv64/local-include/dasics.h"
+#endif
 
 void isa_mmio_misalign_data_addr_check(paddr_t paddr, vaddr_t vaddr, int len, int type, int is_cross_page);
 
@@ -43,6 +47,48 @@ static paddr_t vaddr_trans_and_check_exception(vaddr_t vaddr, int len, int type,
   *exp = !check_paddr(paddr, len, type, type, cpu.mode, vaddr);
   return paddr;
 }
+
+#ifdef CONFIG_RV_DASICS
+/* This entry belongs only to ordinary scalar instruction helpers. Shared
+ * vector, atomic and hypervisor memory helpers retain their existing policy. */
+void vaddr_check_scalar_access(struct Decode *s, vaddr_t addr, int len, int type, int mmu_mode) {
+  save_globals(s);
+  assert(type == MEM_TYPE_READ || type == MEM_TYPE_WRITE);
+  addr = get_effective_address(addr, type);
+  DasicsAccess access = type == MEM_TYPE_READ ? DASICS_ACCESS_READ : DASICS_ACCESS_WRITE;
+  DasicsAccessResult permission = dasics_scalar_permission(s->pc, addr, len, access);
+  if (permission == DASICS_ALLOW) return;
+  if (permission == DASICS_DENIED) {
+    /* Only a host denial needs standard-fault preflight. Enabled guest use is
+     * illegal before translation. Allowed operations do not duplicate a PTW. */
+    void isa_misalign_data_addr_check(vaddr_t vaddr, int len, int type);
+    isa_misalign_data_addr_check(addr, len, type);
+    if (mmu_mode == MMU_DYNAMIC || mmu_mode == MMU_TRANSLATE)
+      mmu_mode = isa_mmu_check(addr, len, type);
+    bool cross_page = (addr & PAGE_MASK) + len > PAGE_SIZE;
+    vaddr_t current = addr;
+    int remaining = len;
+    while (remaining) {
+      int fragment = PAGE_SIZE - (current & PAGE_MASK);
+      if (fragment > remaining) fragment = remaining;
+      paddr_t physical = current;
+      if (mmu_mode != MMU_DIRECT) {
+        paddr_t page = isa_mmu_translate(current, fragment, type);
+        /* Architectural translation failures leave through longjmp_exception;
+         * a returned failure must never be mistaken for a valid translation. */
+        assert((page & PAGE_MASK) == MEM_RET_OK);
+        physical = (page & ~PAGE_MASK) | (current & PAGE_MASK);
+      }
+      paddr_check_data_access(physical, fragment, type, current, cross_page);
+      current += fragment;
+      remaining -= fragment;
+    }
+  }
+  /* Permission has not changed during the probe. A rejected full access uses
+   * its original effective VA, not a page fragment or a physical address. */
+  dasics_check_access(s->pc, access, false, addr);
+}
+#endif
 
 static word_t vaddr_read_cross_page(vaddr_t addr, int len, int type, bool needTranslate) {
   vaddr_t vaddr = addr;

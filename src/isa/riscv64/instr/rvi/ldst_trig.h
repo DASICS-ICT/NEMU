@@ -4,6 +4,7 @@
     const vaddr_t vaddr = *dsrc1 + id_src2->imm; \
     action = check_triggers_mcontrol6(cpu.TM, TRIG_OP_LOAD, vaddr, TRIGGER_NO_VALUE); \
     trigger_handler(TRIG_TYPE_MCONTROL6, action, vaddr); \
+    IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, vaddr, width, MEM_TYPE_READ, mmu_mode)); \
     concat(rtl_, rtl_instr) (s, ddest, dsrc1, id_src2->imm, width, mmu_mode); \
   }
 
@@ -14,6 +15,7 @@
     const word_t data = *ddest; \
     action = check_triggers_mcontrol6(cpu.TM, TRIG_OP_STORE, vaddr, data); \
     trigger_handler(TRIG_TYPE_MCONTROL6, action, vaddr); \
+    IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, vaddr, width, MEM_TYPE_WRITE, mmu_mode)); \
     concat(rtl_, rtl_instr) (s, ddest, dsrc1, id_src2->imm, width, mmu_mode); \
   }
 

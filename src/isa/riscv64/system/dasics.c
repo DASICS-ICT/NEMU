@@ -139,27 +139,60 @@ bool dasics_csr_source_permitted(vaddr_t source_pc) {
     (source_pc >= bound[0] && source_pc < bound[1]);
 }
 
-void dasics_check_access(vaddr_t source_pc, DasicsAccess access, bool raw_allow, word_t tval) {
+/* Source authority uses the executing mode, never the privilege selected by
+ * MPRV for translation. A denied host access may still have a standard fault. */
+static DasicsAccessResult dasics_access_permission(vaddr_t source_pc, DasicsAccess access, bool raw_allow) {
   unsigned close_bit;
-  word_t reason;
   switch (access) {
-    case DASICS_ACCESS_READ: close_bit = 4; reason = 2; break;
-    case DASICS_ACCESS_WRITE: close_bit = 3; reason = 3; break;
-    case DASICS_ACCESS_JUMP: close_bit = 5; reason = 4; break;
-    case DASICS_ACCESS_ECALL: close_bit = 2; reason = 1; break;
-    default: assert(0); return;
+    case DASICS_ACCESS_READ: close_bit = 4; break;
+    case DASICS_ACCESS_WRITE: close_bit = 3; break;
+    case DASICS_ACCESS_JUMP: close_bit = 5; break;
+    case DASICS_ACCESS_ECALL: close_bit = 2; break;
+    default: return DASICS_ILLEGAL;
   }
   bool virtual = MUXDEF(CONFIG_RVH, cpu.v, false);
   if ((cpu.mode != MODE_M && cpu.mode != MODE_S && cpu.mode != MODE_U) ||
-      (cpu.mode == MODE_M && virtual)) longjmp_exception(EX_II);
-  if (cpu.mode == MODE_M) return;
+      (cpu.mode == MODE_M && virtual)) return DASICS_ILLEGAL;
+  if (cpu.mode == MODE_M) return DASICS_ALLOW;
   word_t enable = cpu.mode == MODE_S ? UINT64_C(1) : UINT64_C(2);
-  if (!(dasics_bank.main_cfg & enable)) return;
+  if (!(dasics_bank.main_cfg & enable)) return DASICS_ALLOW;
   /* Enabled guest execution cannot borrow host bounds or close permissions. */
-  if (virtual) longjmp_exception(EX_II);
-  if (dasics_csr_source_permitted(source_pc)) return;
+  if (virtual) return DASICS_ILLEGAL;
+  if (dasics_csr_source_permitted(source_pc)) return DASICS_ALLOW;
   if (cpu.mode == MODE_U) close_bit += 4;
-  if ((dasics_bank.main_cfg & (UINT64_C(1) << close_bit)) || raw_allow) return;
+  return ((dasics_bank.main_cfg & (UINT64_C(1) << close_bit)) || raw_allow) ?
+    DASICS_ALLOW : DASICS_DENIED;
+}
+
+DasicsAccessResult dasics_scalar_permission(vaddr_t source_pc, vaddr_t address, int len, DasicsAccess access) {
+  assert((access == DASICS_ACCESS_READ || access == DASICS_ACCESS_WRITE) &&
+    (len == 1 || len == 2 || len == 4 || len == 8));
+  word_t last = address + (word_t)len - 1;
+  word_t permissions = access == DASICS_ACCESS_READ ? 0xa : 0x9;
+  bool allowed = false;
+  /* An access cannot wrap or combine adjacent entries. A stored hi of zero
+   * remains an empty upper endpoint, not a whole-address-space sentinel. */
+  if (last >= address) {
+    for (unsigned i = 0; i < 16; i++) {
+      allowed |= ((dasics_bank.lib_cfg >> (4 * i)) & permissions) == permissions &&
+        address >= dasics_bank.lib_bound[2 * i] && last < dasics_bank.lib_bound[2 * i + 1];
+    }
+  }
+  return dasics_access_permission(source_pc, access, allowed);
+}
+
+void dasics_check_access(vaddr_t source_pc, DasicsAccess access, bool raw_allow, word_t tval) {
+  DasicsAccessResult result = dasics_access_permission(source_pc, access, raw_allow);
+  if (result == DASICS_ALLOW) return;
+  if (result == DASICS_ILLEGAL) longjmp_exception(EX_II);
+  word_t reason;
+  switch (access) {
+    case DASICS_ACCESS_READ: reason = 2; break;
+    case DASICS_ACCESS_WRITE: reason = 3; break;
+    case DASICS_ACCESS_JUMP: reason = 4; break;
+    case DASICS_ACCESS_ECALL: reason = 1; break;
+    default: assert(0); return;
+  }
 
   dasics_fault.valid = true;
   dasics_fault.source_pc = source_pc;

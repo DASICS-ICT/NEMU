@@ -17,20 +17,24 @@
 #define F64_SIGN ((uint64_t)1 << 63)
 
 def_EHelper(fld) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 8, MEM_TYPE_READ, MMU_DIRECT));
   rtl_lm(s, ddest, dsrc1, id_src2->imm, 8, MMU_DIRECT);
   rtl_fsr(s, ddest, ddest, FPCALL_W64);
 }
 
 def_EHelper(fsd) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 8, MEM_TYPE_WRITE, MMU_DIRECT));
   rtl_sm(s, ddest, dsrc1, id_src2->imm, 8, MMU_DIRECT);
 }
 
 def_EHelper(fld_mmu) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 8, MEM_TYPE_READ, MMU_TRANSLATE));
   rtl_lm(s, ddest, dsrc1, id_src2->imm, 8, MMU_TRANSLATE);
   rtl_fsr(s, ddest, ddest, FPCALL_W64);
 }
 
 def_EHelper(fsd_mmu) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 8, MEM_TYPE_WRITE, MMU_TRANSLATE));
   rtl_sm(s, ddest, dsrc1, id_src2->imm, 8, MMU_TRANSLATE);
 }
 

@@ -22,6 +22,9 @@ struct Decode;
 word_t vaddr_ifetch(vaddr_t addr, int len);
 word_t vaddr_read(struct Decode *s, vaddr_t addr, int len, int mmu_mode);
 void vaddr_write(struct Decode *s, vaddr_t addr, int len, word_t data, int mmu_mode);
+#ifdef CONFIG_RV_DASICS
+void vaddr_check_scalar_access(struct Decode *s, vaddr_t addr, int len, int type, int mmu_mode);
+#endif
 
 word_t vaddr_read_safe(vaddr_t addr, int len);
 

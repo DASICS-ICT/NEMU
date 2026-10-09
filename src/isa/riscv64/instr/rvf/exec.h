@@ -19,20 +19,24 @@
 def_rtl(fclass, rtlreg_t *, rtlreg_t *, int);
 
 def_EHelper(flw) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 4, MEM_TYPE_READ, MMU_DIRECT));
   rtl_lm(s, ddest, dsrc1, id_src2->imm, 4, MMU_DIRECT);
   rtl_fsr(s, ddest, ddest, FPCALL_W32);
 }
 
 def_EHelper(fsw) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 4, MEM_TYPE_WRITE, MMU_DIRECT));
   rtl_sm(s, ddest, dsrc1, id_src2->imm, 4, MMU_DIRECT);
 }
 
 def_EHelper(flw_mmu) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 4, MEM_TYPE_READ, MMU_TRANSLATE));
   rtl_lm(s, ddest, dsrc1, id_src2->imm, 4, MMU_TRANSLATE);
   rtl_fsr(s, ddest, ddest, FPCALL_W32);
 }
 
 def_EHelper(fsw_mmu) {
+  IFDEF(CONFIG_RV_DASICS, vaddr_check_scalar_access(s, *dsrc1 + id_src2->imm, 4, MEM_TYPE_WRITE, MMU_TRANSLATE));
   rtl_sm(s, ddest, dsrc1, id_src2->imm, 4, MMU_TRANSLATE);
 }
 

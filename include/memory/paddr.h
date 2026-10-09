@@ -63,6 +63,9 @@ static inline bool in_pmem(paddr_t addr) {
 word_t paddr_read(paddr_t addr, int len, int type, int trap_type, int mode, vaddr_t vaddr);
 void paddr_write(paddr_t addr, int len, word_t data, int mode, vaddr_t vaddr);
 bool check_paddr(paddr_t addr, int len, int type, int trap_type, int mode, vaddr_t vaddr);
+#ifdef CONFIG_RV_DASICS
+void paddr_check_data_access(paddr_t addr, int len, int type, vaddr_t vaddr, bool cross_page);
+#endif
 #ifdef CONFIG_RV_MBMC
 word_t bitmap_read(paddr_t addr, int type, int mode);
 #endif
