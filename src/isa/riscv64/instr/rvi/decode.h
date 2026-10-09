@@ -65,6 +65,19 @@ static inline def_DHelper(J) {
   id_src2->imm = s->snpc;
 }
 
+#ifdef CONFIG_RV_DASICS
+static inline def_DHelper(FDIJ) {
+  uint32_t instr = s->isa.instr.val;
+  /* The immediate is a signed 22-bit payload followed by one zero bit;
+   * instruction bits 11:7 belong to it, not an encoded link register. */
+  uint32_t offset = BITS(instr, 31, 31) << 22 | BITS(instr, 7, 7) << 21 |
+    BITS(instr, 20, 15) << 15 | BITS(instr, 11, 8) << 11 | BITS(instr, 30, 21) << 1;
+  decode_op_i(s, id_src1, s->pc + SEXT(offset, 23), true);
+  decode_op_r(s, id_dest, 1, false);
+  id_src2->imm = s->pc + UINT64_C(4);
+}
+#endif
+
 static inline def_DHelper(B) {
   sword_t offset = (s->isa.instr.b.simm12 << 12) | (s->isa.instr.b.imm11 << 11) |
     (s->isa.instr.b.imm10_5 << 5) | (s->isa.instr.b.imm4_1 << 1);

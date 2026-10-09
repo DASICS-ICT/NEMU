@@ -59,6 +59,10 @@ static inline uint32_t get_instr(Decode *s) {
 #endif// CONFIG_RV_CBO
 
 def_THelper(main) {
+#ifdef CONFIG_RV_DASICS
+  def_INSTR_IDTAB("??????? ????? ????? 000 ????? 00010 11", FDIJ  , fdicall_j);
+  def_INSTR_IDTAB("??????? ????? ????? 001 ????? 00010 11", I     , fdicall_jr);
+#endif
   def_INSTR_IDTAB("??????? ????? ????? ??? ????? 00000 ??", load  , load);
 #ifndef CONFIG_FPU_NONE
   def_INSTR_IDTAB("??????? ????? ????? ??? ????? 00001 ??", fload , fload);
@@ -131,6 +135,7 @@ int isa_fetch_decode(Decode *s) {
   s->type = INSTR_TYPE_N;
   switch (idx) {
     case EXEC_ID_c_j: case EXEC_ID_p_jal: case EXEC_ID_jal:
+    IFDEF(CONFIG_RV_DASICS, case EXEC_ID_fdicall_j:)
       s->jnpc = id_src1->imm; s->type = INSTR_TYPE_J; break;
 
     case EXEC_ID_beq: case EXEC_ID_bne: case EXEC_ID_blt: case EXEC_ID_bge:
@@ -140,6 +145,7 @@ int isa_fetch_decode(Decode *s) {
       s->jnpc = id_dest->imm; s->type = INSTR_TYPE_B; break;
 
     case EXEC_ID_p_ret: case EXEC_ID_c_jr: case EXEC_ID_c_jalr: case EXEC_ID_jalr:
+    IFDEF(CONFIG_RV_DASICS, case EXEC_ID_fdicall_jr:)
     case EXEC_ID_c_ebreak:
 #if defined(CONFIG_DEBUG) || defined(CONFIG_SHARE)
     case EXEC_ID_mret: case EXEC_ID_sret: case EXEC_ID_ecall: case EXEC_ID_ebreak:

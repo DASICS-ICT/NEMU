@@ -1,5 +1,7 @@
 #include <isa.h>
+#include <cpu/cpu.h>
 #include "../local-include/dasics.h"
+#include "../local-include/intr.h"
 
 #ifdef CONFIG_RV_DASICS
 
@@ -19,6 +21,15 @@ static struct {
   word_t jump_cfg;
   word_t jump_bound[8];
 } dasics_bank;
+
+/* A denial is not architectural state until the ordinary trap selector accepts
+ * it. Keep its identity outside the bank and both legacy copy interfaces. */
+static struct {
+  bool valid;
+  vaddr_t source_pc;
+  word_t cause;
+  word_t reason;
+} dasics_fault;
 
 _Static_assert(sizeof(dasics_bank) == 51 * sizeof(uint64_t), "FDI requires 51 RV64 backing words");
 
@@ -55,6 +66,7 @@ static DasicsCsrView dasics_csr_view(uint32_t address) {
 
 void dasics_reset(void) {
   memset(&dasics_bank, 0, sizeof(dasics_bank));
+  memset(&dasics_fault, 0, sizeof(dasics_fault));
 }
 
 /* Check raw storage before deriving the U alias. CSR reads alone would hide
@@ -125,6 +137,68 @@ bool dasics_csr_source_permitted(vaddr_t source_pc) {
    * and an empty interval remains empty even when its upper bound is zero. */
   return !(dasics_bank.main_cfg & enable) ||
     (source_pc >= bound[0] && source_pc < bound[1]);
+}
+
+void dasics_check_access(vaddr_t source_pc, DasicsAccess access, bool raw_allow, word_t tval) {
+  unsigned close_bit;
+  word_t reason;
+  switch (access) {
+    case DASICS_ACCESS_READ: close_bit = 4; reason = 2; break;
+    case DASICS_ACCESS_WRITE: close_bit = 3; reason = 3; break;
+    case DASICS_ACCESS_JUMP: close_bit = 5; reason = 4; break;
+    case DASICS_ACCESS_ECALL: close_bit = 2; reason = 1; break;
+    default: assert(0); return;
+  }
+  bool virtual = MUXDEF(CONFIG_RVH, cpu.v, false);
+  if ((cpu.mode != MODE_M && cpu.mode != MODE_S && cpu.mode != MODE_U) ||
+      (cpu.mode == MODE_M && virtual)) longjmp_exception(EX_II);
+  if (cpu.mode == MODE_M) return;
+  word_t enable = cpu.mode == MODE_S ? UINT64_C(1) : UINT64_C(2);
+  if (!(dasics_bank.main_cfg & enable)) return;
+  /* Enabled guest execution cannot borrow host bounds or close permissions. */
+  if (virtual) longjmp_exception(EX_II);
+  if (dasics_csr_source_permitted(source_pc)) return;
+  if (cpu.mode == MODE_U) close_bit += 4;
+  if ((dasics_bank.main_cfg & (UINT64_C(1) << close_bit)) || raw_allow) return;
+
+  dasics_fault.valid = true;
+  dasics_fault.source_pc = source_pc;
+  dasics_fault.cause = cpu.mode == MODE_U ? EX_DASICS_U : EX_DASICS_S;
+  dasics_fault.reason = reason;
+  cpu.trapInfo.tval = tval;
+  cpu.trapInfo.tval2 = 0;
+  cpu.trapInfo.tinst = 0;
+  longjmp_exception(dasics_fault.cause);
+}
+
+void dasics_check_jump(vaddr_t source_pc, vaddr_t target) {
+  bool allowed = false;
+  for (unsigned i = 0; i < 4; i++) {
+    allowed |= ((dasics_bank.jump_cfg >> (16 * i)) & 1) &&
+      target >= dasics_bank.jump_bound[2 * i] && target < dasics_bank.jump_bound[2 * i + 1];
+  }
+  allowed |= dasics_bank.main_call_entry && target == dasics_bank.main_call_entry;
+  allowed |= dasics_bank.return_pc && target == dasics_bank.return_pc;
+  allowed |= dasics_bank.active_zone_return_pc && target == dasics_bank.active_zone_return_pc;
+  dasics_check_access(source_pc, DASICS_ACCESS_JUMP, allowed, target);
+}
+
+void dasics_fdicall(vaddr_t source_pc) {
+  if (MUXDEF(CONFIG_RVH, cpu.v, false) ||
+      (cpu.mode != MODE_U && cpu.mode != MODE_S)) longjmp_exception(EX_II);
+  word_t enable = cpu.mode == MODE_S ? UINT64_C(1) : UINT64_C(2);
+  if (!(dasics_bank.main_cfg & enable) || !dasics_csr_source_permitted(source_pc))
+    longjmp_exception(EX_II);
+  /* State-enable gates explicit CSR access, not this instruction's implicit
+   * update. Its caller has captured the old source before committing the link. */
+  dasics_bank.return_pc = source_pc + UINT64_C(4);
+}
+
+void dasics_finish_trap(word_t cause, vaddr_t epc, bool committed) {
+  if (committed && dasics_fault.valid && dasics_fault.source_pc == epc &&
+      dasics_fault.cause == cause) dasics_bank.freason = dasics_fault.reason;
+  /* A replacement trap, critical error or external trap consumes no FDI reason. */
+  dasics_fault.valid = false;
 }
 
 #endif

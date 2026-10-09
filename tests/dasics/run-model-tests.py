@@ -333,7 +333,17 @@ def test_permission(ref, address, context, mc, sc, enables, trust, write,
             oracle.write(address, source)
         ref.step(pc + 4, retired=False)
         check(ref.regs()[REG_PC], MTRAP, "real ECALL enters observation handler")
-        check(ref.csrs()[0x342], {0: 8, 1: 9, 3: 11}[mode], "standard ECALL cause")
+        # A permitted CSR may leave the following ECALL outside the trusted
+        # half-open interval, or may change the policy before that ECALL.
+        cfg = oracle.read(SCFG)
+        bound_lo, bound_hi = (SLO, SHI) if mode == 1 else (ULO, UHI)
+        ecall_trusted = oracle.read(bound_lo) <= pc + 4 < oracle.read(bound_hi)
+        restricted = (mode in (0, 1) and bool(cfg & (1 if mode == 1 else 2))
+                      and not ecall_trusted and not bool(cfg & (1 << (2 if mode == 1 else 6))))
+        check(ref.csrs()[0x342], (25 if mode == 1 else 24) if restricted else
+              {0: 8, 1: 9, 3: 11}[mode], "ECALL uses post-CSR policy and its own source PC")
+        if restricted:
+            oracle.write(0x8B3, 1)
     else:
         illegal(ref, pc, operation)
         check(ref.regs()[10], SENTINEL, "denial preserves destination GPR")
@@ -606,7 +616,7 @@ def main():
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--state", choices=("off", "on"), required=True)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--jobs", type=int, choices=range(1, 5), default=4)
+    parser.add_argument("--jobs", type=int, choices=range(1, 45), default=4)
     parser.add_argument("--case", help="run one case in an isolated process")
     parser.add_argument("--select", action="append", help="run only these exact cases")
     args = parser.parse_args()

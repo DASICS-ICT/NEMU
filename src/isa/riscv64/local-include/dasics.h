@@ -65,6 +65,13 @@
 #define DASICS_FREASON_MASK UINT64_C(0x7)
 
 #ifdef CONFIG_RV_DASICS
+typedef enum {
+  DASICS_ACCESS_READ = 0,
+  DASICS_ACCESS_WRITE = 1,
+  DASICS_ACCESS_JUMP = 3,
+  DASICS_ACCESS_ECALL = 4
+} DasicsAccess;
+
 void dasics_reset(void);
 bool dasics_export_state(uint64_t words[52]);
 void fdi_check_reset(void);
@@ -75,6 +82,10 @@ bool dasics_is_csr(uint32_t address);
 word_t dasics_csr_read(uint32_t address);
 void dasics_csr_write(uint32_t address, word_t value);
 bool dasics_csr_source_permitted(vaddr_t source_pc);
+void dasics_check_access(vaddr_t source_pc, DasicsAccess access, bool raw_allow, word_t tval);
+void dasics_check_jump(vaddr_t source_pc, vaddr_t target);
+void dasics_fdicall(vaddr_t source_pc);
+void dasics_finish_trap(word_t cause, vaddr_t epc, bool committed);
 #endif
 
 #endif

@@ -391,12 +391,19 @@
   ZFH_ZFA_INSTR_BINARY(f) \
   ZCB_INSTR_BINARY(f)
 
+#ifdef CONFIG_RV_DASICS
+#define DASICS_INSTR_TERNARY(f) f(fdicall_j) f(fdicall_jr)
+#else
+#define DASICS_INSTR_TERNARY(f)
+#endif
+
 #define INSTR_TERNARY(f) \
   f(add) f(sll) f(srl) f(slt) f(sltu) f(xor) f(or) f(sub) f(sra) f(and) \
   f(addi) f(slli) f(srli) f(slti) f(sltui) f(xori) f(ori) f(srai) f(andi) \
   f(addw) f(sllw) f(srlw) f(subw) f(sraw) \
   f(addiw) f(slliw) f(srliw) f(sraiw) \
   f(jalr) f(beq) f(bne) f(blt) f(bge) f(bltu) f(bgeu) \
+  DASICS_INSTR_TERNARY(f) \
   f(mul) f(mulh) f(mulhu) f(mulhsu) f(div) f(divu) f(rem) f(remu) \
   f(mulw) f(divw) f(divuw) f(remw) f(remuw) \
   f(c_li) f(c_addi) f(c_slli) f(c_srli) f(c_srai) f(c_andi) f(c_addiw) \

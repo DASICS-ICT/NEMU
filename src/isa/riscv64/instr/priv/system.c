@@ -17,6 +17,7 @@
 #include <rtl/rtl.h>
 #include <cpu/difftest.h>
 #include <cpu/cpu.h>
+#include "../../local-include/dasics.h"
 
 __attribute__((cold))
 int rtl_sys_slow_path(Decode *s, rtlreg_t *dest, const rtlreg_t *src1, uint32_t id, rtlreg_t *jpc) {
@@ -28,6 +29,10 @@ int rtl_sys_slow_path(Decode *s, rtlreg_t *dest, const rtlreg_t *src1, uint32_t 
     if (s->isa.instr.val == 0x73) { // ecall
 #else
     if (id == 0) { // ecall
+#endif
+#ifdef CONFIG_RV_DASICS
+      save_globals(s);
+      dasics_check_access(s->pc, DASICS_ACCESS_ECALL, false, 0);
 #endif
 #ifdef CONFIG_RVH
       rtl_trap(s, s->pc, 8 + cpu.mode + (cpu.mode == MODE_S && cpu.v));

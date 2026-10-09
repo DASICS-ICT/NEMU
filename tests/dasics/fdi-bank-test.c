@@ -1,5 +1,7 @@
 /* The production translation units are included to inject faults into their
  * private storage without adding an architectural import or debug setter. */
+#define FDI_BANK_TEST
+#include "fdi-stubs/trap-isolation.h"
 #include "../../src/isa/riscv64/system/dasics.c"
 #include "../../src/isa/riscv64/difftest/fdi.c"
 

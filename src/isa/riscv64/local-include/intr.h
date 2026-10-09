@@ -43,7 +43,11 @@ enum {
   EX_IGPF = 20,// instruction guest-page fault, H-extention
   EX_LGPF,// load guest-page fault, H-extention
   EX_VI,  // virtual instruction, H-extention
-  EX_SGPF // store/amo guest-page fault, H-extention
+  EX_SGPF, // store/amo guest-page fault, H-extention
+#ifdef CONFIG_RV_DASICS
+  EX_DASICS_U = 24,
+  EX_DASICS_S = 25
+#endif
 };
 
 enum {

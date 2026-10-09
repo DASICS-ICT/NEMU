@@ -97,6 +97,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
   /* External trap injection advances the model without passing cpu_exec. */
   IFDEF(CONFIG_RV_DASICS, fdi_note_execution());
   IFDEF(CONFIG_RV_DASICS, if (!(NO & INTR_BIT)) uit_note_exception(NO));
+  IFDEF(CONFIG_RV_DASICS, bool dasics_committed = false;)
   Logti("raise intr cause NO: %ld, epc: %lx\n", NO, epc);
 #ifdef CONFIG_DIFFTEST_REF_SPIKE
   switch (NO) {
@@ -147,6 +148,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     nemu_state.halt_pc = epc;
     nemu_state.halt_ret = 0;
 #endif // CONFIG_SHARE
+    IFDEF(CONFIG_RV_DASICS, dasics_finish_trap(NO, epc, false));
     return 0;
   }
 #endif // CONFIG_RV_SMRNMI
@@ -247,6 +249,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     IFDEF(CONFIG_RVH, htinst->val = cpu.trapInfo.tinst);
     stval->val = cpu.trapInfo.tval;
     switch (NO) {
+#ifdef CONFIG_RV_DASICS
+      case EX_DASICS_U: case EX_DASICS_S:
+#endif
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
@@ -286,6 +291,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     // 18.6.3. Transformed Instruction or Pseudoinstruction for mtinst or htinst.
     cpu.mode = MODE_S;
     trap_pc = get_trap_pc(stvec->val, scause->val);
+    IFDEF(CONFIG_RV_DASICS, dasics_committed = true;)
   } else if((delegM || vs_EX_DT || s_EX_DT) && !m_EX_DT){
 #ifdef CONFIG_RVH
     bool is_mem_access_virtual = mstatus->mprv && mstatus->mpv && (mstatus->mpp != MODE_M);
@@ -302,6 +308,9 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     IFDEF(CONFIG_RVH, mtval2->val = cpu.trapInfo.tval2);
     IFDEF(CONFIG_RVH, mtinst->val = cpu.trapInfo.tinst);
     switch (NO) {
+#ifdef CONFIG_RV_DASICS
+      case EX_DASICS_U: case EX_DASICS_S:
+#endif
       case EX_IPF: case EX_LPF: case EX_SPF:
       case EX_LAM: case EX_SAM:
       case EX_IAF: case EX_LAF: case EX_SAF:
@@ -344,6 +353,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
 #endif //CONFIG_RV_SSDBLTRP
     cpu.mode = MODE_M;
     trap_pc = get_trap_pc(mtvec->val, mcause->val);
+    IFDEF(CONFIG_RV_DASICS, dasics_committed = (mcause->val == NO);)
   }
 #ifdef CONFIG_RV_SMRNMI
   else if ((m_EX_DT || isNMI) && mnstatus->nmie) {
@@ -358,6 +368,7 @@ word_t raise_intr(word_t NO, vaddr_t epc) {
     trap_pc = get_trap_pc(mtvec->val, mncause->val);
   }
 #endif //CONFIG_RV_SMRNMI
+  IFDEF(CONFIG_RV_DASICS, dasics_finish_trap(NO, epc, dasics_committed));
   update_mmu_state();
   clear_trapinfo();
   return trap_pc;

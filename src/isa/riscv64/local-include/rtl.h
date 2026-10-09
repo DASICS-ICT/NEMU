@@ -21,6 +21,22 @@
 #include "reg.h"
 #include "csr.h"
 #include "trigger.h"
+#ifdef CONFIG_RV_DASICS
+#include <cpu/cpu.h>
+#include "dasics.h"
+
+/* Check ordinary control flow before its destination or link is committed.
+ * Privileged returns and FDICALL use their own instruction contracts. */
+static inline def_rtl(dasics_jump, vaddr_t target) {
+  save_globals(s);
+  dasics_check_jump(s->pc, target);
+}
+
+static inline def_rtl(dasics_branch, uint32_t relop,
+    const rtlreg_t *src1, const rtlreg_t *src2, vaddr_t target) {
+  if (interpret_relop(relop, *src1, *src2)) rtl_dasics_jump(s, target);
+}
+#endif
 
 #define FBOX_MASK 0xFFFFFFFF00000000ull
 #define HFBOX_MASK 0xFFFFFFFFFFFF0000ull

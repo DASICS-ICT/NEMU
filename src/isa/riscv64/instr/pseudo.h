@@ -43,22 +43,27 @@ def_EHelper(p_sext_w) {
 }
 
 def_EHelper(p_blez) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_branch(s, RELOP_GE, rz, dsrc2, id_dest->imm));
   rtl_jrelop(s, RELOP_GE, rz, dsrc2, id_dest->imm);
 }
 
 def_EHelper(p_bgtz) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_branch(s, RELOP_LT, rz, dsrc2, id_dest->imm));
   rtl_jrelop(s, RELOP_LT, rz, dsrc2, id_dest->imm);
 }
 
 def_EHelper(p_bltz) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_branch(s, RELOP_LT, dsrc1, rz, id_dest->imm));
   rtl_jrelop(s, RELOP_LT, dsrc1, rz, id_dest->imm);
 }
 
 def_EHelper(p_bgez) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_branch(s, RELOP_GE, dsrc1, rz, id_dest->imm));
   rtl_jrelop(s, RELOP_GE, dsrc1, rz, id_dest->imm);
 }
 
 def_EHelper(p_jal) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_jump(s, id_src1->imm));
   rtl_li(s, &cpu.gpr[1]._64, id_src2->imm);
   IFDEF(CONFIG_BR_LOG, br_log_commit(s->pc, id_src1->imm, 1, BR_JUMP));
   rtl_j(s, id_src1->imm);
@@ -68,6 +73,7 @@ def_EHelper(p_ret) {
 #ifdef CONFIG_SHARE
   // See rvi/control.h:26. JALR should set the LSB to 0.
   rtl_andi(s, s0, &cpu.gpr[1]._64, ~1UL);
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_jump(s, *s0));
   rtl_jr(s, s0);
 #else
 //  IFDEF(CONFIG_ENGINE_INTERPRETER, rtl_andi(s, s0, s0, ~0x1u));

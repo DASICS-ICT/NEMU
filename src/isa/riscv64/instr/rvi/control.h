@@ -16,6 +16,7 @@
 #include <generated/autoconf.h>
 
 def_EHelper(jal) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_jump(s, id_src1->imm));
   rtl_li(s, ddest, id_src2->imm);
   IFDEF(CONFIG_BR_LOG, br_log_commit(s->pc, id_src1->imm, 1, BR_JUMP));
   rtl_j(s, id_src1->imm);
@@ -27,6 +28,7 @@ def_EHelper(jalr) {
   rtl_addi(s, s0, dsrc1, id_src2->imm);
   // then setting the least-significant bit of the result to zero.
   rtl_andi(s, s0, s0, ~1UL);
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_jump(s, *s0));
 //  IFDEF(CONFIG_ENGINE_INTERPRETER, rtl_andi(s, s0, s0, ~0x1lu));
 #ifdef CONFIG_GUIDED_EXEC
   if(cpu.guided_exec && cpu.execution_guide.force_set_jump_target) {
@@ -42,25 +44,51 @@ def_EHelper(jalr) {
 }
 
 def_EHelper(beq) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_branch(s, RELOP_EQ, dsrc1, dsrc2, id_dest->imm));
   rtl_jrelop(s, RELOP_EQ, dsrc1, dsrc2, id_dest->imm);
 }
 
 def_EHelper(bne) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_branch(s, RELOP_NE, dsrc1, dsrc2, id_dest->imm));
   rtl_jrelop(s, RELOP_NE, dsrc1, dsrc2, id_dest->imm);
 }
 
 def_EHelper(blt) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_branch(s, RELOP_LT, dsrc1, dsrc2, id_dest->imm));
   rtl_jrelop(s, RELOP_LT, dsrc1, dsrc2, id_dest->imm);
 }
 
 def_EHelper(bge) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_branch(s, RELOP_GE, dsrc1, dsrc2, id_dest->imm));
   rtl_jrelop(s, RELOP_GE, dsrc1, dsrc2, id_dest->imm);
 }
 
 def_EHelper(bltu) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_branch(s, RELOP_LTU, dsrc1, dsrc2, id_dest->imm));
   rtl_jrelop(s, RELOP_LTU, dsrc1, dsrc2, id_dest->imm);
 }
 
 def_EHelper(bgeu) {
+  IFDEF(CONFIG_RV_DASICS, rtl_dasics_branch(s, RELOP_GEU, dsrc1, dsrc2, id_dest->imm));
   rtl_jrelop(s, RELOP_GEU, dsrc1, dsrc2, id_dest->imm);
 }
+
+#ifdef CONFIG_RV_DASICS
+def_EHelper(fdicall_j) {
+  save_globals(s);
+  dasics_fdicall(s->pc);
+  rtl_li(s, ddest, id_src2->imm);
+  IFDEF(CONFIG_BR_LOG, br_log_commit(s->pc, id_src1->imm, 1, BR_JUMP));
+  rtl_j(s, id_src1->imm);
+}
+
+def_EHelper(fdicall_jr) {
+  /* Capture the old rs1 before either architectural destination changes. */
+  rtl_addi(s, s0, dsrc1, id_src2->imm);
+  rtl_andi(s, s0, s0, ~UINT64_C(1));
+  save_globals(s);
+  dasics_fdicall(s->pc);
+  rtl_li(s, ddest, s->pc + UINT64_C(4));
+  rtl_jr(s, s0);
+}
+#endif

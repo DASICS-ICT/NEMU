@@ -211,7 +211,7 @@ def probe_child(reference, enabled):
 def build(args):
     require(socket.gethostname() == HOST, "EXECUTION_HOST_MISMATCH")
     require(args.mode == "shared", "DASICS_STANDALONE_UNSUPPORTED: this builder supports shared references only")
-    require(1 <= args.jobs <= 8, "M01_BUILD_JOB_BUDGET: jobs must be between 1 and 8")
+    require(1 <= args.jobs <= 44, "BUILD_JOB_BUDGET: jobs must be between 1 and 44")
     integration = args.integration_root.resolve(strict=True)
     original_helper = integration / "scripts/simulation/dasics_development_common.py"
     # Load the frozen helper, so repository helpers cannot change during the build.
@@ -349,7 +349,7 @@ def main():
     parser.add_argument("--integration-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dasics", choices=("off", "on"), required=True)
-    parser.add_argument("--evidence-task", choices=("m01-nemu-csr", "d01-state-record"), default="m01-nemu-csr")
+    parser.add_argument("--evidence-task", choices=("m01-nemu-csr", "d01-state-record", "m02-nemu-controlflow"), default="m01-nemu-csr")
     parser.add_argument("--mode", choices=("shared", "standalone"), default="shared")
     parser.add_argument("--jobs", type=int, default=4)
     args = parser.parse_args()
